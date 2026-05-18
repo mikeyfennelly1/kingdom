@@ -1,0 +1,4 @@
+= kingdom
+
+1. Download devbox.
+2. clone this repo and run `devbox shell`
