@@ -11,18 +11,19 @@
 | *Block Leader* | Mark Burkley
 |===
 
-== Instructors
+== Overview
+=== Instructors
 
 [cols="1,1", options="header"]
-|===
+|====
 | Major | Instructor
 | Computer Networks & Cybersecurity | Mark Burkley
 | C++ Programming | Kashif Memon
 | Cryptography | Eoin O’Brien
 | Blockchain | Andrew Le Gear
-|===
+|====
 
-== Project Summary
+=== Project Summary
 
 In this project, students are tasked with the design and implementation of a **secure messaging application** that guarantees confidentiality, integrity, and authenticity of communications. The application must incorporate concepts from all four subjects studied during the CS4455 block.
 
@@ -46,37 +47,37 @@ Teams have flexibility in their messaging architecture (real-time, asynchronous,
 
 **Overall Marking Scheme:** The CS4436 block is divided into four equally weighted subjects. Each subject contributes 25% to the overall epic project grade, for a total of 100%. Within each subject, marks are distributed across the criteria defined in that subject’s rubric.
 
-== Key Dates
+=== Key Dates
 
 [cols="1,1", options="header"]
-|===
+|====
 | Milestone | Date
 | Brief released to students | Monday 18th May 2026
 | Weekly status report 1 | Friday 23rd May 2026, 5:00 PM
 | Weekly status report 2 | Friday 30th May 2026, 5:00 PM
 | Project submission deadline | Wednesday 3rd June 2026, 5:00 PM
 | Presentations & interviews | 4th and 5th June 2026
-|===
+|====
 
-== Marks Breakdown
+=== Marks Breakdown
 
 [cols="3,1", options="header"]
-|===
+|====
 | Minor | Weight
 | Computer Networks & Cybersecurity (Burkley) | 25%
 | C++ Programming (Memon) | 25%
 | Cryptography (O’Brien) | 25%
 | Blockchain (Le Gear) | 25%
 | *Total* | *100%*
-|===
+|====
 
-== Project Server
+=== Project Server
 
 A cloud server is available for teams to run cloud backends. The domain name for the project is **THEBURKENATOR.COM**.
 
 Each team will have their own virtual host (e.g. `SAS.THEBURKENATOR.COM`) and their own virtual machine that is accessible via `ALDERAAN.SOFTWARE-ENGINEERING.IE`. VMs will be created with Ubuntu Linux by default but other distros can be used as needed. Teams may install their own development environments and back-ends on their respective VMs.
 
-== Submission Requirements
+=== Submission Requirements
 
 Upload a zipped archive of your project’s GitHub repository to Brightspace by **Wednesday 3rd June 2026 at 5:00 PM**. This archive must include:
 
@@ -93,7 +94,7 @@ Your submission must also include a **cover document** (PDF or Markdown) alongsi
 ** The specific features, components, or tasks each member worked on
 * Any additional design summaries, diagrams, or explanations requested by the topic-specific requirements below
 
-=== AI Prompt Artefacts (New for 2026)
+==== AI Prompt Artefacts (New for 2026)
 
 Your submission must **include** a record of AI tool usage during development. This should include:
 
