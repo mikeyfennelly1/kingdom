@@ -18,6 +18,13 @@ function(configure_third_party)
     )
     FetchContent_MakeAvailable(httplib)
 
+    FetchContent_Declare(
+        cli11
+        GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+        GIT_TAG v2.4.2
+    )
+    FetchContent_MakeAvailable(cli11)
+
 # Test dependencies
     FetchContent_Declare(googletest
             GIT_REPOSITORY https://github.com/google/googletest.git
