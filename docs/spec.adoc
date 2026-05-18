@@ -135,30 +135,30 @@ Each instructor has defined the requirements for their portion of the project be
 
 === Computer Networks & Cybersecurity (Mark Burkley) — 25%
 
-* **Secure connectivity (SSL/TLS between client and server)**
-** Client verifies authenticity and validity of SSL certificate
-* **Server-side security and authentication**
-** Users are securely authenticated and authorised
-* **Vulnerability testing and penetration testing report**
-* **Network architecture documentation**
-** Connections to external services (MySQL server, etc) are documented
-* **Front end programs should create SSL protected connections to the virtual host.**
-** A back-end service running on the server should accept requests and process them.
-** Part of the back-end may be written in C++ with html parsing in NodeJS or python or the entire back-end can be written in one of those languages.
-* **Teams should demonstrate their ability to write code that resolves host names and establishes secure connections.**
-** Using low level socket calls with libcrypto and libssl libraries would be impressive but if time is tight then using a library such as libcurl is acceptable.
-* **The implemented solution must be tested and ensure protection against undesired side effects.**
-* **Students must demonstrate that they have implemented controls and have actively checked for issues such as:**
-** Improper Input Validation
-** Broken Authentication
-** Broken Access Control
-** Cryptographic Issues
-** Injection
-** Security Misconfiguration
-** Sensitive Data Exposure
-** Vulnerable Components
-* **Both front end and backend services are expected to be resilient against common vulnerabilities and exploits.**
-* **Students are encouraged to include a penetration testing report in their submission detailing penetration tests executed and their findings.**
+. **Secure connectivity (SSL/TLS between client and server)**
+.. Client verifies authenticity and validity of SSL certificate
+. **Server-side security and authentication**
+.. Users are securely authenticated and authorised
+. **Vulnerability testing and penetration testing report**
+. **Network architecture documentation**
+.. Connections to external services (MySQL server, etc) are documented
+. **Front end programs should create SSL protected connections to the virtual host.**
+.. A back-end service running on the server should accept requests and process them.
+.. Part of the back-end may be written in C++ with html parsing in NodeJS or python or the entire back-end can be written in one of those languages.
+. **Teams should demonstrate their ability to write code that resolves host names and establishes secure connections.**
+.. Using low level socket calls with libcrypto and libssl libraries would be impressive but if time is tight then using a library such as libcurl is acceptable.
+. **The implemented solution must be tested and ensure protection against undesired side effects.**
+. **Students must demonstrate that they have implemented controls and have actively checked for issues such as:**
+.. Improper Input Validation
+.. Broken Authentication
+.. Broken Access Control
+.. Cryptographic Issues
+.. Injection
+.. Security Misconfiguration
+.. Sensitive Data Exposure
+.. Vulnerable Components
+. **Both front end and backend services are expected to be resilient against common vulnerabilities and exploits.**
+. **Students are encouraged to include a penetration testing report in their submission detailing penetration tests executed and their findings.**
 
 === C++ Programming (Kashif Memon) — 25%
 
@@ -169,60 +169,60 @@ The C++ work does not need to implement the entire messaging system, but it must
 **Requirements**
 
 1.  **C++ Component**
-    *   Build a working C++ component related to the secure messaging app.
-    *   Examples include:
-        ** sending or preparing messages;
-        ** receiving, parsing, or displaying messages;
-        ** storing local message history;
-        ** validating message data;
-        ** interacting with another part of the system;
-        ** providing a simple client interface.
+    .   Build a working C++ component related to the secure messaging app.
+    .   Examples include:
+        .. sending or preparing messages;
+        .. receiving, parsing, or displaying messages;
+        .. storing local message history;
+        .. validating message data;
+        .. interacting with another part of the system;
+        .. providing a simple client interface.
 2.  **Code Structure**
-    *   Use more than one source file where appropriate.
-    *   Use clear .h / .hpp and .cpp files.
-    *   Provide simple build instructions.
-    *   Use CMake if possible, or clearly document any alternative build method.
+    .   Use more than one source file where appropriate.
+    .   Use clear .h / .hpp and .cpp files.
+    .   Provide simple build instructions.
+    .   Use CMake if possible, or clearly document any alternative build method.
 3.  **Functions and Classes**
-    *   Use functions to break the program into smaller tasks.
-    *   Use classes to model important parts of the system, such as:
-        ** User
-        ** Message
-        ** Conversation
-        ** Client
-        ** MessageStore
-    *   Use public and private access correctly.
-    *   Use constructors where needed.
+    .   Use functions to break the program into smaller tasks.
+    .   Use classes to model important parts of the system, such as:
+        .. User
+        .. Message
+        .. Conversation
+        .. Client
+        .. MessageStore
+    .   Use public and private access correctly.
+    .   Use constructors where needed.
 4.  **Object-Oriented Programming**
-    *   Use object-oriented programming where it helps the design.
-    *   Use inheritance or polymorphism only where it makes sense.
-    *   Students should be able to explain why they used their class structure.
+    .   Use object-oriented programming where it helps the design.
+    .   Use inheritance or polymorphism only where it makes sense.
+    .   Students should be able to explain why they used their class structure.
 5.  **Memory Management**
-    *   Avoid memory leaks and unsafe pointer use.
-    *   Prefer normal objects, references, STL containers, and smart pointers.
-    *   Use `std::unique_ptr` or `std::shared_ptr` only where appropriate.
-    *   Students should be able to explain who owns important objects.
+    .   Avoid memory leaks and unsafe pointer use.
+    .   Prefer normal objects, references, STL containers, and smart pointers.
+    .   Use `std::unique_ptr` or `std::shared_ptr` only where appropriate.
+    .   Students should be able to explain who owns important objects.
 6.  **STL and Modern C++**
-    *   Use suitable STL containers such as:
-        ** `std::vector`
-        ** `std::map`
-        ** `std::set`
-        ** `std::unordered_map`
+    .   Use suitable STL containers such as:
+        .. `std::vector`
+        .. `std::map`
+        .. `std::set`
+        .. `std::unordered_map`
     *   Use STL algorithms where appropriate, such as:
-        ** `std::find`
-        ** `std::sort`
-        ** `std::count`
-        ** `std::copy`
-    *   Use lambdas where useful.
-    *   Use `const` and references correctly where possible.
+        .. `std::find`
+        .. `std::sort`
+        .. `std::count`
+        .. `std::copy`
+    .   Use lambdas where useful.
+    .   Use `const` and references correctly where possible.
 7.  **Documentation and Interview**
-    *   Include README instructions for building and running the C++ component.
-    *   Each student must be able to explain:
-        ** what the C++ component does;
-        ** how the code is organised;
-        ** how the classes work;
-        ** how memory is managed;
-        ** what STL containers/algorithms were used;
-        ** how AI tools were used, if applicable.
+    .   Include README instructions for building and running the C++ component.
+    .   Each student must be able to explain:
+        .. what the C++ component does;
+        .. how the code is organised;
+        .. how the classes work;
+        .. how memory is managed;
+        .. what STL containers/algorithms were used;
+        .. how AI tools were used, if applicable.
 
 === Cryptography (Eoin O’Brien) — 25%
 
@@ -230,10 +230,10 @@ The messaging application must provide end-to-end encrypted (E2EE) communication
 
 Your design must guarantee confidentiality, integrity, and authenticity of messages against:
 
-*   A passive network attacker who can read all traffic between clients and the server
-*   An active network attacker who can additionally modify, drop, replay, or inject traffic
-*   An honest-but-curious server that faithfully runs your protocol but logs everything it sees
-*   A fully compromised server controlled by the attacker, with full access to the database and able to send arbitrary responses to clients
+.   A passive network attacker who can read all traffic between clients and the server
+.   An active network attacker who can additionally modify, drop, replay, or inject traffic
+.   An honest-but-curious server that faithfully runs your protocol but logs everything it sees
+.   A fully compromised server controlled by the attacker, with full access to the database and able to send arbitrary responses to clients
 
 A compromised server can drop messages, refuse to deliver them, or serve malicious public keys to new users. It **must not** be able to read message plaintexts, forge messages from one user to another, or tamper with ciphertexts without detection. Your design document must state explicitly which properties survive server compromise and which do not.
 
@@ -280,25 +280,25 @@ Students must demonstrate the application of blockchain technology to provide ta
 **Requirements:**
 
 1.  **Smart Contract Development**
-    ** Write a Solidity smart contract that stores message conversation digest hashes periodically (keccak256).
-    ** Deploy the contract to the Ethereum Sepolia testnet
-    ** The contract should accept a message conversation hash and record it alongside the block timestamp
-    ** Provide the deployed contract address and ABI in your submission
+    . Write a Solidity smart contract that stores message conversation digest hashes periodically (keccak256).
+    . Deploy the contract to the Ethereum Sepolia testnet
+    . The contract should accept a message conversation hash and record it alongside the block timestamp
+    . Provide the deployed contract address and ABI in your submission
 2.  **Message Digest Recording**
-    ** When a message (or conversation segment) is sent, compute its keccak256 hash
-    ** Write the hash to the deployed smart contract via a transaction
-    ** Store the corresponding transaction hash for later verification
-    ** Pay attention to trade offs in persisting to the chain. E.g. a hash for each message may be excessive.
+    . When a message (or conversation segment) is sent, compute its keccak256 hash
+    . Write the hash to the deployed smart contract via a transaction
+    . Store the corresponding transaction hash for later verification
+    . Pay attention to trade offs in persisting to the chain. E.g. a hash for each message may be excessive.
 3.  **Verification Page**
-    ** Implement a web-based verification interface that allows a user to:
-        *** Input or paste original message content
-        *** Retrieve the on-chain hash and timestamp for a given transaction
-        *** Compare the computed hash of the provided content against the on-chain record
-        *** Display a clear pass/fail fidelity result with timestamp information
-    ** This page should be accessible independently of the messaging application
-    ** Reference example: Document Fidelity Proof — Upstream Exchange
+    . Implement a web-based verification interface that allows a user to:
+        .. Input or paste original message content
+        .. Retrieve the on-chain hash and timestamp for a given transaction
+        .. Compare the computed hash of the provided content against the on-chain record
+        .. Display a clear pass/fail fidelity result with timestamp information
+    . This page should be accessible independently of the messaging application
+    . Reference example: Document Fidelity Proof — Upstream Exchange
 4.  **Understanding and Explanation**
-    ** Students must be able to explain: hash functions and why keccak256 is used, how Ethereum transactions work, gas costs, the immutability guarantees of blockchain, and the difference between on-chain and off-chain data
+    . Students must be able to explain: hash functions and why keccak256 is used, how Ethereum transactions work, gas costs, the immutability guarantees of blockchain, and the difference between on-chain and off-chain data
 
 == Assessment Rubrics
 
