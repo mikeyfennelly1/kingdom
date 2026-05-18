@@ -1,12 +1,12 @@
 {
   "packages": [
-    "gcc@latest",
-    "clang-tools@latest",
-    "cmake@latest",
-    "ninja@latest",
-    "go-task@latest",
-    "openjdk@latest",
-    "plantuml@latest"
+    "gcc@15.2.0",
+    "clang-tools@21.1.8",
+    "cmake@4.1.2",
+    "ninja@1.13.1",
+    "go-task@3.48.0",
+    "openjdk@19.0.1+10",
+    "plantuml@1.2026.2"
   ],
   "shell": {
     "init_hook": [
