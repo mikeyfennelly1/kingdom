@@ -1,0 +1,23 @@
+{
+  "packages": [
+    "gcc@latest",
+    "clang-tools@latest",
+    "cmake@latest",
+    "ninja@latest",
+    "go-task@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'Development environment initialized'",
+      "echo 'C++ compiler:' $(g++ --version | head -n 1)",
+      "echo 'CMake:' $(cmake --version | head -n 1)",
+      "echo 'Ninja:' $(ninja --version)",
+      "echo 'Task:' $(task --version)"
+    ]
+  },
+  "env": {
+    "CXX": "g++",
+    "CC": "gcc",
+    "CXXFLAGS": "-std=c++20"
+  }
+}
