@@ -2,3 +2,10 @@
 
 1. Download devbox.
 2. clone this repo and run `devbox shell`
+
+image::https://gaelicart.ie/app/uploads/2021/01/Kerry-2006-GA-670.jpg[]
+image::https://www.skelligmichaelcruises.com/wp-content/uploads/2015/10/day-3-skelligs-novemberslider3.jpg[]
+image::https:https://allaroundireland.ie/carrauntoohil/[]
+image::https:https://annagh-more.ie/wp-content/uploads/2018/05/Map-of-Kerry.jpg[]
+image::https:https://www.independent.ie/regionals/kerry/south-kerry-news/kerry-political-row-over-michael-healy-rae-funding-claim-there-were-no-deals-for-him/a353892223.html[]
+image::https://www.farmersjournal.ie/WEBFILES/000/563/848/1525181-563848.jpg[]
