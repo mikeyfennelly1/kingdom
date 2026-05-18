@@ -1,0 +1,245 @@
+{
+  "lockfile_version": "1",
+  "packages": {
+    "cmake@latest": {
+      "last_modified": "2025-11-23T21:50:36Z",
+      "resolved": "github:NixOS/nixpkgs/ee09932cedcef15aaf476f9343d1dea2cb77e261#cmake",
+      "source": "devbox-search",
+      "version": "4.1.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/0v5vpvwbl94qv9447jz995i4n9mx4l63-cmake-4.1.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/0v5vpvwbl94qv9447jz995i4n9mx4l63-cmake-4.1.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ipjw0mbzcycidbw62gsz47cgivqxm2lv-cmake-4.1.2",
+              "default": true
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/4m6l2qb5s7vyirybbn3c5k1rv2dww1vy-cmake-4.1.2-debug"
+            }
+          ],
+          "store_path": "/nix/store/ipjw0mbzcycidbw62gsz47cgivqxm2lv-cmake-4.1.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/i7c7r2g0zycvi7wh3rnw1dx3aglbvw2d-cmake-4.1.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/i7c7r2g0zycvi7wh3rnw1dx3aglbvw2d-cmake-4.1.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/w9jm660dykns6hzrdhxmqfywnc9ail8g-cmake-4.1.2",
+              "default": true
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/pnizhra0882ijp3nilvzdzbaa0ayq4hd-cmake-4.1.2-debug"
+            }
+          ],
+          "store_path": "/nix/store/w9jm660dykns6hzrdhxmqfywnc9ail8g-cmake-4.1.2"
+        }
+      }
+    },
+    "gcc@latest": {
+      "last_modified": "2026-04-23T13:07:47Z",
+      "resolved": "github:NixOS/nixpkgs/01fbdeef22b76df85ea168fbfe1bfd9e63681b30#gcc",
+      "source": "devbox-search",
+      "version": "15.2.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/dwlwh17hj0kvd3wjdldzjhpg1lrkriz7-gcc-wrapper-15.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/9aq51flq9r3qk1wad800jnwhywxh11g8-gcc-wrapper-15.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/c56kq8gqdv1x250bkszg4qka470hkdxn-gcc-wrapper-15.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/dwlwh17hj0kvd3wjdldzjhpg1lrkriz7-gcc-wrapper-15.2.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xvvipinc7wngr82akl5i61bxdh10rajw-gcc-wrapper-15.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/d5svqdhdiryldnkaphaxwamiwxnadcid-gcc-wrapper-15.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/q487ij6jvnbvwwqnqf2yzacplj0nl1lm-gcc-wrapper-15.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/xvvipinc7wngr82akl5i61bxdh10rajw-gcc-wrapper-15.2.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/3gphzab4pz860k6xyyg913a0ys3ch3fw-gcc-wrapper-15.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/wp66lw67zy3a6l8nyrm7mp849pv38a52-gcc-wrapper-15.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/nrkdf7av6jq3p1x7pdmvllcp1l1gbs1v-gcc-wrapper-15.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/3gphzab4pz860k6xyyg913a0ys3ch3fw-gcc-wrapper-15.2.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qd70v8g0561vm8m33kmnp79z00cgyi5n-gcc-wrapper-15.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/s03w1r1shmmzs1zz367aplbfyq2vgcfg-gcc-wrapper-15.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/k8zz91jx73nabxg7hh8yshab5w9y4rq8-gcc-wrapper-15.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/qd70v8g0561vm8m33kmnp79z00cgyi5n-gcc-wrapper-15.2.0"
+        }
+      }
+    },
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "last_modified": "2026-05-15T18:21:44Z",
+      "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb?lastModified=1778869304&narHash=sha256-30sZNZoA1cqF5JNO9fVX%2BwgiQYjB7HJqqJ4ztCDeBZE%3D"
+    },
+    "go-task@latest": {
+      "last_modified": "2026-04-23T13:07:47Z",
+      "resolved": "github:NixOS/nixpkgs/01fbdeef22b76df85ea168fbfe1bfd9e63681b30#go-task",
+      "source": "devbox-search",
+      "version": "3.48.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/gx97hxd28ymbxf2nj4kq6masld4qk7yw-go-task-3.48.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/gx97hxd28ymbxf2nj4kq6masld4qk7yw-go-task-3.48.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/di0pkf2d113g9nkcbm4p51sgivfbkcxg-go-task-3.48.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/di0pkf2d113g9nkcbm4p51sgivfbkcxg-go-task-3.48.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4mdamkq6v7xi11525ah95nb4psdd1a9m-go-task-3.48.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4mdamkq6v7xi11525ah95nb4psdd1a9m-go-task-3.48.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/gak3jfx9splyph60r0vvvv24vjcwyakx-go-task-3.48.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/gak3jfx9splyph60r0vvvv24vjcwyakx-go-task-3.48.0"
+        }
+      }
+    },
+    "ninja@latest": {
+      "last_modified": "2025-11-23T21:50:36Z",
+      "resolved": "github:NixOS/nixpkgs/ee09932cedcef15aaf476f9343d1dea2cb77e261#ninja",
+      "source": "devbox-search",
+      "version": "1.13.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6y79vrqachzns4pgl8r0j04b7g33hl52-ninja-1.13.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6y79vrqachzns4pgl8r0j04b7g33hl52-ninja-1.13.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jpwn5zii6bzpvf9dm4dw7cdvwychpxwz-ninja-1.13.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jpwn5zii6bzpvf9dm4dw7cdvwychpxwz-ninja-1.13.1"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/82kdfnd09s2npwlsnqzak29nf592czr6-ninja-1.13.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/82kdfnd09s2npwlsnqzak29nf592czr6-ninja-1.13.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/nib1r4k4cqph7zjjnbfc1d6cbg11qr76-ninja-1.13.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/nib1r4k4cqph7zjjnbfc1d6cbg11qr76-ninja-1.13.1"
+        }
+      }
+    }
+  }
+}
