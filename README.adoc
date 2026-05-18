@@ -19,12 +19,16 @@ devbox shell
 *CMake*
 - link:https://cmake.org/cmake/help/latest/index.html[CMake command reference]
 - link:https://cmake.org/cmake/help/latest/manual/cmake-variables.7.html[CMake Variables]
+
 *libsodium*
 - link:https://libsodium.gitbook.io/doc[libsodium User Guide]
+
 *openssl*
 - link:https://docs.openssl.org/master/man7/ossl-guide-introduction/[OpenSSL User Guide]
+
 *libpqxx*
 - link:https://pqxx.org/libpqxx/[libpqxx User Guide]
+
 *googletest*
 - link:https://google.github.io/googletest/[GoogleTest User Guide]
 
