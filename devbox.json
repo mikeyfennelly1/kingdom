@@ -4,7 +4,9 @@
     "clang-tools@latest",
     "cmake@latest",
     "ninja@latest",
-    "go-task@latest"
+    "go-task@latest",
+    "openjdk@latest",
+    "plantuml@latest"
   ],
   "shell": {
     "init_hook": [
@@ -16,8 +18,8 @@
     ]
   },
   "env": {
-    "CXX": "g++",
-    "CC": "gcc",
+    "CXX":      "g++",
+    "CC":       "gcc",
     "CXXFLAGS": "-std=c++20"
   }
 }

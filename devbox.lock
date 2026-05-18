@@ -1,6 +1,54 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "clang-tools@latest": {
+      "last_modified": "2026-04-23T13:07:47Z",
+      "resolved": "github:NixOS/nixpkgs/01fbdeef22b76df85ea168fbfe1bfd9e63681b30#clang-tools",
+      "source": "devbox-search",
+      "version": "21.1.8",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/bw3x1vkn4gdbhmjzqnjrznx7zd6ylc2k-clang-tools-21.1.8",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/bw3x1vkn4gdbhmjzqnjrznx7zd6ylc2k-clang-tools-21.1.8"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6brkgrckqbashgarh3iqw79hqb075ijz-clang-tools-21.1.8",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6brkgrckqbashgarh3iqw79hqb075ijz-clang-tools-21.1.8"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/l6i8gmm17pqzp2f4js69zvmw2rckagvq-clang-tools-21.1.8",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/l6i8gmm17pqzp2f4js69zvmw2rckagvq-clang-tools-21.1.8"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/55mfy3z8nv3d7hjghybnk2fmazyqfyhh-clang-tools-21.1.8",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/55mfy3z8nv3d7hjghybnk2fmazyqfyhh-clang-tools-21.1.8"
+        }
+      }
+    },
     "cmake@latest": {
       "last_modified": "2025-11-23T21:50:36Z",
       "resolved": "github:NixOS/nixpkgs/ee09932cedcef15aaf476f9343d1dea2cb77e261#cmake",
@@ -238,6 +286,60 @@
             }
           ],
           "store_path": "/nix/store/nib1r4k4cqph7zjjnbfc1d6cbg11qr76-ninja-1.13.1"
+        }
+      }
+    },
+    "openjdk@latest": {
+      "last_modified": "2023-02-24T09:01:09Z",
+      "resolved": "github:NixOS/nixpkgs/7d0ed7f2e5aea07ab22ccb338d27fbe347ed2f11#openjdk",
+      "source": "devbox-search",
+      "version": "19.0.1+10"
+    },
+    "plantuml@latest": {
+      "last_modified": "2026-04-23T13:07:47Z",
+      "resolved": "github:NixOS/nixpkgs/01fbdeef22b76df85ea168fbfe1bfd9e63681b30#plantuml",
+      "source": "devbox-search",
+      "version": "1.2026.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/iw19jl3s06w925ipkk1ih7haphhzy2md-plantuml-1.2026.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/iw19jl3s06w925ipkk1ih7haphhzy2md-plantuml-1.2026.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/s2735j3gpnmpcmm6pamyqykj7cywy0hz-plantuml-1.2026.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/s2735j3gpnmpcmm6pamyqykj7cywy0hz-plantuml-1.2026.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/v070q1498420fs55xkqwh0bnp4f56fyy-plantuml-1.2026.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/v070q1498420fs55xkqwh0bnp4f56fyy-plantuml-1.2026.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jkrrj32yakb84sldiaincylxab4n8v9c-plantuml-1.2026.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jkrrj32yakb84sldiaincylxab4n8v9c-plantuml-1.2026.2"
         }
       }
     }
