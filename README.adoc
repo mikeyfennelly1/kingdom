@@ -31,7 +31,7 @@ The Kingdom Server (`kds`) can be started from the build directory:
 [source, bash]
 ----
 # Start the REST API server
-./build/kds/kds
+task run
 ----
 
 The server runs on port `8080` by default.
