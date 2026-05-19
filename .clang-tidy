@@ -1,0 +1,5 @@
+Checks: 'misc-unused-includes,bugprone-*,modernize-*,performance-*,readability-*'
+WarningsAsErrors: 'misc-unused-includes'
+CheckOptions:
+  - key: misc-unused-includes.IncludeCleaner
+    value: 'true'

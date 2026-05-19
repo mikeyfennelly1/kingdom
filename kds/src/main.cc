@@ -1,18 +1,20 @@
-#include "Server.hh"
 #include <spdlog/spdlog.h>
 
-int main(void) {
-    try {
-        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
-        spdlog::info("Initializing Kingdom Server...");
+#include <cstdlib>
 
-        kd::Server server("0.0.0.0", 8080);
-        server.start();
-        
-    } catch (const std::exception& e) {
-        spdlog::critical("Unhandled exception: {}", e.what());
-        return 1;
-    }
+#include "controller/Controller.hh"
 
-    return 0;
+const int defaultPortNumber = 8080;
+
+auto main() -> int {
+  try {
+    kd::Controller server = kd::configure();
+    server.start();
+
+  } catch (const std::exception& e) {
+    spdlog::critical("Unhandled exception: {}", e.what());
+    return 1;
+  }
+
+  return 0;
 }

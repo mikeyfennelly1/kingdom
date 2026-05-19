@@ -26,3 +26,9 @@ tasks:
     cmds:
       - plantuml -tsvg docs/arch.puml
       - echo "$(pwd)/docs/arch.svg"
+
+  test:
+    desc: Runs all project tests
+    deps: [build]
+    cmds:
+      - cd build && ctest --output-on-failure
