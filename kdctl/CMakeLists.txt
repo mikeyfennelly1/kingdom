@@ -5,5 +5,7 @@ add_executable(kdctl
 )
 
 target_link_libraries(kdctl
-    PRIVATE kd
+    PRIVATE 
+        kd
+        CLI11::CLI11
 )
