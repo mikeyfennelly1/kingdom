@@ -9,22 +9,23 @@ class SecurityTest : public ::testing::Test {
 protected:
     Message msg;
     
+    const int senderId = 100;
     void SetUp() override {
         msg.id = 1;
-        msg.senderId = 100;
+        msg.senderId = senderId;
         msg.payload = "Test payload";
     }
 };
 
 TEST_F(SecurityTest, FactoryCreatesCorrectPredicates) {
-    auto p1 = SecurityPredicateFactory::GetPredicate("ValidateSenderAuthenticity");
-    ASSERT_NE(p1, nullptr);
+    auto validateSenderAuthenticity = SecurityPredicateFactory::GetPredicate("ValidateSenderAuthenticity");
+    ASSERT_NE(validateSenderAuthenticity, nullptr);
 
-    auto p2 = SecurityPredicateFactory::GetPredicate("ValidateUntampered");
-    ASSERT_NE(p2, nullptr);
+    auto validateUntampered = SecurityPredicateFactory::GetPredicate("ValidateUntampered");
+    ASSERT_NE(validateUntampered, nullptr);
 
-    auto p3 = SecurityPredicateFactory::GetPredicate("ValidateAuthenticated");
-    ASSERT_NE(p3, nullptr);
+    auto validateAuthenticated = SecurityPredicateFactory::GetPredicate("ValidateAuthenticated");
+    ASSERT_NE(validateAuthenticated, nullptr);
 }
 
 TEST_F(SecurityTest, FactoryThrowsOnUnknownPredicate) {
