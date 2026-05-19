@@ -7,7 +7,3 @@ add_executable(kdctl
 target_link_libraries(kdctl
     PRIVATE kd
 )
-
-target_include_directories(kdctl
-    PRIVATE ../libkd/include
-)
