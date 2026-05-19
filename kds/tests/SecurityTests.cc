@@ -1,19 +1,17 @@
 #include <gtest/gtest.h>
+#include <httplib.h>
 #include "../src/security/SecurityPredicateFactory.hh"
 #include "../src/security/SecurityFilterChain.hh"
-#include <kd/Message.hpp>
 
 namespace kd {
 
 class SecurityTest : public ::testing::Test {
 protected:
-    Message msg;
+    httplib::Request req;
     
-    const int senderId = 100;
     void SetUp() override {
-        msg.id = 1;
-        msg.senderId = senderId;
-        msg.payload = "Test payload";
+        req.method = "GET";
+        req.path = "/health";
     }
 };
 
@@ -40,7 +38,7 @@ TEST_F(SecurityTest, FilterChainExecutesAllSuccess) {
     };
     
     SecurityFilterChain chain(names);
-    auto result = chain.Execute(msg);
+    auto result = chain.Execute(req);
     
     EXPECT_FALSE(result.has_value());
 }
