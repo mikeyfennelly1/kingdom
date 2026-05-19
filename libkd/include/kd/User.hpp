@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <nlohmann/json.hpp>
 
 namespace kd {
 
@@ -12,6 +13,8 @@ struct User {
     std::string username;
     std::string displayName;
     std::string publicKey; // Base64 encoded public key for E2EE
+
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(User, id, username, displayName, publicKey)
 };
 
 } // namespace kd
