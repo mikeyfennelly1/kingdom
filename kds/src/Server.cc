@@ -1,4 +1,5 @@
 #include "Server.hh"
+#include <kd/Conversation.hpp>
 
 namespace kd {
 
@@ -21,6 +22,34 @@ void Server::setupRoutes() {
             {"version", "1.0"}
         };
         res.set_content(info.dump(), "application/json");
+    });
+
+    // Get all conversations for a user
+    svr_.Get(R"(/users/(\d+)/conversations)", [](const httplib::Request& req, httplib::Response& res) {
+        std::string userIdStr = req.matches[1];
+        uint64_t userId = std::stoull(userIdStr);
+        
+        spdlog::info("Fetching conversations for user: {}", userId);
+
+        // Mock data
+        std::vector<kd::Conversation> convs = {
+            {1, "General Discussion", {userId, 2, 3}, 1716124800},
+            {2, "Security Team", {userId, 4}, 1716124900}
+        };
+
+        nlohmann::json result = convs;
+        res.set_content(result.dump(), "application/json");
+    });
+
+    // 404 handler
+    svr_.set_error_handler([](const httplib::Request&, httplib::Response& res) {
+        if (res.status == 404) {
+            nlohmann::json error = {
+                {"error", "Not Found"},
+                {"status", 404}
+            };
+            res.set_content(error.dump(), "application/json");
+        }
     });
 }
 

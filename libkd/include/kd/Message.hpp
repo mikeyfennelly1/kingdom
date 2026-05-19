@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <nlohmann/json.hpp>
 
 namespace kd {
 
@@ -18,6 +19,8 @@ struct Message {
     uint64_t timestamp;      // Unix timestamp (milliseconds)
     
     std::string blockchainDigest; // Hash stored on-chain for integrity
+
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(Message, id, senderId, conversationId, payload, signature, timestamp, blockchainDigest)
 };
 
 } // namespace kd
