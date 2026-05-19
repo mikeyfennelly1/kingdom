@@ -5,5 +5,11 @@ add_executable(kds
 )
 
 target_link_libraries(kds
-    PRIVATE kd
+    PRIVATE 
+        kd
+        nlohmann_json::nlohmann_json
+        spdlog::spdlog
+        httplib::httplib
+        OpenSSL::SSL
+        OpenSSL::Crypto
 )
