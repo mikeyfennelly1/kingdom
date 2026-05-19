@@ -30,6 +30,14 @@ public:
      */
     nlohmann::json getInfo();
 
+    /**
+     * @brief Get all conversations for a user
+     * 
+     * @param userId User ID
+     * @return nlohmann::json List of conversations
+     */
+    nlohmann::json getConversations(uint64_t userId);
+
 private:
     std::string baseUrl_;
 };
