@@ -13,3 +13,19 @@ target_link_libraries(kds
         OpenSSL::SSL
         OpenSSL::Crypto
 )
+
+# Testing
+add_executable(kds_tests
+    tests/SecurityTests.cc
+    src/security/SecurityPredicateFactory.cc
+    src/security/SecurityFilterChain.cc
+)
+
+target_link_libraries(kds_tests
+    PRIVATE
+        kd
+        spdlog::spdlog
+        GTest::gtest_main
+)
+
+add_test(NAME KdsSecurityTests COMMAND kds_tests)

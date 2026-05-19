@@ -9,6 +9,7 @@ include(FetchContent)
 include(cmake/dependencies.cmake)
 
 configure_third_party()
+enable_testing()
 add_subdirectory(libkd)
 add_subdirectory(kdctl)
 add_subdirectory(kds)
