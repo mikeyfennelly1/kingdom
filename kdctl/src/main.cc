@@ -28,6 +28,17 @@ int main(int argc, char** argv) {
     uint64_t userId = 0;
     convsCmd->add_option("-u,--user-id", userId, "User ID to fetch conversations for")->required();
 
+    auto signupCmd = app.add_subcommand("signup", "Register a new user");
+    std::string username, password;
+    signupCmd->add_option("-u,--username", username, "Username")->required();
+    signupCmd->add_option("-p,--password", password, "Password")->required();
+
+    auto loginCmd = app.add_subcommand("login", "Log in as a user");
+    loginCmd->add_option("-u,--username", username, "Username")->required();
+    loginCmd->add_option("-p,--password", password, "Password")->required();
+
+    auto logoutCmd = app.add_subcommand("logout", "Log out current session");
+
     CLI11_PARSE(app, argc, argv);
 
     // Construct URL if not explicitly provided via --server
@@ -44,6 +55,12 @@ int main(int argc, char** argv) {
             std::cout << client.getInfo().dump(4) << std::endl;
         } else if (convsCmd->parsed()) {
             std::cout << client.getConversations(userId).dump(4) << std::endl;
+        } else if (signupCmd->parsed()) {
+            std::cout << client.signup(username, password).dump(4) << std::endl;
+        } else if (loginCmd->parsed()) {
+            std::cout << client.login(username, password).dump(4) << std::endl;
+        } else if (logoutCmd->parsed()) {
+            std::cout << client.logout().dump(4) << std::endl;
         } else {
             std::cout << app.help() << std::endl;
         }

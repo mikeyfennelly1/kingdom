@@ -26,6 +26,7 @@ class Controller {
 
   void setupRoutes();
   void healthController_();
+  void authController_();
   void conversationController_();
   void basicApiInfo_();
   void notFoundHandler_();

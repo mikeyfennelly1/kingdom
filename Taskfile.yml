@@ -1,6 +1,4 @@
-
 version: '3'
-
 
 tasks:
   build:
@@ -21,14 +19,18 @@ tasks:
       - rm -rf build
 
   uml:
-
     desc: Generate UML artifacts
     cmds:
       - plantuml -tsvg docs/arch.puml
-      - echo "$(pwd)/docs/arch.svg"
+      - echo "SVG generated in docs/arch.svg"
 
   test:
     desc: Runs all project tests
     deps: [build]
     cmds:
       - cd build && ctest --output-on-failure
+
+  format:
+    desc: Formats all source files using clang-format
+    cmds:
+      - find . -name "*.cc" -o -name "*.hh" -o -name "*.hpp" -exec clang-format -i {} +

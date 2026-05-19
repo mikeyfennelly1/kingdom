@@ -28,10 +28,34 @@ void Controller::setupRoutes() {
 
   notFoundHandler_();
   healthController_();
+  authController_();
   basicApiInfo_();
 
   // conversations
   conversationController_();
+}
+
+void Controller::authController_() {
+  // Sign-up endpoint
+  svr_.Post("/signup", [](const httplib::Request& req, httplib::Response& res) {
+    spdlog::info("Sign-up request received: {}", req.body);
+    nlohmann::json response = {{"status", "success"}, {"message", "User signed up (stub)"}};
+    res.set_content(response.dump(), "application/json");
+  });
+
+  // Login endpoint
+  svr_.Post("/login", [](const httplib::Request& req, httplib::Response& res) {
+    spdlog::info("Login request received: {}", req.body);
+    nlohmann::json response = {{"status", "success"}, {"message", "User logged in (stub)"}};
+    res.set_content(response.dump(), "application/json");
+  });
+
+  // Logout endpoint
+  svr_.Post("/logout", [](const httplib::Request& req, httplib::Response& res) {
+    spdlog::info("Logout request received: {}", req.body);
+    nlohmann::json response = {{"status", "success"}, {"message", "User logged out (stub)"}};
+    res.set_content(response.dump(), "application/json");
+  });
 }
 
 void Controller::start() {

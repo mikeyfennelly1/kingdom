@@ -38,6 +38,10 @@ public:
      */
     nlohmann::json getConversations(uint64_t userId);
 
+    nlohmann::json signup(const std::string& username, const std::string& password);
+    nlohmann::json login(const std::string& username, const std::string& password);
+    nlohmann::json logout();
+
 private:
     std::string baseUrl_;
 };
