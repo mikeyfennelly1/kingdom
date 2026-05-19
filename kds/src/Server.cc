@@ -22,6 +22,17 @@ void Server::setupRoutes() {
         };
         res.set_content(info.dump(), "application/json");
     });
+
+    // 404 handler
+    svr_.set_error_handler([](const httplib::Request&, httplib::Response& res) {
+        if (res.status == 404) {
+            nlohmann::json error = {
+                {"error", "Not Found"},
+                {"status", 404}
+            };
+            res.set_content(error.dump(), "application/json");
+        }
+    });
 }
 
 void Server::start() {
