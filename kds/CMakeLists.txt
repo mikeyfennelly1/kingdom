@@ -7,7 +7,3 @@ add_executable(kds
 target_link_libraries(kds
     PRIVATE kd
 )
-
-target_include_directories(kds
-    PRIVATE ../libkd/include
-)

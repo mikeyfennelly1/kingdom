@@ -1,15 +1,16 @@
-file(GLOB_RECURSE KD_SOURCES src/*.cc)
-
 add_library(kd SHARED
-    ${KD_SOURCES}
+    src/Conversation.cc
+    src/Message.cc
 )
 
 target_include_directories(kd
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
 )
 
-# Optional: control output name/location
 set_target_properties(kd PROPERTIES
     OUTPUT_NAME "kd"
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 1
 )
