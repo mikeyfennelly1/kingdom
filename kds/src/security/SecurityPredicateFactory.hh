@@ -1,22 +1,13 @@
 #pragma once
-#include "SecurityPredicate.hh"
 #include <string>
-#include <memory>
+
+#include "SecurityPredicate.hh"
 
 namespace kd {
 
-/**
- * @brief Factory for creating security predicates by name.
- */
 class SecurityPredicateFactory {
-public:
-    /**
-     * @brief Get a predicate instance by name.
-     * 
-     * @param predicateName The name of the predicate.
-     * @return SecurityPredicatePtr A unique pointer to the predicate instance.
-     */
-    static SecurityPredicatePtr GetPredicate(const std::string& predicateName);
+ public:
+  static auto GetPredicate(const std::string& predicateName) -> SecurityPredicatePtr;
 };
 
-} // namespace kd
+}  // namespace kd

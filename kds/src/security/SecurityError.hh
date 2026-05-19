@@ -3,12 +3,9 @@
 
 namespace kd {
 
-/**
- * @brief Represents a security validation error.
- */
 struct SecurityError {
-    std::string message;
-    int httpStatusCode;
+  std::string message;
+  int httpStatusCode;
 };
 
-} // namespace kd
+}  // namespace kd

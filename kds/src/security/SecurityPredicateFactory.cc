@@ -1,19 +1,24 @@
 #include "SecurityPredicateFactory.hh"
-#include "SecurityPredicates.hh"
+
 #include <stdexcept>
+
+#include "SecurityPredicates.hh"
 
 namespace kd {
 
-SecurityPredicatePtr SecurityPredicateFactory::GetPredicate(const std::string& predicateName) {
-    if (predicateName == "ValidateSenderAuthenticity") {
-        return std::make_unique<ValidateSenderAuthenticity>();
-    } else if (predicateName == "ValidateUntampered") {
-        return std::make_unique<ValidateUntampered>();
-    } else if (predicateName == "ValidateAuthenticated") {
-        return std::make_unique<ValidateAuthenticated>();
-    }
-    
-    throw std::invalid_argument("Unknown security predicate: " + predicateName);
+auto SecurityPredicateFactory::GetPredicate(const std::string& predicateName)
+    -> SecurityPredicatePtr {
+  if (predicateName == "ValidateSenderAuthenticity") {
+    return std::make_unique<ValidateSenderAuthenticity>();
+  }
+  if (predicateName == "ValidateUntampered") {
+    return std::make_unique<ValidateUntampered>();
+  }
+  if (predicateName == "ValidateAuthenticated") {
+    return std::make_unique<ValidateAuthenticated>();
+  }
+
+  throw std::invalid_argument("Unknown security predicate: " + predicateName);
 }
 
-} // namespace kd
+}  // namespace kd
