@@ -23,6 +23,10 @@ int main(int argc, char** argv) {
 
     auto healthCmd = app.add_subcommand("health", "Check server health");
     auto infoCmd = app.add_subcommand("info", "Get server information");
+    
+    auto convsCmd = app.add_subcommand("conversations", "List conversations for a user");
+    uint64_t userId = 0;
+    convsCmd->add_option("-u,--user-id", userId, "User ID to fetch conversations for")->required();
 
     CLI11_PARSE(app, argc, argv);
 
@@ -38,6 +42,8 @@ int main(int argc, char** argv) {
             std::cout << client.getHealth().dump(4) << std::endl;
         } else if (infoCmd->parsed()) {
             std::cout << client.getInfo().dump(4) << std::endl;
+        } else if (convsCmd->parsed()) {
+            std::cout << client.getConversations(userId).dump(4) << std::endl;
         } else {
             std::cout << app.help() << std::endl;
         }
