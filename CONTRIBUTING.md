@@ -5,9 +5,9 @@
 
 This is to ensure that there isn't environmental/platform specific conflictions relating to conventional binary paths in build-tools, scripts etc.
 
-2. link:https://www.jetify.com/docs/devbox/installing-devbox[Install devbox.]
+2. [https://www.jetify.com/docs/devbox/installing-devbox][Install devbox.]
 
-3. link:https://linear.app/mikey-fennelly/project/kingdom-64173990f5c0/overview[Join the Linear Project.]
+3. [https://linear.app/mikey-fennelly/project/kingdom-64173990f5c0/overview][Join the Linear Project.]
 
 ## Development workflow
 ### Static analysis
