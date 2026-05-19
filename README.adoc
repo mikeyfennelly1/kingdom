@@ -6,12 +6,50 @@ Run the following set of commands:
 [source, bash]
 ----
 # install devbox if you don't have it already
-sudo apt install devbox
+curl -fsSL https://get.jetpack.io/devbox | bash
+
 # clone this repository
 git clone git@github.com:mikeyfennelly1/kingdom.git
+
 # move into project directory, and init devbox shell
 cd kingdom
 devbox shell
+----
+
+== Building the Project
+Once inside the `devbox shell`, use the task runner to build the system:
+
+[source, bash]
+----
+# Compile all libraries and binaries
+task build
+----
+
+== Running the Server
+The Kingdom Server (`kds`) can be started from the build directory:
+
+[source, bash]
+----
+# Start the REST API server
+./build/kds/kds
+----
+
+The server runs on port `8080` by default.
+
+== Installing the CLI
+To install the `kdctl` command-line tool to your system path (`/usr/local/bin`):
+
+[source, bash]
+----
+./kdctl-install.sh
+----
+
+After installation, you can use `kdctl` from any directory:
+
+[source, bash]
+----
+kdctl --help
+kdctl health
 ----
 
 == Tooling Reference Documentation
