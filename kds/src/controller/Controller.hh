@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include "../security/SecurityFilterChain.hh"
+#include "../db/Database.hh"
 
 namespace kd {
 
@@ -14,7 +15,7 @@ const std::string defaultListenHost = "0.0.0.0";
 
 class Controller {
  public:
-  Controller(std::string host = defaultListenHost, int port = defaultPortNumber);
+  Controller(std::string host, int port, std::string dbConnectionString);
 
   void start();
 
@@ -23,6 +24,7 @@ class Controller {
   int port_;
   httplib::Server svr_;
   std::unique_ptr<SecurityFilterChain> securityFilterChain_;
+  Database db_;
 
   void setupRoutes();
   void healthController_();

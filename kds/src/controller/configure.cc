@@ -1,5 +1,6 @@
 
 #include <httplib.h>
+#include <stdexcept>
 
 #include <kd/Conversation.hpp>
 
@@ -18,6 +19,13 @@ auto configure() -> kd::Controller {
   // Port Configuration
   const char* portEnv = std::getenv("KD_PORT");
   int port = (portEnv != nullptr) ? std::stoi(portEnv) : defaultPortNumber;
-  return {"0.0.0.0", port};
+
+  // Database Configuration
+  const char* dbUrl = std::getenv("KD_DB_URL");
+  if (dbUrl == nullptr) {
+    throw std::runtime_error("KD_DB_URL environment variable not set");
+  }
+
+  return {"0.0.0.0", port, dbUrl};
 }
 }  // namespace kd

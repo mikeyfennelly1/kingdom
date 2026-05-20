@@ -12,7 +12,7 @@ target_link_libraries(kds
         httplib::httplib
         OpenSSL::SSL
         OpenSSL::Crypto
-        ${LIBPQXX_LIBRARIES}  # libpqxx - PostgreSQL C++ client
+        ${LIBPQXX_LIBRARIES}    # libpqxx - PostgreSQL C++ client
 )
 
 # libpqxx headers exposed via pkg-config (pqxx/pqxx)

@@ -6,7 +6,8 @@
 
 namespace kd {
 
-Controller::Controller(std::string host, int port) : host_(std::move(host)), port_(port) {
+Controller::Controller(std::string host, int port, std::string dbConnectionString)
+    : host_(std::move(host)), port_(port), db_(dbConnectionString) {
   std::vector<std::string> securityPredicates = {
       "ValidateSenderAuthenticity", "ValidateUntampered", "ValidateAuthenticated"};
   securityFilterChain_ = std::make_unique<SecurityFilterChain>(securityPredicates);
@@ -36,11 +37,28 @@ void Controller::setupRoutes() {
 }
 
 void Controller::authController_() {
-  // Sign-up endpoint
-  svr_.Post("/signup", [](const httplib::Request& req, httplib::Response& res) {
-    spdlog::info("Sign-up request received: {}", req.body);
-    nlohmann::json response = {{"status", "success"}, {"message", "User signed up (stub)"}};
-    res.set_content(response.dump(), "application/json");
+  svr_.Post("/signup", [this](const httplib::Request& req, httplib::Response& res) {
+    spdlog::info("Sign-up request received");
+
+    auto body = nlohmann::json::parse(req.body, nullptr, false);
+    if (body.is_discarded() || !body.contains("username") || !body.contains("password")) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "username and password required"}}.dump(), "application/json");
+      return;
+    }
+
+    std::string username = body["username"];
+    std::string password = body["password"];
+
+    try {
+      uint64_t id = db_.createUser(username, password);
+      spdlog::info("Created user '{}' with id {}", username, id);
+      res.status = 201;
+      res.set_content(nlohmann::json{{"id", id}, {"username", username}}.dump(), "application/json");
+    } catch (const std::runtime_error& e) {
+      res.status = 409;
+      res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+    }
   });
 
   // Login endpoint
