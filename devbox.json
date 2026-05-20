@@ -7,7 +7,6 @@
     "go-task@3.48.0",
     "openjdk@19.0.1+10",
     "plantuml@1.2026.2",
-    "openssl@3.4.1",
     "libpqxx",
     "pkg-config"
   ],
