@@ -8,7 +8,9 @@
     "openjdk@19.0.1+10",
     "plantuml@1.2026.2",
     "libpqxx",
-    "pkg-config"
+    "pkg-config",
+    "tmux@latest",
+    "gum@latest"
   ],
   "shell": {
     "init_hook": [
