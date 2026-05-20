@@ -5,6 +5,7 @@
     "cmake@4.1.2",
     "ninja@1.13.1",
     "go-task@3.48.0",
+    "shellcheck@0.10.0",
     "openjdk@19.0.1+10",
     "plantuml@1.2026.2",
     "libpqxx",
