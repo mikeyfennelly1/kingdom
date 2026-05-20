@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kingdom — Message Integrity Verification</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: #f8fafc;
+    }
+
+    .subtitle {
+      font-size: 0.875rem;
+      color: #64748b;
+      margin-bottom: 2rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      padding: 0.75rem;
+      resize: vertical;
+      margin-bottom: 1.25rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus, input[type="text"]:focus {
+      border-color: #4f6ef7;
+    }
+
+    textarea { height: 120px; }
+
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      background: #4f6ef7;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #3d5ce8; }
+    button:disabled { background: #2d3148; color: #64748b; cursor: not-allowed; }
+
+    #result {
+      margin-top: 1.5rem;
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: none;
+    }
+
+    #result.pass {
+      background: #052e16;
+      border: 1px solid #16a34a;
+    }
+
+    #result.fail {
+      background: #2d0a0a;
+      border: 1px solid #dc2626;
+    }
+
+    #result.error {
+      background: #1c1007;
+      border: 1px solid #d97706;
+    }
+
+    .result-badge {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+
+    .pass .result-badge { color: #4ade80; }
+    .fail .result-badge { color: #f87171; }
+    .error .result-badge { color: #fbbf24; }
+
+    .result-detail {
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      color: #94a3b8;
+      line-height: 1.7;
+    }
+
+    .result-detail span { color: #cbd5e1; }
+
+    #spinner {
+      display: none;
+      text-align: center;
+      color: #64748b;
+      font-size: 0.875rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Message Integrity Verification</h1>
+    <p class="subtitle">Verify that a message has not been tampered with since it was sent.</p>
+
+    <label for="ciphertext">Message ciphertext</label>
+    <textarea id="ciphertext" placeholder="Paste the encrypted message payload here..."></textarea>
+
+    <label for="txHash">Transaction hash</label>
+    <input type="text" id="txHash" placeholder="0x...">
+
+    <button id="verifyBtn" onclick="verify()">Verify</button>
+
+    <div id="spinner">Querying Sepolia...</div>
+
+    <div id="result">
+      <div class="result-badge" id="resultBadge"></div>
+      <div class="result-detail" id="resultDetail"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.min.js";
+
+    // -- Configuration --
+    // Update CONTRACT_ADDRESS after deployment
+    const CONTRACT_ADDRESS = "REPLACE_WITH_DEPLOYED_CONTRACT_ADDRESS";
+    const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
+
+    const EVENT_ABI = [
+      "event HashRecorded(uint256 indexed conversationId, bytes32 hash, uint256 timestamp)"
+    ];
+
+    window.verify = async function () {
+      const ciphertext = document.getElementById("ciphertext").value.trim();
+      const txHash = document.getElementById("txHash").value.trim();
+      const resultEl = document.getElementById("result");
+      const spinner = document.getElementById("spinner");
+      const btn = document.getElementById("verifyBtn");
+
+      resultEl.style.display = "none";
+      resultEl.className = "";
+
+      if (!ciphertext || !txHash) {
+        showError("Both fields are required.");
+        return;
+      }
+
+      btn.disabled = true;
+      spinner.style.display = "block";
+
+      try {
+        const provider = new ethers.JsonRpcProvider(RPC_URL);
+
+        // Compute hash of the provided ciphertext
+        const computedHash = ethers.keccak256(ethers.toUtf8Bytes(ciphertext));
+
+        // Fetch the transaction receipt
+        const receipt = await provider.getTransactionReceipt(txHash);
+        if (!receipt) {
+          showError("Transaction not found on Sepolia. Check the hash and try again.");
+          return;
+        }
+
+        // Decode the HashRecorded event from the logs
+        const iface = new ethers.Interface(EVENT_ABI);
+        let onChainHash = null;
+        let onChainTimestamp = null;
+
+        for (const log of receipt.logs) {
+          if (log.address.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) continue;
+          try {
+            const parsed = iface.parseLog(log);
+            if (parsed && parsed.name === "HashRecorded") {
+              onChainHash = parsed.args.hash;
+              onChainTimestamp = parsed.args.timestamp;
+              break;
+            }
+          } catch {
+            // not a HashRecorded log, skip
+          }
+        }
+
+        if (!onChainHash) {
+          showError("No HashRecorded event found in this transaction. Ensure the transaction hash belongs to this contract.");
+          return;
+        }
+
+        const ts = new Date(Number(onChainTimestamp) * 1000).toUTCString();
+        const match = computedHash.toLowerCase() === onChainHash.toLowerCase();
+
+        showResult(match, computedHash, onChainHash, ts, receipt.blockNumber);
+
+      } catch (err) {
+        showError("Error: " + err.message);
+      } finally {
+        btn.disabled = false;
+        spinner.style.display = "none";
+      }
+    };
+
+    function showResult(pass, computedHash, onChainHash, timestamp, blockNumber) {
+      const resultEl = document.getElementById("result");
+      const badge = document.getElementById("resultBadge");
+      const detail = document.getElementById("resultDetail");
+
+      resultEl.className = pass ? "pass" : "fail";
+      badge.textContent = pass ? "PASS — Message is unmodified" : "FAIL — Message has been tampered with";
+      detail.innerHTML = `
+        <div>Recorded at: <span>${timestamp}</span></div>
+        <div>Block: <span>${blockNumber}</span></div>
+        <div>On-chain hash: <span>${onChainHash}</span></div>
+        <div>Computed hash: <span>${computedHash}</span></div>
+      `;
+      resultEl.style.display = "block";
+    }
+
+    function showError(msg) {
+      const resultEl = document.getElementById("result");
+      const badge = document.getElementById("resultBadge");
+      const detail = document.getElementById("resultDetail");
+
+      resultEl.className = "error";
+      badge.textContent = "Error";
+      detail.innerHTML = `<span>${msg}</span>`;
+      resultEl.style.display = "block";
+    }
+  </script>
+</body>
+</html>
