@@ -1,16 +1,26 @@
 function(configure_third_party)
-    FetchContent_Declare(json 
-        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz 
+    FetchContent_Declare(json
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(json)
+
+    # On macOS, CMake won't find Homebrew's OpenSSL when using Nix's pkg-config.
+    # On Linux this block is skipped - OpenSSL is found via standard system paths.
+    if(APPLE)
+        set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
+    endif()
     find_package(OpenSSL 3.0 REQUIRED)
+
     FetchContent_Declare(spdlog
         GIT_REPOSITORY https://github.com/gabime/spdlog.git
         GIT_TAG v1.13.0
     )
     FetchContent_MakeAvailable(spdlog)
+
+    # HTTPS support enabled; macOS keychain disabled to avoid CoreFoundation dependency in Nix
     set(HTTPLIB_REQUIRE_OPENSSL ON CACHE BOOL "" FORCE)
+    set(HTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
             httplib
             GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
@@ -31,4 +41,8 @@ function(configure_third_party)
             GIT_TAG        v1.14.0
     )
     FetchContent_MakeAvailable(googletest)
+
+    # libpqxx - C++ PostgreSQL client, located via pkg-config since Nix doesn't ship a CMake config file for it
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBPQXX REQUIRED libpqxx)
 endfunction()

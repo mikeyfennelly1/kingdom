@@ -5,13 +5,21 @@ add_executable(kds
 )
 
 target_link_libraries(kds
-    PRIVATE 
+    PRIVATE
         kd
         nlohmann_json::nlohmann_json
         spdlog::spdlog
         httplib::httplib
         OpenSSL::SSL
         OpenSSL::Crypto
+        ${LIBPQXX_LIBRARIES}  # libpqxx - PostgreSQL C++ client
+)
+
+# libpqxx headers exposed via pkg-config (pqxx/pqxx)
+target_include_directories(kds
+    PRIVATE
+        ../libkd/include
+        ${LIBPQXX_INCLUDE_DIRS}
 )
 
 # Testing
