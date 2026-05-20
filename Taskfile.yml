@@ -4,8 +4,7 @@ tasks:
   build:
     desc: Compiles the project using CMake and Ninja
     cmds:
-      - cmake -B build -GNinja
-      - cmake --build build
+      - ./scripts/build.sh
 
   run:
     desc: Builds and executes the kds binary
@@ -26,11 +25,25 @@ tasks:
 
   test:
     desc: Runs all project tests
-    deps: [build]
     cmds:
-      - cd build && ctest --output-on-failure
+      - ./scripts/test.sh
+
+  lint:
+    desc: Runs clang-tidy as part of the build process
+    cmds:
+      - ./scripts/static-analysis.sh
 
   format:
     desc: Formats all source files using clang-format
     cmds:
-      - find . -name "*.cc" -o -name "*.hh" -o -name "*.hpp" -exec clang-format -i {} +
+      - find kdctl kds libkd -name "*.cc" -o -name "*.hh" -o -name "*.hpp" | xargs clang-format -i
+
+  format-check:
+    desc: Checks if all source files are formatted correctly
+    cmds:
+      - ./scripts/static-analysis.sh
+
+  shellcheck:
+    desc: Runs ShellCheck on all scripts
+    cmds:
+      - ./scripts/shellcheck.sh
