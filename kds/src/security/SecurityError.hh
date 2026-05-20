@@ -4,8 +4,8 @@
 namespace kd {
 
 struct SecurityError {
-  std::string message;
-  int httpStatusCode;
+    std::string message;
+    int httpStatusCode;
 };
 
 }  // namespace kd

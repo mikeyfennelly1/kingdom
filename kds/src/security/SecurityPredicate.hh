@@ -9,10 +9,10 @@
 namespace kd {
 
 class SecurityPredicate {
- public:
-  virtual ~SecurityPredicate() = default;
+   public:
+    virtual ~SecurityPredicate() = default;
 
-  virtual auto Validate(const httplib::Request& req) -> std::optional<SecurityError> = 0;
+    virtual auto Validate(const httplib::Request& req) -> std::optional<SecurityError> = 0;
 };
 
 using SecurityPredicatePtr = std::unique_ptr<SecurityPredicate>;

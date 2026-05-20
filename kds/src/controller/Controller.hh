@@ -15,24 +15,24 @@ const int defaultPortNumber = 8080;
 const std::string defaultListenHost = "0.0.0.0";
 
 class Controller {
- public:
-  Controller(std::string host, int port, std::string dbConnectionString);
+   public:
+    Controller(std::string host, int port, std::string dbConnectionString);
 
-  void start();
+    void start();
 
- private:
-  std::string host_;
-  int port_;
-  httplib::Server svr_;
-  std::unique_ptr<SecurityFilterChain> securityFilterChain_;
-  Database db_;
+   private:
+    std::string host_;
+    int port_;
+    httplib::Server svr_;
+    std::unique_ptr<SecurityFilterChain> securityFilterChain_;
+    Database db_;
 
-  void setupRoutes();
-  void healthController_();
-  void authController_();
-  void conversationController_();
-  void basicApiInfo_();
-  void notFoundHandler_();
+    void setupRoutes();
+    void healthController_();
+    void authController_();
+    void conversationController_();
+    void basicApiInfo_();
+    void notFoundHandler_();
 };
 
 auto configure() -> kd::Controller;

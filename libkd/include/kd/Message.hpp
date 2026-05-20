@@ -9,19 +9,19 @@ namespace kd {
  * @brief Represents a single message within a conversation.
  */
 struct Message {
-  uint64_t id;
-  uint64_t senderId;
-  uint64_t conversationId;
+    uint64_t id;
+    uint64_t senderId;
+    uint64_t conversationId;
 
-  std::string payload;    // Encrypted message content
-  std::string signature;  // Digital signature for authenticity
+    std::string payload;    // Encrypted message content
+    std::string signature;  // Digital signature for authenticity
 
-  uint64_t timestamp;  // Unix timestamp (milliseconds)
+    uint64_t timestamp;  // Unix timestamp (milliseconds)
 
-  std::string blockchainDigest;  // Hash stored on-chain for integrity
+    std::string blockchainDigest;  // Hash stored on-chain for integrity
 
-  NLOHMANN_DEFINE_TYPE_INTRUSIVE(Message, id, senderId, conversationId, payload, signature,
-                                 timestamp, blockchainDigest)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(Message, id, senderId, conversationId, payload, signature,
+                                   timestamp, blockchainDigest)
 };
 
 }  // namespace kd

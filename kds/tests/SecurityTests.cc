@@ -7,39 +7,39 @@
 namespace kd {
 
 class SecurityTest : public ::testing::Test {
- protected:
-  httplib::Request req;
+   protected:
+    httplib::Request req;
 
-  void SetUp() override {
-    req.method = "GET";
-    req.path = "/health";
-  }
+    void SetUp() override {
+        req.method = "GET";
+        req.path = "/health";
+    }
 };
 
 TEST_F(SecurityTest, FactoryCreatesCorrectPredicates) {
-  auto validateSenderAuthenticity =
-      SecurityPredicateFactory::GetPredicate("ValidateSenderAuthenticity");
-  ASSERT_NE(validateSenderAuthenticity, nullptr);
+    auto validateSenderAuthenticity =
+        SecurityPredicateFactory::GetPredicate("ValidateSenderAuthenticity");
+    ASSERT_NE(validateSenderAuthenticity, nullptr);
 
-  auto validateUntampered = SecurityPredicateFactory::GetPredicate("ValidateUntampered");
-  ASSERT_NE(validateUntampered, nullptr);
+    auto validateUntampered = SecurityPredicateFactory::GetPredicate("ValidateUntampered");
+    ASSERT_NE(validateUntampered, nullptr);
 
-  auto validateAuthenticated = SecurityPredicateFactory::GetPredicate("ValidateAuthenticated");
-  ASSERT_NE(validateAuthenticated, nullptr);
+    auto validateAuthenticated = SecurityPredicateFactory::GetPredicate("ValidateAuthenticated");
+    ASSERT_NE(validateAuthenticated, nullptr);
 }
 
 TEST_F(SecurityTest, FactoryThrowsOnUnknownPredicate) {
-  EXPECT_THROW(SecurityPredicateFactory::GetPredicate("UnknownPredicate"), std::invalid_argument);
+    EXPECT_THROW(SecurityPredicateFactory::GetPredicate("UnknownPredicate"), std::invalid_argument);
 }
 
 TEST_F(SecurityTest, FilterChainExecutesAllSuccess) {
-  std::vector<std::string> names = {"ValidateSenderAuthenticity", "ValidateUntampered",
-                                    "ValidateAuthenticated"};
+    std::vector<std::string> names = {"ValidateSenderAuthenticity", "ValidateUntampered",
+                                      "ValidateAuthenticated"};
 
-  SecurityFilterChain chain(names);
-  auto result = chain.Execute(req);
+    SecurityFilterChain chain(names);
+    auto result = chain.Execute(req);
 
-  EXPECT_FALSE(result.has_value());
+    EXPECT_FALSE(result.has_value());
 }
 
 // To test failure, we'd ideally have a way to inject a failing predicate.

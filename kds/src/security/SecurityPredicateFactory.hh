@@ -6,8 +6,8 @@
 namespace kd {
 
 class SecurityPredicateFactory {
- public:
-  static auto GetPredicate(const std::string& predicateName) -> SecurityPredicatePtr;
+   public:
+    static auto GetPredicate(const std::string& predicateName) -> SecurityPredicatePtr;
 };
 
 }  // namespace kd
