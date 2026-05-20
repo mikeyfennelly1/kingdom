@@ -47,7 +47,7 @@ nlohmann::json Client::signup(const std::string& username, const std::string& pa
     httplib::Client cli(baseUrl_);
     nlohmann::json body = {{"username", username}, {"password", password}};
     if (auto res = cli.Post("/signup", body.dump(), "application/json")) {
-        if (res->status == 200) return nlohmann::json::parse(res->body);
+        if (res->status == 200 || res->status == 201) return nlohmann::json::parse(res->body);
         throw std::runtime_error("Server returned status " + std::to_string(res->status));
     }
     throw std::runtime_error("Failed to connect to server at " + baseUrl_);
