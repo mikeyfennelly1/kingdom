@@ -1,0 +1,13 @@
+# ShellCheck configuration file
+# See: https://github.com/koalaman/shellcheck/wiki/Configuration
+
+# Enable all optional checks
+enable-all=true
+
+# Disable specific rules if they are too noisy or not applicable
+# SC2148: Tips about missing shebang (useful to keep enabled)
+# SC1091: Not following sourced files (useful to disable if env files aren't available)
+disable=SC1091
+
+# Set the shell type if not specified in the shebang
+shell=bash
