@@ -2,7 +2,9 @@
 
 #include <httplib.h>
 
+#include <chrono>
 #include <kd/Conversation.hpp>
+#include <kd/Message.hpp>
 
 namespace kd {
 
@@ -34,6 +36,7 @@ void Controller::setupRoutes() {
 
   // conversations
   conversationController_();
+  messageController_();
 }
 
 void Controller::authController_() {
@@ -93,19 +96,70 @@ void Controller::healthController_() {
 }
 
 void Controller::conversationController_() {
+  svr_.Post("/conversations", [this](const httplib::Request& req, httplib::Response& res) {
+    auto body = nlohmann::json::parse(req.body, nullptr, false);
+    if (body.is_discarded() || !body.contains("name") || !body.contains("participantIds")) {
+      res.status = 400;
+      res.set_content(
+          nlohmann::json{{"error", "name and participantIds required"}}.dump(), "application/json");
+      return;
+    }
+
+    std::string name = body["name"];
+    auto participantIds = body["participantIds"].get<std::vector<uint64_t>>();
+
+    uint64_t id = db_.createConversation(name, participantIds);
+    spdlog::info("Created conversation '{}' with id {}", name, id);
+    res.status = 201;
+    res.set_content(nlohmann::json{{"id", id}, {"name", name}}.dump(), "application/json");
+  });
+
   svr_.Get(R"(/users/(\d+)/conversations)",
-           [](const httplib::Request& req, httplib::Response& res) -> void {
-             std::string userIdStr = req.matches[1];
-             uint64_t userId = std::stoull(userIdStr);
-
+           [this](const httplib::Request& req, httplib::Response& res) -> void {
+             uint64_t userId = std::stoull(std::string(req.matches[1]));
              spdlog::info("Fetching conversations for user: {}", userId);
-
-             // Mock data
-             std::vector<kd::Conversation> convs = {
-                 {1, "General Discussion", {userId, 2, 3}, 1716124800},
-                 {2, "Security Team", {userId, 4}, 1716124900}};
-
+             auto convs = db_.getConversationsByUserId(userId);
              nlohmann::json result = convs;
+             res.set_content(result.dump(), "application/json");
+           });
+}
+
+void Controller::messageController_() {
+  svr_.Post(R"(/conversations/(\d+)/messages)",
+            [this](const httplib::Request& req, httplib::Response& res) {
+              uint64_t convId = std::stoull(std::string(req.matches[1]));
+
+              auto body = nlohmann::json::parse(req.body, nullptr, false);
+              if (body.is_discarded() || !body.contains("senderId") || !body.contains("payload")) {
+                res.status = 400;
+                res.set_content(
+                    nlohmann::json{{"error", "senderId and payload required"}}.dump(),
+                    "application/json");
+                return;
+              }
+
+              uint64_t senderId = body["senderId"];
+              std::string payload = body["payload"];
+
+              auto now = static_cast<uint64_t>(
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::system_clock::now().time_since_epoch())
+                      .count());
+
+              uint64_t msgId = db_.createMessage(convId, senderId, payload, now);
+              spdlog::info("Created message {} in conversation {}", msgId, convId);
+
+              kd::Message msg{msgId, senderId, convId, payload, "", now, ""};
+              nlohmann::json result = msg;
+              res.status = 201;
+              res.set_content(result.dump(), "application/json");
+            });
+
+  svr_.Get(R"(/conversations/(\d+)/messages)",
+           [this](const httplib::Request& req, httplib::Response& res) -> void {
+             uint64_t convId = std::stoull(std::string(req.matches[1]));
+             auto msgs = db_.getMessagesByConversationId(convId);
+             nlohmann::json result = msgs;
              res.set_content(result.dump(), "application/json");
            });
 }

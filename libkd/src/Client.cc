@@ -72,4 +72,37 @@ nlohmann::json Client::logout() {
     throw std::runtime_error("Failed to connect to server at " + baseUrl_);
 }
 
+nlohmann::json Client::createConversation(const std::string& name,
+                                          const std::vector<uint64_t>& participantIds) {
+    httplib::Client cli(baseUrl_);
+    nlohmann::json body = {{"name", name}, {"participantIds", participantIds}};
+    if (auto res = cli.Post("/conversations", body.dump(), "application/json")) {
+        if (res->status == 200 || res->status == 201) return nlohmann::json::parse(res->body);
+        throw std::runtime_error("Server returned status " + std::to_string(res->status));
+    }
+    throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+}
+
+nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
+                                   const std::string& payload) {
+    httplib::Client cli(baseUrl_);
+    std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
+    nlohmann::json body = {{"senderId", senderId}, {"payload", payload}};
+    if (auto res = cli.Post(path, body.dump(), "application/json")) {
+        if (res->status == 200 || res->status == 201) return nlohmann::json::parse(res->body);
+        throw std::runtime_error("Server returned status " + std::to_string(res->status));
+    }
+    throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+}
+
+nlohmann::json Client::getMessages(uint64_t conversationId) {
+    httplib::Client cli(baseUrl_);
+    std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
+    if (auto res = cli.Get(path)) {
+        if (res->status == 200) return nlohmann::json::parse(res->body);
+        throw std::runtime_error("Server returned status " + std::to_string(res->status));
+    }
+    throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+}
+
 } // namespace kd

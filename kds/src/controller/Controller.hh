@@ -30,6 +30,7 @@ class Controller {
   void healthController_();
   void authController_();
   void conversationController_();
+  void messageController_();
   void basicApiInfo_();
   void notFoundHandler_();
 };
