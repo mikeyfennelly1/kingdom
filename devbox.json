@@ -8,6 +8,7 @@
     "openjdk@19.0.1+10",
     "plantuml@1.2026.2",
     "libpqxx",
+    "libsodium",
     "pkg-config",
     "tmux@latest",
     "gum@latest"

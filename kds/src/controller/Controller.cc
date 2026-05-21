@@ -1,6 +1,7 @@
 #include "Controller.hh"
 
 #include <httplib.h>
+#include <sodium.h>
 
 #include <chrono>
 #include <iomanip>
@@ -11,10 +12,32 @@
 
 namespace kd {
 
+namespace {
+
+std::string hashPassword(const std::string& password) {
+  char encodedHash[crypto_pwhash_STRBYTES];
+  if (crypto_pwhash_str_alg(encodedHash, password.c_str(), password.size(),
+                            crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                            crypto_pwhash_MEMLIMIT_INTERACTIVE,
+                            crypto_pwhash_ALG_ARGON2ID13) != 0) {
+    throw std::runtime_error("Failed to hash password");
+  }
+  return encodedHash;
+}
+
+bool verifyPassword(const std::string& encodedHash, const std::string& password) {
+  return crypto_pwhash_str_verify(encodedHash.c_str(), password.c_str(), password.size()) == 0;
+}
+
+}  // namespace
+
 Controller::Controller(std::string host, int port, std::string dbConnectionString,
                        std::string sidecarUrl)
     : host_(std::move(host)), port_(port), sidecarUrl_(std::move(sidecarUrl)),
       db_(dbConnectionString) {
+  if (sodium_init() < 0) {
+    throw std::runtime_error("Failed to initialize libsodium");
+  }
   std::vector<std::string> securityPredicates = {"ValidateSenderAuthenticity", "ValidateUntampered",
                                                  "ValidateAuthenticated"};
   securityFilterChain_ = std::make_unique<SecurityFilterChain>(securityPredicates);
@@ -98,7 +121,8 @@ void Controller::authController_() {
     std::string password = body["password"];
 
     try {
-      uint64_t id = db_.createUser(username, password);
+      auto passwordHash = hashPassword(password);
+      uint64_t id = db_.createUser(username, passwordHash);
       auto sessionToken = createSession_(id);
       spdlog::info("Created user '{}' with id {}", username, id);
       res.status = 201;
@@ -125,7 +149,7 @@ void Controller::authController_() {
     std::string username = body["username"];
     std::string password = body["password"];
     auto user = db_.getUserByUsername(username);
-    if (!user.has_value() || user->passwordHash != password) {
+    if (!user.has_value() || !verifyPassword(user->passwordHash, password)) {
       res.status = 401;
       res.set_content(nlohmann::json{{"error", "invalid username or password"}}.dump(),
                       "application/json");
