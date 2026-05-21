@@ -13,10 +13,12 @@ class Client {
 public:
     /**
      * @brief Construct a new Client object
-     * 
-     * @param baseUrl Base URL of the server (e.g., "http://localhost:8080")
+     *
+     * @param baseUrl    Base URL of the server (e.g., "https://localhost:8443")
+     * @param caCertPath Path to the CA certificate for TLS verification. Required for
+     *                   self-signed certs; leave empty to use system CAs.
      */
-    Client(const std::string& baseUrl);
+    Client(const std::string& baseUrl, std::string caCertPath = "");
 
     /**
      * @brief Check server health
@@ -54,6 +56,7 @@ public:
 
 private:
     std::string baseUrl_;
+    std::string caCertPath_;
     std::string sessionToken_;
 };
 

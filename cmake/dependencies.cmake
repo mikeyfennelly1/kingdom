@@ -11,6 +11,15 @@ function(configure_third_party)
     )
     FetchContent_MakeAvailable(spdlog)
 
+    # OpenSSL: use pkg-config to locate the split nix store paths (dev headers separate from libs),
+    # then seed CMake's FindOpenSSL variables so find_package works correctly.
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PC_OPENSSL REQUIRED openssl)
+    find_library(OPENSSL_SSL_LIBRARY NAMES ssl HINTS ${PC_OPENSSL_LIBRARY_DIRS} NO_DEFAULT_PATH)
+    find_library(OPENSSL_CRYPTO_LIBRARY NAMES crypto HINTS ${PC_OPENSSL_LIBRARY_DIRS} NO_DEFAULT_PATH)
+    set(OPENSSL_INCLUDE_DIR ${PC_OPENSSL_INCLUDE_DIRS} CACHE STRING "" FORCE)
+    find_package(OpenSSL 3.0 REQUIRED)
+
     # HTTPS support enabled; macOS keychain disabled to avoid CoreFoundation dependency in Nix
     set(HTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(

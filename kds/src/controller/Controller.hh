@@ -19,7 +19,8 @@ const std::string defaultListenHost = "0.0.0.0";
 
 class Controller {
  public:
-  Controller(std::string host, int port, std::string dbConnectionString, std::string sidecarUrl);
+  Controller(std::string host, int port, std::string dbConnectionString, std::string sidecarUrl,
+             std::string certPath, std::string keyPath);
 
   void start();
 
@@ -27,7 +28,7 @@ class Controller {
   std::string host_;
   int port_;
   std::string sidecarUrl_;
-  httplib::Server svr_;
+  httplib::SSLServer svr_;
   std::unique_ptr<SecurityFilterChain> securityFilterChain_;
   Database db_;
   std::unordered_map<std::string, uint64_t> sessions_;

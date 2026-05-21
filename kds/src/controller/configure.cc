@@ -29,6 +29,12 @@ auto configure() -> kd::Controller {
   const char* sidecarEnv = std::getenv("KD_BLOCKCHAIN_SIDECAR_URL");
   std::string sidecarUrl = (sidecarEnv != nullptr) ? sidecarEnv : "http://localhost:3001";
 
-  return {"0.0.0.0", port, dbUrl, sidecarUrl};
+  const char* certPath = std::getenv("KD_TLS_CERT");
+  const char* keyPath = std::getenv("KD_TLS_KEY");
+  if (certPath == nullptr || keyPath == nullptr) {
+    throw std::runtime_error("KD_TLS_CERT and KD_TLS_KEY environment variables must be set");
+  }
+
+  return {"0.0.0.0", port, dbUrl, sidecarUrl, certPath, keyPath};
 }
 }  // namespace kd
