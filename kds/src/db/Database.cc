@@ -203,4 +203,11 @@ std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversa
     return messages;
 }
 
+void Database::updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest) {
+    pqxx::work txn(conn_);
+    pqxx::params params{digest, static_cast<int64_t>(msgId)};
+    txn.exec("UPDATE messages SET blockchain_digest = $1 WHERE id = $2", params);
+    txn.commit();
+}
+
 }  // namespace kd

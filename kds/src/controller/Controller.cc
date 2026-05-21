@@ -11,8 +11,10 @@
 
 namespace kd {
 
-Controller::Controller(std::string host, int port, std::string dbConnectionString)
-    : host_(std::move(host)), port_(port), db_(dbConnectionString) {
+Controller::Controller(std::string host, int port, std::string dbConnectionString,
+                       std::string sidecarUrl)
+    : host_(std::move(host)), port_(port), sidecarUrl_(std::move(sidecarUrl)),
+      db_(dbConnectionString) {
   std::vector<std::string> securityPredicates = {"ValidateSenderAuthenticity", "ValidateUntampered",
                                                  "ValidateAuthenticated"};
   securityFilterChain_ = std::make_unique<SecurityFilterChain>(securityPredicates);
@@ -227,7 +229,27 @@ void Controller::messageController_() {
     uint64_t msgId = db_.createMessage(convId, senderId, payload, now);
     spdlog::info("Created message {} in conversation {}", msgId, convId);
 
-    kd::Message msg{msgId, senderId, convId, payload, "", now, ""};
+    // Record hash on-chain via the blockchain sidecar
+    std::string txHash;
+    try {
+        httplib::Client sidecar(sidecarUrl_);
+        sidecar.set_connection_timeout(30);
+        sidecar.set_read_timeout(60);
+        nlohmann::json sidecarBody = {{"conversationId", convId}, {"ciphertext", payload}};
+        auto sidecarRes = sidecar.Post("/record", sidecarBody.dump(), "application/json");
+        if (sidecarRes && sidecarRes->status == 200) {
+            auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
+            txHash = sidecarJson["txHash"].get<std::string>();
+            db_.updateMessageBlockchainDigest(msgId, txHash);
+            spdlog::info("Blockchain digest recorded for message {}: {}", msgId, txHash);
+        } else {
+            spdlog::warn("Blockchain sidecar unavailable for message {}", msgId);
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("Blockchain sidecar error for message {}: {}", msgId, e.what());
+    }
+
+    kd::Message msg{msgId, senderId, convId, payload, "", now, txHash};
     nlohmann::json result = msg;
     res.status = 201;
     res.set_content(result.dump(), "application/json");

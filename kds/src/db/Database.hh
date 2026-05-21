@@ -35,6 +35,9 @@ public:
     // Get all messages in a conversation ordered by timestamp ASC.
     std::vector<kd::Message> getMessagesByConversationId(uint64_t conversationId);
 
+    // Update the blockchain_digest field of a message after on-chain recording.
+    void updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest);
+
 private:
     void initSchema_();
 
