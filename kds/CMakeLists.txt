@@ -11,13 +11,15 @@ target_link_libraries(kds
         spdlog::spdlog
         httplib::httplib
         ${LIBPQXX_LIBRARIES}    # libpqxx - PostgreSQL C++ client
+        ${LIBSODIUM_LIBRARIES}  # libsodium - Argon2id password hashing
 )
 
-# libpqxx headers exposed via pkg-config (pqxx/pqxx)
+# libpqxx/libsodium headers exposed via pkg-config
 target_include_directories(kds
     PRIVATE
         ../libkd/include
         ${LIBPQXX_INCLUDE_DIRS}
+        ${LIBSODIUM_INCLUDE_DIRS}
 )
 
 # Testing

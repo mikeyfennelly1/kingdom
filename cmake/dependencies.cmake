@@ -37,4 +37,5 @@ function(configure_third_party)
     # libpqxx - C++ PostgreSQL client, located via pkg-config since Nix doesn't ship a CMake config file for it
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LIBPQXX REQUIRED libpqxx)
+    pkg_check_modules(LIBSODIUM REQUIRED libsodium)
 endfunction()
