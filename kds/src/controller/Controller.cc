@@ -4,10 +4,8 @@
 #include <sodium.h>
 
 #include <chrono>
-#include <iomanip>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
-#include <random>
 #include <sstream>
 
 namespace kd {
@@ -32,9 +30,9 @@ bool verifyPassword(const std::string& encodedHash, const std::string& password)
 }  // namespace
 
 Controller::Controller(std::string host, int port, std::string dbConnectionString,
-                       std::string sidecarUrl)
+                       std::string sidecarUrl, std::string certPath, std::string keyPath)
     : host_(std::move(host)), port_(port), sidecarUrl_(std::move(sidecarUrl)),
-      db_(dbConnectionString) {
+      svr_(certPath.c_str(), keyPath.c_str()), db_(dbConnectionString) {
   if (sodium_init() < 0) {
     throw std::runtime_error("Failed to initialize libsodium");
   }
@@ -68,14 +66,12 @@ void Controller::setupRoutes() {
 }
 
 std::string Controller::createSession_(uint64_t userId) {
-  std::random_device rd;
-  std::mt19937_64 generator(rd());
-  std::uniform_int_distribution<uint64_t> dist;
-  std::ostringstream token;
-  token << std::hex << std::setfill('0') << std::setw(16) << dist(generator) << std::setw(16)
-        << dist(generator);
+  unsigned char buf[32];
+  randombytes_buf(buf, sizeof(buf));
+  char hex[65];
+  sodium_bin2hex(hex, sizeof(hex), buf, sizeof(buf));
 
-  auto value = token.str();
+  std::string value(hex);
   std::lock_guard<std::mutex> lock(sessionsMutex_);
   sessions_[value] = userId;
   return value;

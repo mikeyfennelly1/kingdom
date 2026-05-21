@@ -12,6 +12,8 @@ target_link_libraries(kds
         httplib::httplib
         ${LIBPQXX_LIBRARIES}    # libpqxx - PostgreSQL C++ client
         ${LIBSODIUM_LIBRARIES}  # libsodium - Argon2id password hashing
+        OpenSSL::SSL
+        OpenSSL::Crypto
 )
 
 # libpqxx/libsodium headers exposed via pkg-config

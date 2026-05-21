@@ -8,6 +8,8 @@ target_link_libraries(kd
     PUBLIC
         nlohmann_json::nlohmann_json
         httplib::httplib
+        OpenSSL::SSL
+        OpenSSL::Crypto
 )
 
 target_include_directories(kd

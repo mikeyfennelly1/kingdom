@@ -152,6 +152,7 @@ int main(int argc, char** argv) {
   int port = 8080;
   std::string protocol = "http";
   std::string serverUrl;
+  std::string caCertPath;
 
   app.add_option("-H,--host", host, "Server host")->envname("KD_HOST")->capture_default_str();
   app.add_option("-p,--port", port, "Server port")->envname("KD_PORT")->capture_default_str();
@@ -159,6 +160,8 @@ int main(int argc, char** argv) {
       ->envname("KD_PROTOCOL")
       ->capture_default_str();
   app.add_option("-s,--server", serverUrl, "Full Server URL (overrides host/port/protocol)");
+  app.add_option("-c,--ca-cert", caCertPath, "Path to CA certificate for TLS verification")
+      ->envname("KD_CA_CERT");
 
   auto healthCmd = app.add_subcommand("health", "Check server health");
   auto infoCmd = app.add_subcommand("info", "Get server information");
@@ -205,7 +208,7 @@ int main(int argc, char** argv) {
   }
 
   try {
-    kd::Client client(serverUrl);
+    kd::Client client(serverUrl, caCertPath);
 
     if (app.get_subcommands().empty()) {
       runShell(client, serverUrl);
