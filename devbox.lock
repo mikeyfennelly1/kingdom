@@ -351,6 +351,10 @@
       "source": "devbox-search",
       "version": "19.0.1+10"
     },
+    "openssl": {
+      "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb?narHash=sha256-30sZNZoA1cqF5JNO9fVX%2BwgiQYjB7HJqqJ4ztCDeBZE%3D#openssl",
+      "source": "nixpkg"
+    },
     "pkg-config": {
       "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb?narHash=sha256-30sZNZoA1cqF5JNO9fVX%2BwgiQYjB7HJqqJ4ztCDeBZE%3D#pkg-config",
       "source": "nixpkg"

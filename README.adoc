@@ -1,72 +1,225 @@
-= kingdom
+= Kingdom — Secure Messaging Application
+:toc: left
+:toclevels: 2
 
-== Getting started
-Run the following set of commands:
+CS4455 Cybersecurity — ISE 2nd Year, 2026
 
-[source, bash]
+== Prerequisites
+
+Install the following before cloning:
+
+* https://www.jetpack.io/devbox/docs/installing_devbox/[Devbox] — reproducible dev environment
+* https://docs.docker.com/get-docker/[Docker] — runs the PostgreSQL database
+
+== Setup
+
+=== 1. Clone the repository
+
+[source,bash]
 ----
-# install devbox if you don't have it already
-curl -fsSL https://get.jetpack.io/devbox | bash
-
-# clone this repository
 git clone git@github.com:mikeyfennelly1/kingdom.git
-
-# move into project directory, and init devbox shell
 cd kingdom
+----
+
+=== 2. Enter the devbox shell
+
+All commands from this point forward must be run inside the devbox shell.
+
+[source,bash]
+----
 devbox shell
 ----
 
-== Building the Project
-Once inside the `devbox shell`, use the task runner to build the system:
+=== 3. Configure environment variables
 
-[source, bash]
+[source,bash]
 ----
-# Compile all libraries and binaries
+cp .env.example .env
+----
+
+The defaults in `.env` work out of the box for local development. No changes needed unless you're running on a different host or port.
+
+=== 4. Generate TLS certificate
+
+The server requires a TLS certificate to start. Generate a self-signed certificate for local development:
+
+[source,bash]
+----
+mkdir -p certs
+openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
+  -keyout certs/server.key \
+  -out certs/server.crt \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+----
+
+This creates `certs/server.crt` (public, committed to the repo) and `certs/server.key` (private, gitignored). If you pulled the repo and `certs/server.crt` already exists, you still need to generate your own `server.key`.
+
+=== 5. Start the database
+
+[source,bash]
+----
+docker compose up -d
+----
+
+PostgreSQL 16 will start on port 5432. The schema is created automatically when the server first starts.
+
+== Building
+
+[source,bash]
+----
 task build
 ----
 
-== Running the Server
-The Kingdom Server (`kds`) can be started from the build directory:
+Binaries are output to:
 
-[source, bash]
+* `build/kds/kds` — Kingdom Data Server
+* `build/kdctl/kdctl` — Kingdom Control CLI
+* `build/libkd/libkd.dylib` — Shared library (macOS) / `libkd.so` (Linux)
+
+== Running the Server
+
+[source,bash]
 ----
-# Start the REST API server
 task run
 ----
 
-The server runs on port `8080` by default.
+This loads environment variables from `.env` and starts `kds` on port 8080 over HTTPS. You should see:
 
-== Installing the CLI
-To install the `kdctl` command-line tool to your system path (`/usr/local/bin`):
-
-[source, bash]
 ----
-./kdctl-install.sh
-----
-
-After installation, you can use `kdctl` from any directory:
-
-[source, bash]
-----
-kdctl --help
-kdctl health
+[info] Initializing Kingdom Server...
+[info] Connected to database
+[info] Database schema initialized
+[info] Starting Kingdom Server on 0.0.0.0:8080
 ----
 
-== Tooling Reference Documentation
+To verify the server is running:
 
-*CMake*
-- link:https://cmake.org/cmake/help/latest/index.html[CMake command reference]
-- link:https://cmake.org/cmake/help/latest/manual/cmake-variables.7.html[CMake Variables]
+[source,bash]
+----
+curl --cacert certs/server.crt https://localhost:8080/health
+----
 
-*libsodium*
-- link:https://libsodium.gitbook.io/doc[libsodium User Guide]
+Expected: `{"status":"ok"}`
 
-*openssl*
-- link:https://docs.openssl.org/master/man7/ossl-guide-introduction/[OpenSSL User Guide]
+== Using the CLI (kdctl)
 
-*libpqxx*
-- link:https://pqxx.org/libpqxx/[libpqxx User Guide]
+All `kdctl` commands require `--protocol https` and `--ca-cert certs/server.crt` since the server uses TLS with a self-signed certificate. Set these as environment variables to avoid repeating them:
 
-*googletest*
-- link:https://google.github.io/googletest/[GoogleTest User Guide]
+[source,bash]
+----
+export KD_PROTOCOL=https
+export KD_CA_CERT=certs/server.crt
+----
 
+=== Interactive shell
+
+[source,bash]
+----
+./build/kdctl/kdctl
+----
+
+Available shell commands:
+
+----
+signup              Create a new account
+login               Log in
+logout              Log out
+health              Check server health
+info                Server info
+conversations       List your conversations
+create-conversation Create a new conversation
+send                Send a message
+messages            List messages in a conversation
+help                Show this list
+exit                Quit
+----
+
+=== Subcommands
+
+[source,bash]
+----
+./build/kdctl/kdctl health
+./build/kdctl/kdctl signup -u alice -p hunter2
+./build/kdctl/kdctl login -u alice -p hunter2
+./build/kdctl/kdctl conversations -u <user-id>
+./build/kdctl/kdctl create-conversation -n "My Chat" -p <user-id> -p <user-id>
+./build/kdctl/kdctl send -c <conversation-id> -u <sender-id> -m "Hello"
+./build/kdctl/kdctl messages -c <conversation-id>
+----
+
+== Blockchain Sidecar
+
+The sidecar records message hashes on the Ethereum Sepolia testnet. It runs as a separate Node.js process alongside `kds`.
+
+=== Setup
+
+[source,bash]
+----
+cd blockchain/sidecar
+cp ../.env.example .env
+# Edit .env with SEPOLIA_RPC_URL, PRIVATE_KEY, CONTRACT_ADDRESS
+npm install
+npm start
+----
+
+The sidecar runs on port 3001 by default. The server (`kds`) calls it automatically when messages are sent via `KD_BLOCKCHAIN_SIDECAR_URL` (defaults to `http://localhost:3001`).
+
+=== Verification page
+
+Open `blockchain/verification/index.html` directly in a browser (no server needed):
+
+[source,bash]
+----
+open blockchain/verification/index.html
+----
+
+Paste a transaction hash from a sent message and the message payload to verify on-chain integrity.
+
+== Environment Variables
+
+=== Server (`kds`)
+
+[cols="1,1,2", options="header"]
+|===
+| Variable | Default | Description
+| `KD_DB_URL` | — | PostgreSQL connection string (required)
+| `KD_TLS_CERT` | — | Path to TLS certificate file (required)
+| `KD_TLS_KEY` | — | Path to TLS private key file (required)
+| `KD_PORT` | `8080` | Port to listen on
+| `KD_LOG_LEVEL` | `info` | Log level (debug, info, warn, error)
+| `KD_BLOCKCHAIN_SIDECAR_URL` | `http://localhost:3001` | Blockchain sidecar URL
+|===
+
+=== Client (`kdctl`)
+
+[cols="1,1,2", options="header"]
+|===
+| Variable | Default | Description
+| `KD_HOST` | `localhost` | Server host
+| `KD_PORT` | `8080` | Server port
+| `KD_PROTOCOL` | `http` | Protocol (`http` or `https`)
+| `KD_CA_CERT` | — | Path to CA certificate for TLS verification
+|===
+
+== Task Reference
+
+[cols="1,2", options="header"]
+|===
+| Command | Description
+| `task build` | Configure with CMake + Ninja and compile
+| `task run` | Build and run `kds` with env vars from `.env`
+| `task test` | Run all tests
+| `task clean` | Delete the `build` directory
+| `task format` | Auto-format all source files with clang-format
+| `task uml` | Generate SVG from `docs/arch.puml`
+|===
+
+== Quick Start (tmux)
+
+Alternatively, use the provided `run.sh` script which sets up a tmux session with the database and server running side by side:
+
+[source,bash]
+----
+./run.sh
+----
