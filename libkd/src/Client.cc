@@ -47,7 +47,11 @@ nlohmann::json Client::signup(const std::string& username, const std::string& pa
     httplib::Client cli(baseUrl_);
     nlohmann::json body = {{"username", username}, {"password", password}};
     if (auto res = cli.Post("/signup", body.dump(), "application/json")) {
-        if (res->status == 200 || res->status == 201) return nlohmann::json::parse(res->body);
+        if (res->status == 200 || res->status == 201) {
+            auto response = nlohmann::json::parse(res->body);
+            if (response.contains("sessionToken")) sessionToken_ = response["sessionToken"];
+            return response;
+        }
         throw std::runtime_error("Server returned status " + std::to_string(res->status));
     }
     throw std::runtime_error("Failed to connect to server at " + baseUrl_);
@@ -57,7 +61,11 @@ nlohmann::json Client::login(const std::string& username, const std::string& pas
     httplib::Client cli(baseUrl_);
     nlohmann::json body = {{"username", username}, {"password", password}};
     if (auto res = cli.Post("/login", body.dump(), "application/json")) {
-        if (res->status == 200) return nlohmann::json::parse(res->body);
+        if (res->status == 200) {
+            auto response = nlohmann::json::parse(res->body);
+            if (response.contains("sessionToken")) sessionToken_ = response["sessionToken"];
+            return response;
+        }
         throw std::runtime_error("Server returned status " + std::to_string(res->status));
     }
     throw std::runtime_error("Failed to connect to server at " + baseUrl_);
@@ -65,11 +73,24 @@ nlohmann::json Client::login(const std::string& username, const std::string& pas
 
 nlohmann::json Client::logout() {
     httplib::Client cli(baseUrl_);
-    if (auto res = cli.Post("/logout")) {
-        if (res->status == 200) return nlohmann::json::parse(res->body);
+    httplib::Headers headers;
+    if (!sessionToken_.empty()) headers.emplace("X-KD-Session", sessionToken_);
+    if (auto res = cli.Post("/logout", headers)) {
+        if (res->status == 200) {
+            clearSessionToken();
+            return nlohmann::json::parse(res->body);
+        }
         throw std::runtime_error("Server returned status " + std::to_string(res->status));
     }
     throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+}
+
+void Client::setSessionToken(const std::string& sessionToken) {
+    sessionToken_ = sessionToken;
+}
+
+void Client::clearSessionToken() {
+    sessionToken_.clear();
 }
 
 nlohmann::json Client::createConversation(const std::string& name,
@@ -88,7 +109,9 @@ nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
     httplib::Client cli(baseUrl_);
     std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
     nlohmann::json body = {{"senderId", senderId}, {"payload", payload}};
-    if (auto res = cli.Post(path, body.dump(), "application/json")) {
+    httplib::Headers headers;
+    if (!sessionToken_.empty()) headers.emplace("X-KD-Session", sessionToken_);
+    if (auto res = cli.Post(path, headers, body.dump(), "application/json")) {
         if (res->status == 200 || res->status == 201) return nlohmann::json::parse(res->body);
         throw std::runtime_error("Server returned status " + std::to_string(res->status));
     }
