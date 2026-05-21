@@ -1,4 +1,4 @@
 /build
 /compile_commands.json
 /.env
-/devbox.lock
+/.gitignored

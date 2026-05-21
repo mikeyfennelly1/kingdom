@@ -2,11 +2,15 @@
 #include <httplib.h>
 #include <spdlog/spdlog.h>
 
-#include <nlohmann/json.hpp>
-#include <string>
 #include <memory>
-#include "../security/SecurityFilterChain.hh"
+#include <mutex>
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <string>
+#include <unordered_map>
+
 #include "../db/Database.hh"
+#include "../security/SecurityFilterChain.hh"
 
 namespace kd {
 
@@ -25,13 +29,19 @@ class Controller {
   httplib::Server svr_;
   std::unique_ptr<SecurityFilterChain> securityFilterChain_;
   Database db_;
+  std::unordered_map<std::string, uint64_t> sessions_;
+  std::mutex sessionsMutex_;
 
   void setupRoutes();
   void healthController_();
   void authController_();
   void conversationController_();
+  void messageController_();
   void basicApiInfo_();
   void notFoundHandler_();
+  std::string createSession_(uint64_t userId);
+  std::optional<uint64_t> authenticatedUserId_(const httplib::Request& req);
+  void clearSession_(const httplib::Request& req);
 };
 
 auto configure() -> kd::Controller;

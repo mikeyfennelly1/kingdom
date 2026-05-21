@@ -5,13 +5,6 @@ function(configure_third_party)
     )
     FetchContent_MakeAvailable(json)
 
-    # On macOS, CMake won't find Homebrew's OpenSSL when using Nix's pkg-config.
-    # On Linux this block is skipped - OpenSSL is found via standard system paths.
-    if(APPLE)
-        set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
-    endif()
-    find_package(OpenSSL 3.0 REQUIRED)
-
     FetchContent_Declare(spdlog
         GIT_REPOSITORY https://github.com/gabime/spdlog.git
         GIT_TAG v1.13.0
@@ -19,7 +12,6 @@ function(configure_third_party)
     FetchContent_MakeAvailable(spdlog)
 
     # HTTPS support enabled; macOS keychain disabled to avoid CoreFoundation dependency in Nix
-    set(HTTPLIB_REQUIRE_OPENSSL ON CACHE BOOL "" FORCE)
     set(HTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
             httplib

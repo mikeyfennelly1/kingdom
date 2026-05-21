@@ -10,8 +10,6 @@ target_link_libraries(kds
         nlohmann_json::nlohmann_json
         spdlog::spdlog
         httplib::httplib
-        OpenSSL::SSL
-        OpenSSL::Crypto
         ${LIBPQXX_LIBRARIES}    # libpqxx - PostgreSQL C++ client
 )
 

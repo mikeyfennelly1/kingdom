@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
+#include <vector>
+#include <cstdint>
 #include <nlohmann/json.hpp>
 
 namespace kd {
@@ -41,9 +43,18 @@ public:
     nlohmann::json signup(const std::string& username, const std::string& password);
     nlohmann::json login(const std::string& username, const std::string& password);
     nlohmann::json logout();
+    void setSessionToken(const std::string& sessionToken);
+    void clearSessionToken();
+
+    nlohmann::json createConversation(const std::string& name,
+                                      const std::vector<uint64_t>& participantIds);
+    nlohmann::json sendMessage(uint64_t conversationId, uint64_t senderId,
+                               const std::string& payload);
+    nlohmann::json getMessages(uint64_t conversationId);
 
 private:
     std::string baseUrl_;
+    std::string sessionToken_;
 };
 
 } // namespace kd
