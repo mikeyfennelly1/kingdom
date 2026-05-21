@@ -19,13 +19,14 @@ const std::string defaultListenHost = "0.0.0.0";
 
 class Controller {
  public:
-  Controller(std::string host, int port, std::string dbConnectionString);
+  Controller(std::string host, int port, std::string dbConnectionString, std::string sidecarUrl);
 
   void start();
 
  private:
   std::string host_;
   int port_;
+  std::string sidecarUrl_;
   httplib::Server svr_;
   std::unique_ptr<SecurityFilterChain> securityFilterChain_;
   Database db_;
