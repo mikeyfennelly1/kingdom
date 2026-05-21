@@ -43,6 +43,8 @@ public:
     nlohmann::json signup(const std::string& username, const std::string& password);
     nlohmann::json login(const std::string& username, const std::string& password);
     nlohmann::json logout();
+    void setSessionToken(const std::string& sessionToken);
+    void clearSessionToken();
 
     nlohmann::json createConversation(const std::string& name,
                                       const std::vector<uint64_t>& participantIds);
@@ -52,6 +54,7 @@ public:
 
 private:
     std::string baseUrl_;
+    std::string sessionToken_;
 };
 
 } // namespace kd
