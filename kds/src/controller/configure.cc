@@ -26,6 +26,9 @@ auto configure() -> kd::Controller {
     throw std::runtime_error("KD_DB_URL environment variable not set");
   }
 
-  return {"0.0.0.0", port, dbUrl};
+  const char* sidecarEnv = std::getenv("KD_BLOCKCHAIN_SIDECAR_URL");
+  std::string sidecarUrl = (sidecarEnv != nullptr) ? sidecarEnv : "http://localhost:3001";
+
+  return {"0.0.0.0", port, dbUrl, sidecarUrl};
 }
 }  // namespace kd

@@ -107,6 +107,7 @@ nlohmann::json Client::createConversation(const std::string& name,
 nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
                                    const std::string& payload) {
     httplib::Client cli(baseUrl_);
+    cli.set_read_timeout(120);
     std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
     nlohmann::json body = {{"senderId", senderId}, {"payload", payload}};
     httplib::Headers headers;
