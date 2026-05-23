@@ -1,6 +1,10 @@
 #include "kd/Client.hpp"
+#include "kd/LocalKeyStore.hpp"
+
 #include <httplib.h>
+#include <filesystem>
 #include <stdexcept>
+#include <system_error>
 
 namespace {
 
@@ -58,16 +62,29 @@ nlohmann::json Client::getConversations(uint64_t userId) {
 }
 
 nlohmann::json Client::signup(const std::string& username, const std::string& password) {
+    auto keyMaterial = LocalKeyStore::createForSignup(username, password);
+    auto cleanupLocalKey = [&keyMaterial]() {
+        std::error_code ignored;
+        std::filesystem::remove(std::filesystem::path(keyMaterial.keyFilePath), ignored);
+    };
+
     auto cli = makeClient(baseUrl_, caCertPath_);
-    nlohmann::json body = {{"username", username}, {"password", password}};
+    nlohmann::json body = {
+        {"username", username},
+        {"password", password},
+        {"publicKey", keyMaterial.publicKey}
+    };
     if (auto res = cli.Post("/signup", body.dump(), "application/json")) {
         if (res->status == 200 || res->status == 201) {
             auto response = nlohmann::json::parse(res->body);
             if (response.contains("sessionToken")) sessionToken_ = response["sessionToken"];
+            response["localKeyFile"] = keyMaterial.keyFilePath;
             return response;
         }
+        cleanupLocalKey();
         throw std::runtime_error("Server returned status " + std::to_string(res->status));
     }
+    cleanupLocalKey();
     throw std::runtime_error("Failed to connect to server at " + baseUrl_);
 }
 

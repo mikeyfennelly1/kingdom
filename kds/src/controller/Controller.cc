@@ -106,25 +106,31 @@ void Controller::authController_() {
     spdlog::info("Sign-up request received");
 
     auto body = nlohmann::json::parse(req.body, nullptr, false);
-    if (body.is_discarded() || !body.contains("username") || !body.contains("password")) {
+    if (body.is_discarded() || !body.contains("username") || !body.contains("password") ||
+        !body.contains("publicKey")) {
       res.status = 400;
-      res.set_content(nlohmann::json{{"error", "username and password required"}}.dump(),
-                      "application/json");
+      res.set_content(
+          nlohmann::json{{"error", "username, password, and publicKey required"}}.dump(),
+          "application/json");
       return;
     }
 
     std::string username = body["username"];
     std::string password = body["password"];
+    std::string publicKey = body["publicKey"];
 
     try {
       auto passwordHash = hashPassword(password);
-      uint64_t id = db_.createUser(username, passwordHash);
+      uint64_t id = db_.createUser(username, passwordHash, publicKey);
       auto sessionToken = createSession_(id);
       spdlog::info("Created user '{}' with id {}", username, id);
       res.status = 201;
-      res.set_content(
-          nlohmann::json{{"id", id}, {"username", username}, {"sessionToken", sessionToken}}.dump(),
-          "application/json");
+      res.set_content(nlohmann::json{{"id", id},
+                                     {"username", username},
+                                     {"publicKey", publicKey},
+                                     {"sessionToken", sessionToken}}
+                          .dump(),
+                      "application/json");
     } catch (const std::runtime_error& e) {
       res.status = 409;
       res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
