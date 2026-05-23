@@ -1,12 +1,18 @@
 #include "Controller.hh"
 
 #include <httplib.h>
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <sodium.h>
 
 #include <chrono>
+#include <cstdint>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
 #include <sstream>
+#include <stdexcept>
+#include <vector>
 
 namespace kd {
 
@@ -15,8 +21,7 @@ namespace {
 std::string hashPassword(const std::string& password) {
   char encodedHash[crypto_pwhash_STRBYTES];
   if (crypto_pwhash_str_alg(encodedHash, password.c_str(), password.size(),
-                            crypto_pwhash_OPSLIMIT_INTERACTIVE,
-                            crypto_pwhash_MEMLIMIT_INTERACTIVE,
+                            crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                             crypto_pwhash_ALG_ARGON2ID13) != 0) {
     throw std::runtime_error("Failed to hash password");
   }
@@ -27,12 +32,124 @@ bool verifyPassword(const std::string& encodedHash, const std::string& password)
   return crypto_pwhash_str_verify(encodedHash.c_str(), password.c_str(), password.size()) == 0;
 }
 
+std::string base64UrlEncode(const unsigned char* data, size_t size) {
+  std::string encoded(4 * ((size + 2) / 3), '\0');
+  const int encodedSize = EVP_EncodeBlock(reinterpret_cast<unsigned char*>(encoded.data()), data,
+                                          static_cast<int>(size));
+  encoded.resize(encodedSize);
+
+  for (char& ch : encoded) {
+    if (ch == '+') {
+      ch = '-';
+    } else if (ch == '/') {
+      ch = '_';
+    }
+  }
+  while (!encoded.empty() && encoded.back() == '=') {
+    encoded.pop_back();
+  }
+  return encoded;
+}
+
+std::string base64UrlEncode(const std::string& value) {
+  return base64UrlEncode(reinterpret_cast<const unsigned char*>(value.data()), value.size());
+}
+
+std::string signJwtInput(const std::string& signingInput, const std::string& secret) {
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int digestLength = 0;
+  HMAC(EVP_sha256(), secret.data(), static_cast<int>(secret.size()),
+       reinterpret_cast<const unsigned char*>(signingInput.data()), signingInput.size(), digest,
+       &digestLength);
+  return base64UrlEncode(digest, digestLength);
+}
+
+uint64_t epochSeconds() {
+  return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+                                   std::chrono::system_clock::now().time_since_epoch())
+                                   .count());
+}
+
+std::optional<std::string> bearerToken(const httplib::Request& req) {
+  const std::string prefix = "Bearer ";
+  auto authorization = req.get_header_value("Authorization");
+  if (authorization.rfind(prefix, 0) != 0) {
+    return std::nullopt;
+  }
+  auto token = authorization.substr(prefix.size());
+  if (token.empty()) {
+    return std::nullopt;
+  }
+  return token;
+}
+
+std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token,
+                                                 const std::string& secret) {
+  auto firstDot = token.find('.');
+  if (firstDot == std::string::npos) {
+    return std::nullopt;
+  }
+  auto secondDot = token.find('.', firstDot + 1);
+  if (secondDot == std::string::npos || token.find('.', secondDot + 1) != std::string::npos) {
+    return std::nullopt;
+  }
+
+  auto signingInput = token.substr(0, secondDot);
+  auto signature = token.substr(secondDot + 1);
+  auto expectedSignature = signJwtInput(signingInput, secret);
+  if (signature.size() != expectedSignature.size() ||
+      CRYPTO_memcmp(signature.data(), expectedSignature.data(), signature.size()) != 0) {
+    return std::nullopt;
+  }
+
+  auto payloadPart = token.substr(firstDot + 1, secondDot - firstDot - 1);
+  for (char& ch : payloadPart) {
+    if (ch == '-') {
+      ch = '+';
+    } else if (ch == '_') {
+      ch = '/';
+    }
+  }
+  while (payloadPart.size() % 4 != 0) {
+    payloadPart.push_back('=');
+  }
+
+  std::vector<unsigned char> decoded(3 * (payloadPart.size() / 4) + 3);
+  auto decodedSize =
+      EVP_DecodeBlock(decoded.data(), reinterpret_cast<const unsigned char*>(payloadPart.data()),
+                      static_cast<int>(payloadPart.size()));
+  if (decodedSize < 0) {
+    return std::nullopt;
+  }
+  while (!payloadPart.empty() && payloadPart.back() == '=') {
+    --decodedSize;
+    payloadPart.pop_back();
+  }
+
+  auto payload =
+      nlohmann::json::parse(std::string(reinterpret_cast<char*>(decoded.data()), decodedSize),
+                            nullptr, false);
+  if (payload.is_discarded() || !payload.contains("sub") || !payload.contains("exp")) {
+    return std::nullopt;
+  }
+  if (!payload["exp"].is_number_unsigned() || payload["exp"].get<uint64_t>() <= epochSeconds()) {
+    return std::nullopt;
+  }
+  return payload;
+}
+
 }  // namespace
 
 Controller::Controller(std::string host, int port, std::string dbConnectionString,
-                       std::string sidecarUrl, std::string certPath, std::string keyPath)
-    : host_(std::move(host)), port_(port), sidecarUrl_(std::move(sidecarUrl)),
-      svr_(certPath.c_str(), keyPath.c_str()), db_(dbConnectionString) {
+                       std::string sidecarUrl, std::string certPath, std::string keyPath,
+                       std::string jwtSecret, uint64_t jwtTtlSeconds)
+    : host_(std::move(host))
+    , port_(port)
+    , sidecarUrl_(std::move(sidecarUrl))
+    , svr_(certPath.c_str(), keyPath.c_str())
+    , db_(dbConnectionString)
+    , jwtSecret_(std::move(jwtSecret))
+    , jwtTtlSeconds_(jwtTtlSeconds) {
   if (sodium_init() < 0) {
     throw std::runtime_error("Failed to initialize libsodium");
   }
@@ -65,40 +182,33 @@ void Controller::setupRoutes() {
   messageController_();
 }
 
-std::string Controller::createSession_(uint64_t userId) {
-  unsigned char buf[32];
-  randombytes_buf(buf, sizeof(buf));
-  char hex[65];
-  sodium_bin2hex(hex, sizeof(hex), buf, sizeof(buf));
+std::string Controller::createSession_(uint64_t userId, const std::string& username) const {
+  const auto issuedAt = epochSeconds();
+  nlohmann::json header = {{"alg", "HS256"}, {"typ", "JWT"}};
+  nlohmann::json payload = {{"sub", std::to_string(userId)},
+                            {"username", username},
+                            {"iat", issuedAt},
+                            {"exp", issuedAt + jwtTtlSeconds_}};
 
-  std::string value(hex);
-  std::lock_guard<std::mutex> lock(sessionsMutex_);
-  sessions_[value] = userId;
-  return value;
+  auto signingInput = base64UrlEncode(header.dump()) + "." + base64UrlEncode(payload.dump());
+  return signingInput + "." + signJwtInput(signingInput, jwtSecret_);
 }
 
 std::optional<uint64_t> Controller::authenticatedUserId_(const httplib::Request& req) {
-  auto tokenHeader = req.get_header_value("X-KD-Session");
-  if (tokenHeader.empty()) {
+  auto token = bearerToken(req);
+  if (!token.has_value()) {
     return std::nullopt;
   }
 
-  std::lock_guard<std::mutex> lock(sessionsMutex_);
-  auto session = sessions_.find(tokenHeader);
-  if (session == sessions_.end()) {
+  auto payload = verifiedJwtPayload(*token, jwtSecret_);
+  if (!payload.has_value()) {
     return std::nullopt;
   }
-  return session->second;
-}
-
-void Controller::clearSession_(const httplib::Request& req) {
-  auto tokenHeader = req.get_header_value("X-KD-Session");
-  if (tokenHeader.empty()) {
-    return;
+  try {
+    return std::stoull((*payload)["sub"].get<std::string>());
+  } catch (const std::exception&) {
+    return std::nullopt;
   }
-
-  std::lock_guard<std::mutex> lock(sessionsMutex_);
-  sessions_.erase(tokenHeader);
 }
 
 void Controller::authController_() {
@@ -122,12 +232,13 @@ void Controller::authController_() {
     try {
       auto passwordHash = hashPassword(password);
       uint64_t id = db_.createUser(username, passwordHash, publicKey);
-      auto sessionToken = createSession_(id);
+      auto sessionToken = createSession_(id, username);
       spdlog::info("Created user '{}' with id {}", username, id);
       res.status = 201;
       res.set_content(nlohmann::json{{"id", id},
                                      {"username", username},
                                      {"publicKey", publicKey},
+                                     {"token", sessionToken},
                                      {"sessionToken", sessionToken}}
                           .dump(),
                       "application/json");
@@ -158,19 +269,19 @@ void Controller::authController_() {
       return;
     }
 
-    auto sessionToken = createSession_(user->id);
+    auto sessionToken = createSession_(user->id, user->username);
     res.set_content(nlohmann::json{{"id", user->id},
                                    {"username", user->username},
+                                   {"token", sessionToken},
                                    {"sessionToken", sessionToken}}
                         .dump(),
                     "application/json");
   });
 
   // Logout endpoint
-  svr_.Post("/logout", [this](const httplib::Request& req, httplib::Response& res) {
+  svr_.Post("/logout", [](const httplib::Request& req, httplib::Response& res) {
     spdlog::info("Logout request received: {}", req.body);
-    clearSession_(req);
-    nlohmann::json response = {{"status", "success"}, {"message", "User logged out (stub)"}};
+    nlohmann::json response = {{"status", "success"}, {"message", "Token cleared client-side"}};
     res.set_content(response.dump(), "application/json");
   });
 }
@@ -258,21 +369,21 @@ void Controller::messageController_() {
     // Record hash on-chain via the blockchain sidecar
     std::string txHash;
     try {
-        httplib::Client sidecar(sidecarUrl_);
-        sidecar.set_connection_timeout(30);
-        sidecar.set_read_timeout(60);
-        nlohmann::json sidecarBody = {{"conversationId", convId}, {"ciphertext", payload}};
-        auto sidecarRes = sidecar.Post("/record", sidecarBody.dump(), "application/json");
-        if (sidecarRes && sidecarRes->status == 200) {
-            auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
-            txHash = sidecarJson["txHash"].get<std::string>();
-            db_.updateMessageBlockchainDigest(msgId, txHash);
-            spdlog::info("Blockchain digest recorded for message {}: {}", msgId, txHash);
-        } else {
-            spdlog::warn("Blockchain sidecar unavailable for message {}", msgId);
-        }
+      httplib::Client sidecar(sidecarUrl_);
+      sidecar.set_connection_timeout(30);
+      sidecar.set_read_timeout(60);
+      nlohmann::json sidecarBody = {{"conversationId", convId}, {"ciphertext", payload}};
+      auto sidecarRes = sidecar.Post("/record", sidecarBody.dump(), "application/json");
+      if (sidecarRes && sidecarRes->status == 200) {
+        auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
+        txHash = sidecarJson["txHash"].get<std::string>();
+        db_.updateMessageBlockchainDigest(msgId, txHash);
+        spdlog::info("Blockchain digest recorded for message {}: {}", msgId, txHash);
+      } else {
+        spdlog::warn("Blockchain sidecar unavailable for message {}", msgId);
+      }
     } catch (const std::exception& e) {
-        spdlog::warn("Blockchain sidecar error for message {}: {}", msgId, e.what());
+      spdlog::warn("Blockchain sidecar error for message {}: {}", msgId, e.what());
     }
 
     kd::Message msg{msgId, senderId, convId, payload, "", now, txHash};

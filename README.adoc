@@ -186,6 +186,8 @@ Paste a transaction hash from a sent message and the message payload to verify o
 | `KD_DB_URL` | — | PostgreSQL connection string (required)
 | `KD_TLS_CERT` | — | Path to TLS certificate file (required)
 | `KD_TLS_KEY` | — | Path to TLS private key file (required)
+| `KD_JWT_SECRET` | — | Secret used to sign HS256 authentication tokens (required, at least 32 chars)
+| `KD_JWT_TTL_SECONDS` | `3600` | Authentication token lifetime in seconds
 | `KD_PORT` | `8080` | Port to listen on
 | `KD_LOG_LEVEL` | `info` | Log level (debug, info, warn, error)
 | `KD_BLOCKCHAIN_SIDECAR_URL` | `http://localhost:3001` | Blockchain sidecar URL
