@@ -1,8 +1,9 @@
 
 #include <httplib.h>
-#include <stdexcept>
 
+#include <cstdlib>
 #include <kd/Conversation.hpp>
+#include <stdexcept>
 
 #include "Controller.hh"
 
@@ -35,6 +36,17 @@ auto configure() -> kd::Controller {
     throw std::runtime_error("KD_TLS_CERT and KD_TLS_KEY environment variables must be set");
   }
 
-  return {"0.0.0.0", port, dbUrl, sidecarUrl, certPath, keyPath};
+  const char* jwtSecret = std::getenv("KD_JWT_SECRET");
+  if (jwtSecret == nullptr || std::string(jwtSecret).size() < 32) {
+    throw std::runtime_error("KD_JWT_SECRET must be set to at least 32 characters");
+  }
+
+  const char* jwtTtlEnv = std::getenv("KD_JWT_TTL_SECONDS");
+  uint64_t jwtTtlSeconds = (jwtTtlEnv != nullptr) ? std::stoull(jwtTtlEnv) : 3600;
+  if (jwtTtlSeconds == 0) {
+    throw std::runtime_error("KD_JWT_TTL_SECONDS must be greater than zero");
+  }
+
+  return {"0.0.0.0", port, dbUrl, sidecarUrl, certPath, keyPath, jwtSecret, jwtTtlSeconds};
 }
 }  // namespace kd
