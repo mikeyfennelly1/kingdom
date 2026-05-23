@@ -49,6 +49,7 @@ class Client {
   void clearAuthToken();
   void setSessionToken(const std::string& sessionToken);
   void clearSessionToken();
+  std::string getPublicKey(uint64_t userId);
 
   nlohmann::json createConversation(const std::string& name,
                                     const std::vector<uint64_t>& participantIds);
