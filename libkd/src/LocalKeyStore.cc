@@ -2,6 +2,7 @@
 
 #include <sodium.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <fstream>
@@ -31,6 +32,43 @@ std::string base64Encode(const unsigned char* data, size_t size) {
 template <size_t N>
 std::string base64Encode(const std::array<unsigned char, N>& data) {
   return base64Encode(data.data(), data.size());
+}
+
+std::vector<unsigned char> base64Decode(const std::string& encoded, const std::string& fieldName) {
+  std::vector<unsigned char> decoded(encoded.size(), 0);
+  size_t decodedSize = 0;
+  if (sodium_base642bin(decoded.data(), decoded.size(), encoded.c_str(), encoded.size(), nullptr,
+                        &decodedSize, nullptr, sodium_base64_VARIANT_ORIGINAL) != 0) {
+    throw std::runtime_error("Invalid base64 in local key file field: " + fieldName);
+  }
+  decoded.resize(decodedSize);
+  return decoded;
+}
+
+template <size_t N>
+std::array<unsigned char, N> base64DecodeArray(const std::string& encoded,
+                                               const std::string& fieldName) {
+  auto decoded = base64Decode(encoded, fieldName);
+  if (decoded.size() != N) {
+    throw std::runtime_error("Unexpected decoded size for local key file field: " + fieldName);
+  }
+
+  std::array<unsigned char, N> value{};
+  std::copy(decoded.begin(), decoded.end(), value.begin());
+  return value;
+}
+
+nlohmann::json readJsonFile(const std::filesystem::path& path) {
+  std::ifstream input(path);
+  if (!input) {
+    throw std::runtime_error("Failed to open local key file for reading: " + path.string());
+  }
+
+  auto body = nlohmann::json::parse(input, nullptr, false);
+  if (body.is_discarded()) {
+    throw std::runtime_error("Local key file is not valid JSON: " + path.string());
+  }
+  return body;
 }
 
 void writeJsonFile(const std::filesystem::path& path, const nlohmann::json& body) {
@@ -124,6 +162,66 @@ RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& userna
   writeJsonFile(keyPath, file);
 
   return RegistrationKeyMaterial{publicKeyEncoded, keyPath.string()};
+}
+
+LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
+                                             const std::string& password) {
+  ensureSodiumInitialized();
+
+  auto keyPath = defaultKeyPath_(username);
+  auto file = readJsonFile(keyPath);
+  if (!file.contains("version") || !file.contains("username") || !file.contains("publicKey") ||
+      !file.contains("privateKey") || !file.contains("kdf")) {
+    throw std::runtime_error("Local key file is missing required fields: " + keyPath.string());
+  }
+  if (file["version"] != 1 || file["username"].get<std::string>() != username) {
+    throw std::runtime_error("Local key file does not match this user: " + keyPath.string());
+  }
+
+  const auto& privateKeyJson = file["privateKey"];
+  const auto& kdfJson = file["kdf"];
+  if (!privateKeyJson.contains("algorithm") || !privateKeyJson.contains("ciphertext") ||
+      !privateKeyJson.contains("nonce") || !kdfJson.contains("algorithm") ||
+      !kdfJson.contains("salt") || !kdfJson.contains("opsLimit") || !kdfJson.contains("memLimit")) {
+    throw std::runtime_error("Local key file is missing encryption parameters: " +
+                             keyPath.string());
+  }
+  if (privateKeyJson["algorithm"].get<std::string>() != "XChaCha20-Poly1305" ||
+      kdfJson["algorithm"].get<std::string>() != "Argon2id") {
+    throw std::runtime_error("Unsupported local key file crypto parameters: " + keyPath.string());
+  }
+
+  auto salt =
+      base64DecodeArray<crypto_pwhash_SALTBYTES>(kdfJson["salt"].get<std::string>(), "kdf.salt");
+  auto nonce = base64DecodeArray<crypto_aead_xchacha20poly1305_ietf_NPUBBYTES>(
+      privateKeyJson["nonce"].get<std::string>(), "privateKey.nonce");
+  auto ciphertext =
+      base64Decode(privateKeyJson["ciphertext"].get<std::string>(), "privateKey.ciphertext");
+  auto opsLimit = kdfJson["opsLimit"].get<unsigned long long>();
+  auto memLimit = kdfJson["memLimit"].get<size_t>();
+
+  std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> keyEncryptionKey{};
+  if (crypto_pwhash(keyEncryptionKey.data(), keyEncryptionKey.size(), password.c_str(),
+                    password.size(), salt.data(), opsLimit, memLimit,
+                    crypto_pwhash_ALG_ARGON2ID13) != 0) {
+    throw std::runtime_error("Failed to derive local key-encryption key");
+  }
+
+  LocalIdentityKey identity{file["publicKey"].get<std::string>(), {}};
+  unsigned long long privateKeySize = 0;
+  const std::string associatedData = username;
+  auto decryptResult = crypto_aead_xchacha20poly1305_ietf_decrypt(
+      identity.privateKey.data(), &privateKeySize, nullptr, ciphertext.data(), ciphertext.size(),
+      reinterpret_cast<const unsigned char*>(associatedData.data()), associatedData.size(),
+      nonce.data(), keyEncryptionKey.data());
+  sodium_memzero(keyEncryptionKey.data(), keyEncryptionKey.size());
+
+  if (decryptResult != 0 || privateKeySize != identity.privateKey.size()) {
+    sodium_memzero(identity.privateKey.data(), identity.privateKey.size());
+    throw std::runtime_error("Failed to decrypt local private key for user: " + username);
+  }
+
+  return identity;
 }
 
 std::filesystem::path LocalKeyStore::defaultKeyPath_(const std::string& username) {
