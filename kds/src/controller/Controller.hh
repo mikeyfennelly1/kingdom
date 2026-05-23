@@ -36,6 +36,7 @@ class Controller {
   void setupRoutes();
   void healthController_();
   void authController_();
+  void publicKeyController_();
   void conversationController_();
   void messageController_();
   void basicApiInfo_();

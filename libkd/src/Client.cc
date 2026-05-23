@@ -147,6 +147,19 @@ void Client::clearSessionToken() {
   clearAuthToken();
 }
 
+std::string Client::getPublicKey(uint64_t userId) {
+  auto cli = makeClient(baseUrl_, caCertPath_);
+  std::string path = "/users/" + std::to_string(userId) + "/public-key";
+  if (auto res = cli.Get(path)) {
+    if (res->status == 200) {
+      auto body = nlohmann::json::parse(res->body);
+      return body["publicKey"].get<std::string>();
+    }
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+}
+
 nlohmann::json Client::createConversation(const std::string& name,
                                           const std::vector<uint64_t>& participantIds) {
   auto cli = makeClient(baseUrl_, caCertPath_);

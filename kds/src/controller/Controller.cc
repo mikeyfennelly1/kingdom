@@ -175,6 +175,7 @@ void Controller::setupRoutes() {
   notFoundHandler_();
   healthController_();
   authController_();
+  publicKeyController_();
   basicApiInfo_();
 
   // conversations
@@ -300,6 +301,22 @@ void Controller::healthController_() {
     nlohmann::json status = {{"status", "ok"}};
     res.set_content(status.dump(), "application/json");
   });
+}
+
+void Controller::publicKeyController_() {
+  svr_.Get(R"(/users/(\d+)/public-key)",
+           [this](const httplib::Request& req, httplib::Response& res) -> void {
+             uint64_t userId = std::stoull(std::string(req.matches[1]));
+             auto publicKey = db_.getUserPublicKey(userId);
+             if (!publicKey.has_value()) {
+               res.status = 404;
+               res.set_content(nlohmann::json{{"error", "user not found"}}.dump(),
+                               "application/json");
+               return;
+             }
+             res.set_content(nlohmann::json{{"userId", userId}, {"publicKey", *publicKey}}.dump(),
+                             "application/json");
+           });
 }
 
 void Controller::conversationController_() {
