@@ -51,12 +51,13 @@ void Database::initSchema_() {
     spdlog::info("Database schema initialized");
 }
 
-uint64_t Database::createUser(const std::string& username, const std::string& passwordHash) {
+uint64_t Database::createUser(const std::string& username, const std::string& passwordHash,
+                              const std::string& publicKey) {
     try {
         pqxx::work txn(conn_);
-        pqxx::params params{username, passwordHash};
+        pqxx::params params{username, passwordHash, publicKey};
         auto result = txn.exec(
-            "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id",
+            "INSERT INTO users (username, password_hash, public_key) VALUES ($1, $2, $3) RETURNING id",
             params
         );
         txn.commit();

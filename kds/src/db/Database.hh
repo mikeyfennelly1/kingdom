@@ -17,7 +17,8 @@ public:
 
     // Insert a new user, returns the new user's id.
     // Throws std::runtime_error if the username is already taken.
-    uint64_t createUser(const std::string& username, const std::string& passwordHash);
+    uint64_t createUser(const std::string& username, const std::string& passwordHash,
+                        const std::string& publicKey);
 
     // Fetch a user by username. Returns std::nullopt if not found.
     std::optional<UserRow> getUserByUsername(const std::string& username);
