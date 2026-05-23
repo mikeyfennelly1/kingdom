@@ -1,12 +1,16 @@
 #include <CLI/CLI.hpp>
 #include <iostream>
 #include <kd/Client.hpp>
+#include <kd/LocalKeyStore.hpp>
+#include <optional>
 #include <sstream>
+#include <stdexcept>
 
 struct ShellSession {
   bool loggedIn = false;
   uint64_t userId = 0;
   std::string username;
+  std::optional<kd::LocalIdentityKey> identityKey;
 };
 
 std::string promptLine(const std::string& prompt) {
@@ -44,6 +48,22 @@ void rememberLogin(ShellSession& session, const nlohmann::json& user) {
     session.userId = user["id"];
     session.username = user["username"];
     std::cout << "Logged in as " << session.username << "." << std::endl;
+  }
+}
+
+void completeLogin(ShellSession& session, kd::Client& client, const nlohmann::json& user,
+                   const std::string& username, const std::string& password) {
+  try {
+    auto identityKey = kd::LocalKeyStore::loadForLogin(username, password);
+    rememberLogin(session, user);
+    session.identityKey = std::move(identityKey);
+    std::cout << "Local private key unlocked." << std::endl;
+  } catch (const std::exception& e) {
+    client.clearAuthToken();
+    session = ShellSession{};
+    throw std::runtime_error(
+        "Server login succeeded but local private key could not be unlocked: " +
+        std::string(e.what()));
   }
 }
 
@@ -96,13 +116,13 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto newPassword = promptLine("password: ");
         auto result = client.signup(newUsername, newPassword);
         std::cout << result.dump(4) << std::endl;
-        rememberLogin(session, result);
+        completeLogin(session, client, result, newUsername, newPassword);
       } else if (command == "login") {
         auto loginUsername = promptLine("username: ");
         auto loginPassword = promptLine("password: ");
         auto result = client.login(loginUsername, loginPassword);
         std::cout << result.dump(4) << std::endl;
-        rememberLogin(session, result);
+        completeLogin(session, client, result, loginUsername, loginPassword);
       } else if (command == "logout") {
         std::cout << client.logout().dump(4) << std::endl;
         session = ShellSession{};
