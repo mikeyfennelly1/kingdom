@@ -39,11 +39,15 @@ app.post("/record", async (req, res) => {
 
   const hash = ethers.keccak256(ethers.toUtf8Bytes(ciphertext));
 
-  const tx = await contract.recordHash(conversationId, hash);
-  await tx.wait();
-
-  console.log(`Recorded hash for conversation ${conversationId}: ${hash} (tx: ${tx.hash})`);
-  res.json({ txHash: tx.hash });
+  try {
+    const tx = await contract.recordHash(conversationId, hash);
+    await tx.wait();
+    console.log(`Recorded hash for conversation ${conversationId}: ${hash} (tx: ${tx.hash})`);
+    res.json({ txHash: tx.hash });
+  } catch (err) {
+    console.error(`Failed to record hash for conversation ${conversationId}:`, err.message);
+    res.status(500).json({ error: "failed to record hash on-chain" });
+  }
 });
 
 /**
