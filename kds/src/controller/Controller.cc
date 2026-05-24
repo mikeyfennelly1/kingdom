@@ -321,6 +321,13 @@ void Controller::publicKeyController_() {
 
 void Controller::conversationController_() {
   svr_.Post("/conversations", [this](const httplib::Request& req, httplib::Response& res) {
+    auto authenticatedUserId = authenticatedUserId_(req);
+    if (!authenticatedUserId.has_value()) {
+      res.status = 401;
+      res.set_content(nlohmann::json{{"error", "login required"}}.dump(), "application/json");
+      return;
+    }
+
     auto body = nlohmann::json::parse(req.body, nullptr, false);
     if (body.is_discarded() || !body.contains("name") || !body.contains("participantIds")) {
       res.status = 400;
@@ -340,7 +347,19 @@ void Controller::conversationController_() {
 
   svr_.Get(R"(/users/(\d+)/conversations)",
            [this](const httplib::Request& req, httplib::Response& res) -> void {
+             auto authenticatedUserId = authenticatedUserId_(req);
+             if (!authenticatedUserId.has_value()) {
+               res.status = 401;
+               res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
+                               "application/json");
+               return;
+             }
              uint64_t userId = std::stoull(std::string(req.matches[1]));
+             if (*authenticatedUserId != userId) {
+               res.status = 403;
+               res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
+               return;
+             }
              spdlog::info("Fetching conversations for user: {}", userId);
              auto convs = db_.getConversationsByUserId(userId);
              nlohmann::json result = convs;
@@ -411,6 +430,13 @@ void Controller::messageController_() {
 
   svr_.Get(R"(/conversations/(\d+)/messages)",
            [this](const httplib::Request& req, httplib::Response& res) -> void {
+             auto authenticatedUserId = authenticatedUserId_(req);
+             if (!authenticatedUserId.has_value()) {
+               res.status = 401;
+               res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
+                               "application/json");
+               return;
+             }
              uint64_t convId = std::stoull(std::string(req.matches[1]));
              auto msgs = db_.getMessagesByConversationId(convId);
              nlohmann::json result = msgs;
