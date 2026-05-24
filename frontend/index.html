@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kingdom — Secure Messaging</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/modules/libsodium-wrappers.js"></script>
+</head>
+<body>
+
+  <!-- Auth screen -->
+  <div id="view-auth">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="logo-icon">&#9813;</span>
+        <h1>Kingdom</h1>
+      </div>
+      <p class="auth-subtitle">End-to-end encrypted messaging</p>
+
+      <div class="tab-bar">
+        <button class="tab active" data-tab="login">Log In</button>
+        <button class="tab" data-tab="signup">Sign Up</button>
+      </div>
+
+      <form id="login-form">
+        <input id="login-username" name="username" placeholder="Username" autocomplete="username" required />
+        <input id="login-password" name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+        <button type="submit" id="login-btn">Log In</button>
+      </form>
+
+      <form id="signup-form" class="hidden">
+        <input id="signup-username" name="username" placeholder="Username" autocomplete="username" required />
+        <input id="signup-password" name="password" type="password" placeholder="Password" autocomplete="new-password" required />
+        <button type="submit" id="signup-btn">Create Account</button>
+      </form>
+
+      <div class="server-row">
+        <label for="server-url">Server</label>
+        <input id="server-url" value="https://localhost:8080" spellcheck="false" />
+      </div>
+
+      <div id="auth-error" class="error-msg hidden"></div>
+    </div>
+  </div>
+
+  <!-- Main app screen -->
+  <div id="view-app" class="hidden">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-identity">
+          <span class="logo-icon small">&#9813;</span>
+          <span id="sidebar-username"></span>
+          <span id="sidebar-userid" class="user-id-badge"></span>
+        </div>
+        <button id="logout-btn" class="icon-btn" title="Sign out">&#x2715;</button>
+      </div>
+
+      <div class="sidebar-label">Conversations</div>
+      <div id="conv-list"></div>
+
+      <button id="new-conv-btn" class="new-conv-btn">+ New Conversation</button>
+    </aside>
+
+    <main class="chat-panel">
+      <div id="chat-empty">
+        <div class="empty-state">
+          <span class="logo-icon large">&#9813;</span>
+          <p>Select a conversation or create a new one</p>
+          <p class="muted">Messages are end-to-end encrypted</p>
+        </div>
+      </div>
+
+      <div id="chat-active" class="hidden">
+        <div class="chat-header">
+          <div>
+            <h2 id="chat-name"></h2>
+            <span id="chat-participants" class="chat-meta"></span>
+          </div>
+          <div id="e2ee-badge" class="e2ee-badge" title="End-to-end encrypted">&#128274; E2EE</div>
+        </div>
+
+        <div id="messages" class="messages"></div>
+
+        <div class="send-bar">
+          <div class="send-bar-inner">
+            <div id="recipient-row" class="recipient-row hidden">
+              <label for="recipient-select">Encrypt for</label>
+              <select id="recipient-select"></select>
+            </div>
+            <div class="input-row">
+              <input id="message-input" placeholder="Write a message…" autocomplete="off" />
+              <button id="send-btn">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- New conversation modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2>New Conversation</h2>
+      <label for="conv-name-input">Name</label>
+      <input id="conv-name-input" placeholder="e.g. General" />
+      <label for="conv-participants-input">Participant IDs <span class="muted">(space-separated, your ID is added automatically)</span></label>
+      <input id="conv-participants-input" placeholder="e.g. 2 3 4" />
+      <div class="modal-actions">
+        <button id="modal-cancel" class="secondary-btn">Cancel</button>
+        <button id="modal-create">Create</button>
+      </div>
+      <div id="modal-error" class="error-msg hidden"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

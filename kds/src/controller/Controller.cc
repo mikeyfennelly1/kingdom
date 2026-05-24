@@ -54,6 +54,16 @@ Controller::Controller(std::string host, int port, std::string dbConnectionStrin
 
 void Controller::setupRoutes() {
   svr_.set_pre_routing_handler([this](const httplib::Request& req, httplib::Response& res) {
+    res.set_header("Access-Control-Allow-Origin", "*");
+    res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.set_header("Access-Control-Max-Age", "86400");
+
+    if (req.method == "OPTIONS") {
+      res.status = 204;
+      return httplib::Server::HandlerResponse::Handled;
+    }
+
     auto error = securityFilterChain_->Execute(req);
     if (error.has_value()) {
       nlohmann::json errorJson = {{"error", error->message}};
