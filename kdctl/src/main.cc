@@ -1,4 +1,5 @@
 #include <CLI/CLI.hpp>
+#include <algorithm>
 #include <iostream>
 #include <kd/Client.hpp>
 #include <kd/LocalKeyStore.hpp>
@@ -153,10 +154,10 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto convName = promptLine("name: ");
         auto participantIds = parseIds(promptLine("participants: "));
         if (session.loggedIn) {
-          bool alreadyIncluded = false;
-          for (auto id : participantIds) {
-            alreadyIncluded = alreadyIncluded || id == session.userId;
-          }
+          bool alreadyIncluded =
+              std::find_if(participantIds.begin(), participantIds.end(),
+                           [&session](uint64_t id) { return id == session.userId; }) !=
+              participantIds.end();
           if (!alreadyIncluded) {
             participantIds.push_back(session.userId);
           }
@@ -177,6 +178,9 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
       } else if (command == "messages") {
         auto convId = promptId("conversation id: ");
         auto msgs = client.getMessages(convId);
+        std::sort(msgs.begin(), msgs.end(), [](const nlohmann::json& a, const nlohmann::json& b) {
+          return a["timestamp"].get<uint64_t>() < b["timestamp"].get<uint64_t>();
+        });
         if (session.loggedIn && session.identityKey.has_value()) {
           printMessages(msgs, client, *session.identityKey);
         } else {
