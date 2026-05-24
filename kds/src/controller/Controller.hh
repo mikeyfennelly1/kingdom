@@ -2,10 +2,13 @@
 #include <httplib.h>
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <memory>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 #include "../db/Database.hh"
 #include "../security/SecurityFilterChain.hh"
@@ -43,6 +46,14 @@ class Controller {
   void notFoundHandler_();
   std::string createSession_(uint64_t userId, const std::string& username) const;
   std::optional<uint64_t> authenticatedUserId_(const httplib::Request& req);
+  bool isRateLimited_(const std::string& ip);
+
+  struct RateLimitEntry {
+    int count;
+    std::chrono::steady_clock::time_point windowStart;
+  };
+  std::unordered_map<std::string, RateLimitEntry> rateLimitMap_;
+  std::mutex rateLimitMutex_;
 };
 
 auto configure() -> kd::Controller;

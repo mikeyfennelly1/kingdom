@@ -104,9 +104,32 @@ std::optional<uint64_t> Controller::authenticatedUserId_(const httplib::Request&
   }
 }
 
+bool Controller::isRateLimited_(const std::string& ip) {
+  constexpr int kMaxAttempts = 10;
+  constexpr auto kWindow = std::chrono::seconds(60);
+
+  std::lock_guard<std::mutex> lock(rateLimitMutex_);
+  auto now = std::chrono::steady_clock::now();
+  auto& entry = rateLimitMap_[ip];
+
+  if (now - entry.windowStart >= kWindow) {
+    entry.count = 0;
+    entry.windowStart = now;
+  }
+
+  ++entry.count;
+  return entry.count > kMaxAttempts;
+}
+
 void Controller::authController_() {
   svr_.Post("/signup", [this](const httplib::Request& req, httplib::Response& res) {
     spdlog::info("Sign-up request received");
+
+    if (isRateLimited_(req.remote_addr)) {
+      res.status = 429;
+      res.set_content(nlohmann::json{{"error", "too many requests"}}.dump(), "application/json");
+      return;
+    }
 
     auto body = nlohmann::json::parse(req.body, nullptr, false);
     if (body.is_discarded() || !body.contains("username") || !body.contains("password") ||
@@ -163,6 +186,13 @@ void Controller::authController_() {
   // Login endpoint
   svr_.Post("/login", [this](const httplib::Request& req, httplib::Response& res) {
     spdlog::info("Login request received: {}", req.body);
+
+    if (isRateLimited_(req.remote_addr)) {
+      res.status = 429;
+      res.set_content(nlohmann::json{{"error", "too many requests"}}.dump(), "application/json");
+      return;
+    }
+
     auto body = nlohmann::json::parse(req.body, nullptr, false);
     if (body.is_discarded() || !body.contains("username") || !body.contains("password")) {
       res.status = 400;
