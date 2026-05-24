@@ -1,9 +1,5 @@
 #include "Controller.hh"
 
-#include <httplib.h>
-#include <openssl/crypto.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
 #include <sodium.h>
 
 #include <chrono>
@@ -13,6 +9,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+
+#include "../security/JwtUtils.hh"
 
 namespace kd {
 
@@ -30,112 +28,6 @@ std::string hashPassword(const std::string& password) {
 
 bool verifyPassword(const std::string& encodedHash, const std::string& password) {
   return crypto_pwhash_str_verify(encodedHash.c_str(), password.c_str(), password.size()) == 0;
-}
-
-std::string base64UrlEncode(const unsigned char* data, size_t size) {
-  std::string encoded(4 * ((size + 2) / 3), '\0');
-  const int encodedSize = EVP_EncodeBlock(reinterpret_cast<unsigned char*>(encoded.data()), data,
-                                          static_cast<int>(size));
-  encoded.resize(encodedSize);
-
-  for (char& ch : encoded) {
-    if (ch == '+') {
-      ch = '-';
-    } else if (ch == '/') {
-      ch = '_';
-    }
-  }
-  while (!encoded.empty() && encoded.back() == '=') {
-    encoded.pop_back();
-  }
-  return encoded;
-}
-
-std::string base64UrlEncode(const std::string& value) {
-  return base64UrlEncode(reinterpret_cast<const unsigned char*>(value.data()), value.size());
-}
-
-std::string signJwtInput(const std::string& signingInput, const std::string& secret) {
-  unsigned char digest[EVP_MAX_MD_SIZE];
-  unsigned int digestLength = 0;
-  HMAC(EVP_sha256(), secret.data(), static_cast<int>(secret.size()),
-       reinterpret_cast<const unsigned char*>(signingInput.data()), signingInput.size(), digest,
-       &digestLength);
-  return base64UrlEncode(digest, digestLength);
-}
-
-uint64_t epochSeconds() {
-  return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
-                                   std::chrono::system_clock::now().time_since_epoch())
-                                   .count());
-}
-
-std::optional<std::string> bearerToken(const httplib::Request& req) {
-  const std::string prefix = "Bearer ";
-  auto authorization = req.get_header_value("Authorization");
-  if (authorization.rfind(prefix, 0) != 0) {
-    return std::nullopt;
-  }
-  auto token = authorization.substr(prefix.size());
-  if (token.empty()) {
-    return std::nullopt;
-  }
-  return token;
-}
-
-std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token,
-                                                 const std::string& secret) {
-  auto firstDot = token.find('.');
-  if (firstDot == std::string::npos) {
-    return std::nullopt;
-  }
-  auto secondDot = token.find('.', firstDot + 1);
-  if (secondDot == std::string::npos || token.find('.', secondDot + 1) != std::string::npos) {
-    return std::nullopt;
-  }
-
-  auto signingInput = token.substr(0, secondDot);
-  auto signature = token.substr(secondDot + 1);
-  auto expectedSignature = signJwtInput(signingInput, secret);
-  if (signature.size() != expectedSignature.size() ||
-      CRYPTO_memcmp(signature.data(), expectedSignature.data(), signature.size()) != 0) {
-    return std::nullopt;
-  }
-
-  auto payloadPart = token.substr(firstDot + 1, secondDot - firstDot - 1);
-  for (char& ch : payloadPart) {
-    if (ch == '-') {
-      ch = '+';
-    } else if (ch == '_') {
-      ch = '/';
-    }
-  }
-  while (payloadPart.size() % 4 != 0) {
-    payloadPart.push_back('=');
-  }
-
-  std::vector<unsigned char> decoded(3 * (payloadPart.size() / 4) + 3);
-  auto decodedSize =
-      EVP_DecodeBlock(decoded.data(), reinterpret_cast<const unsigned char*>(payloadPart.data()),
-                      static_cast<int>(payloadPart.size()));
-  if (decodedSize < 0) {
-    return std::nullopt;
-  }
-  while (!payloadPart.empty() && payloadPart.back() == '=') {
-    --decodedSize;
-    payloadPart.pop_back();
-  }
-
-  auto payload =
-      nlohmann::json::parse(std::string(reinterpret_cast<char*>(decoded.data()), decodedSize),
-                            nullptr, false);
-  if (payload.is_discarded() || !payload.contains("sub") || !payload.contains("exp")) {
-    return std::nullopt;
-  }
-  if (!payload["exp"].is_number_unsigned() || payload["exp"].get<uint64_t>() <= epochSeconds()) {
-    return std::nullopt;
-  }
-  return payload;
 }
 
 }  // namespace

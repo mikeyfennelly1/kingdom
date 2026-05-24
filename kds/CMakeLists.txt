@@ -35,6 +35,10 @@ target_link_libraries(kds_tests
     PRIVATE
         kd
         spdlog::spdlog
+        httplib::httplib
+        nlohmann_json::nlohmann_json
+        OpenSSL::SSL
+        OpenSSL::Crypto
         GTest::gtest_main
 )
 
