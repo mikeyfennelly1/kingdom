@@ -1,8 +1,8 @@
 #pragma once
-#include <string>
-#include <vector>
 #include <cstdint>
 #include <nlohmann/json.hpp>
+#include <string>
+#include <vector>
 
 namespace kd {
 
@@ -14,6 +14,8 @@ struct Conversation {
     std::string name;
     std::vector<uint64_t> participantIds;
     uint64_t createdAt;
+
+    [[nodiscard]] bool hasParticipant(uint64_t userId) const;
 
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(Conversation, id, name, participantIds, createdAt)
 };
