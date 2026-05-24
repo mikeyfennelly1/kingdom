@@ -4,6 +4,7 @@
 #include <kd/Client.hpp>
 #include <kd/LocalKeyStore.hpp>
 #include <kd/Message.hpp>
+#include <kd/MessageStore.hpp>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -14,6 +15,7 @@ struct ShellSession {
   uint64_t userId = 0;
   std::string username;
   std::optional<kd::LocalIdentityKey> identityKey;
+  kd::MessageStore messageStore;
 };
 
 std::string promptLine(const std::string& prompt) {
@@ -96,6 +98,7 @@ void printShellHelp() {
             << "  create-conversation\n"
             << "  send\n"
             << "  messages\n"
+            << "  messages-from\n"
             << "  help\n"
             << "  exit\n";
 }
@@ -181,10 +184,25 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         std::sort(msgs.begin(), msgs.end(), [](const nlohmann::json& a, const nlohmann::json& b) {
           return a["timestamp"].get<uint64_t>() < b["timestamp"].get<uint64_t>();
         });
+        session.messageStore.clear();
+        for (const auto& m : msgs) {
+          session.messageStore.add(m.get<kd::Message>());
+        }
         if (session.loggedIn && session.identityKey.has_value()) {
           printMessages(msgs, client, *session.identityKey);
         } else {
           printMessages(msgs);
+        }
+      } else if (command == "messages-from") {
+        auto senderId = promptId("sender user id: ");
+        auto results = session.messageStore.findBySender(senderId);
+        if (results.empty()) {
+          std::cout << "No cached messages from user " << senderId
+                    << ". Run 'messages' first." << std::endl;
+        } else {
+          for (const auto& m : results) {
+            std::cout << m.formatted() << std::endl;
+          }
         }
       } else if (!command.empty()) {
         std::cout << "Unknown command. Type help for commands." << std::endl;
