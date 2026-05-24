@@ -5,6 +5,7 @@
 #include <optional>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 struct ShellSession {
   bool loggedIn = false;
@@ -39,6 +40,22 @@ void printMessages(const nlohmann::json& msgs) {
   for (const auto& msg : msgs) {
     std::cout << "[" << msg["timestamp"] << "] "
               << "User " << msg["senderId"] << ": " << msg["payload"] << std::endl;
+  }
+}
+
+void printMessages(const nlohmann::json& msgs, kd::Client& client,
+                   const kd::LocalIdentityKey& identity) {
+  for (const auto& msg : msgs) {
+    std::string displayText;
+    try {
+      auto senderPk = client.getPublicKey(msg["senderId"].get<uint64_t>());
+      displayText =
+          kd::LocalKeyStore::decryptMessage(msg["payload"].get<std::string>(), identity, senderPk);
+    } catch (const std::exception&) {
+      displayText = "[decryption failed]";
+    }
+    std::cout << "[" << msg["timestamp"] << "] "
+              << "User " << msg["senderId"] << ": " << displayText << std::endl;
   }
 }
 
@@ -146,16 +163,25 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         }
         std::cout << client.createConversation(convName, participantIds).dump(4) << std::endl;
       } else if (command == "send") {
-        if (!session.loggedIn) {
+        if (!session.loggedIn || !session.identityKey.has_value()) {
           std::cout << "Log in first." << std::endl;
           continue;
         }
         auto convId = promptId("conversation id: ");
+        auto recipientId = promptId("recipient user id: ");
         auto messageText = promptLine("message: ");
-        std::cout << client.sendMessage(convId, session.userId, messageText).dump(4) << std::endl;
+        auto recipientPk = client.getPublicKey(recipientId);
+        auto payload =
+            kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk);
+        std::cout << client.sendMessage(convId, session.userId, payload).dump(4) << std::endl;
       } else if (command == "messages") {
         auto convId = promptId("conversation id: ");
-        printMessages(client.getMessages(convId));
+        auto msgs = client.getMessages(convId);
+        if (session.loggedIn && session.identityKey.has_value()) {
+          printMessages(msgs, client, *session.identityKey);
+        } else {
+          printMessages(msgs);
+        }
       } else if (!command.empty()) {
         std::cout << "Unknown command. Type help for commands." << std::endl;
       }

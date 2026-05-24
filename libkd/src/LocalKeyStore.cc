@@ -224,6 +224,62 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
   return identity;
 }
 
+std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
+                                           const LocalIdentityKey& sender,
+                                           const std::string& recipientPkB64) {
+  ensureSodiumInitialized();
+
+  auto recipientPk = base64Decode(recipientPkB64, "recipientPublicKey");
+  if (recipientPk.size() != crypto_box_PUBLICKEYBYTES) {
+    throw std::runtime_error("Invalid recipient public key size");
+  }
+
+  std::array<unsigned char, crypto_box_NONCEBYTES> nonce{};
+  randombytes_buf(nonce.data(), nonce.size());
+
+  std::vector<unsigned char> ciphertext(plaintext.size() + crypto_box_MACBYTES);
+  if (crypto_box_easy(ciphertext.data(),
+                      reinterpret_cast<const unsigned char*>(plaintext.data()),
+                      static_cast<unsigned long long>(plaintext.size()), nonce.data(),
+                      recipientPk.data(), sender.privateKey.data()) != 0) {
+    throw std::runtime_error("Encryption failed");
+  }
+
+  std::vector<unsigned char> combined;
+  combined.insert(combined.end(), nonce.begin(), nonce.end());
+  combined.insert(combined.end(), ciphertext.begin(), ciphertext.end());
+  return base64Encode(combined.data(), combined.size());
+}
+
+std::string LocalKeyStore::decryptMessage(const std::string& payloadB64,
+                                           const LocalIdentityKey& recipient,
+                                           const std::string& senderPkB64) {
+  ensureSodiumInitialized();
+
+  auto combined = base64Decode(payloadB64, "payload");
+  if (combined.size() < crypto_box_NONCEBYTES + crypto_box_MACBYTES) {
+    throw std::runtime_error("Payload too short to be valid ciphertext");
+  }
+
+  std::array<unsigned char, crypto_box_NONCEBYTES> nonce{};
+  std::copy(combined.begin(), combined.begin() + crypto_box_NONCEBYTES, nonce.begin());
+
+  auto senderPk = base64Decode(senderPkB64, "senderPublicKey");
+  if (senderPk.size() != crypto_box_PUBLICKEYBYTES) {
+    throw std::runtime_error("Invalid sender public key size");
+  }
+
+  const size_t ciphertextLen = combined.size() - crypto_box_NONCEBYTES;
+  std::vector<unsigned char> plaintext(ciphertextLen - crypto_box_MACBYTES);
+  if (crypto_box_open_easy(plaintext.data(), combined.data() + crypto_box_NONCEBYTES,
+                           static_cast<unsigned long long>(ciphertextLen), nonce.data(),
+                           senderPk.data(), recipient.privateKey.data()) != 0) {
+    throw std::runtime_error("Decryption failed");
+  }
+
+  return {reinterpret_cast<char*>(plaintext.data()), plaintext.size()};
+}
+
 std::filesystem::path LocalKeyStore::defaultKeyPath_(const std::string& username) {
   const char* home = std::getenv("HOME");
   if (home == nullptr || std::string(home).empty()) {
