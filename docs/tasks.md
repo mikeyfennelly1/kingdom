@@ -9,8 +9,8 @@ Tasks are ordered by what to work on first. Crypto key infrastructure is mostly 
 - [x] **1. Deploy `MessageIntegrity.sol` to Sepolia**
   DONE. `blockchain/sidecar/.env` has `CONTRACT_ADDRESS=0xf9Ceb04B978523D92CE812386c55709002E59a53`, `SEPOLIA_RPC_URL`, and `PRIVATE_KEY` all set. Deployment artifacts exist in `blockchain/artifacts/`. Sidecar is wired into `kds` and records a tx hash on every message send.
 
-- [ ] **2. Enforce authentication on protected routes**
-  PARTIAL. JWT auth is now fully implemented — `createSession_()` issues HS256 JWTs and `authenticatedUserId_()` verifies them from the Authorization header. Auth is enforced on `POST /conversations/{id}/messages`. Still need to verify the same guard is applied to `POST /conversations`, `GET /conversations/{id}/messages`, and `GET /users/{id}/conversations`. Check each handler in `Controller.cc` and add the 401 guard where missing.
+- [x] **2. Enforce authentication on protected routes**
+  DONE. Auth guard (401) added to `POST /conversations` and `GET /conversations/{id}/messages`. `GET /users/{id}/conversations` also has a 403 ownership check (see task 12).
 
 - [x] **3. Add `PUT /users/{id}/public-key` endpoint**
   DONE — not needed as a separate endpoint. The public key is now sent in the signup request body and stored in the DB by the signup handler. `Database.cc` was updated alongside this.
@@ -36,23 +36,23 @@ Tasks are ordered by what to work on first. Crypto key infrastructure is mostly 
 - [x] **10. Configure sidecar with deployed contract address**
   DONE. All three env vars are set in `blockchain/sidecar/.env`. `kds` calls the sidecar on every message creation and stores the returned tx hash in `blockchainDigest`.
 
-- [ ] **11. Add input validation to all route handlers**
-  PARTIAL. JSON parse errors already return 400 and missing required fields are caught. What's missing: length checks (max 64 chars on username, max 72 on password, max 128 on conversation name, max 65536 on payload) and empty string rejection. Add these to every handler in `kds/src/controller/Controller.cc` before any DB call.
+- [x] **11. Add input validation to all route handlers**
+  DONE. Length checks and empty string rejection added to signup, login, create conversation, and send message handlers in `Controller.cc`.
 
-- [ ] **12. Enforce access control — own-user-only**
-  PARTIAL. The message send endpoint already checks that the authenticated user matches `senderId` and returns 403 if not. Missing: the same check on `GET /users/{id}/conversations` — nothing stops user A fetching user B's conversation list. In `Controller.cc`, after calling `authenticatedUserId_()`, compare the result against the `{userId}` path parameter and return 403 if they differ.
+- [x] **12. Enforce access control — own-user-only**
+  DONE. `GET /users/{id}/conversations` now returns 403 if the authenticated user doesn't match the `{id}` path parameter.
 
 - [x] **13. Fix verification page with real contract address and ABI**
   DONE. Merge conflict resolved, `CONTRACT_ADDRESS` set to `0xf9Ceb04B978523D92CE812386c55709002E59a53`. Page fetches the `HashRecorded` event from Sepolia via a public RPC, computes keccak256 of the input ciphertext, and displays a pass/fail result with block timestamp. Works as a standalone `file://` page.
 
-- [ ] **14. Implement `Conversation::hasParticipant()`**
-  In `libkd/src/Conversation.cc`, implement `bool Conversation::hasParticipant(uint64_t userId) const` using `std::find` over `participantIds`. Declare it in `libkd/include/kd/Conversation.hpp`. This fills the stub and adds a required STL algorithm.
+- [x] **14. Implement `Conversation::hasParticipant()`**
+  DONE. Implemented in `libkd/src/Conversation.cc` using `std::find`. Declared in `libkd/include/kd/Conversation.hpp` with `[[nodiscard]]`.
 
-- [ ] **15. Implement `Message::formatted()`**
-  In `libkd/src/Message.cc`, implement `std::string Message::formatted() const` returning a string like `[1716000000000] User 3: hello`. Declare it in `libkd/include/kd/Message.hpp`. Use it in kdctl's `printMessages()` in place of the current manual formatting.
+- [x] **15. Implement `Message::formatted()`**
+  DONE. Implemented in `libkd/src/Message.cc`, declared in `libkd/include/kd/Message.hpp` with `[[nodiscard]]`. Used in kdctl's basic `printMessages()` in place of manual formatting.
 
-- [ ] **16. Add STL algorithm usage in kdctl**
-  In `kdctl/src/main.cc`, add: `std::sort` on the message list by timestamp before display, and `std::find_if` with a lambda (e.g. to find a conversation by name in the list). These are specifically called out in the C++ rubric.
+- [x] **16. Add STL algorithm usage in kdctl**
+  DONE. `std::sort` on messages by timestamp before display. `std::find_if` replaces the manual participant inclusion loop in `create-conversation`.
 
 - [ ] **17. Write cryptographic design document**
   Create `docs/crypto-design.md` (~2–6 pages, required by spec). Must cover: (1) threat model — which properties hold against passive attacker, active attacker, honest-but-curious server, fully compromised server (properties that fail in case 4 must be named explicitly); (2) construction walkthrough with diagrams for registration, key publication, send, receive, at-rest key storage; (3) justification for every primitive at parameter level with RFC/paper citations (libsodium `crypto_box` = Curve25519 + XSalsa20-Poly1305, RFC 9106 for Argon2id, RFC 5869 for HKDF); (4) TOFU trust model rationale and limitations; (5) known limitations (no forward secrecy in static `crypto_box`, server can equivocate on first key fetch).
