@@ -230,6 +230,25 @@ void Controller::authController_() {
     std::string password = body["password"];
     std::string publicKey = body["publicKey"];
 
+    if (username.empty() || username.size() > 64) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "username must be 1–64 characters"}}.dump(),
+                      "application/json");
+      return;
+    }
+    if (password.empty() || password.size() > 72) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "password must be 1–72 characters"}}.dump(),
+                      "application/json");
+      return;
+    }
+    if (publicKey.empty()) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "publicKey must not be empty"}}.dump(),
+                      "application/json");
+      return;
+    }
+
     try {
       auto passwordHash = hashPassword(password);
       uint64_t id = db_.createUser(username, passwordHash, publicKey);
@@ -262,6 +281,20 @@ void Controller::authController_() {
 
     std::string username = body["username"];
     std::string password = body["password"];
+
+    if (username.empty() || username.size() > 64) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "username must be 1–64 characters"}}.dump(),
+                      "application/json");
+      return;
+    }
+    if (password.empty() || password.size() > 72) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "password must be 1–72 characters"}}.dump(),
+                      "application/json");
+      return;
+    }
+
     auto user = db_.getUserByUsername(username);
     if (!user.has_value() || !verifyPassword(user->passwordHash, password)) {
       res.status = 401;
@@ -337,6 +370,14 @@ void Controller::conversationController_() {
     }
 
     std::string name = body["name"];
+
+    if (name.empty() || name.size() > 128) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "name must be 1–128 characters"}}.dump(),
+                      "application/json");
+      return;
+    }
+
     auto participantIds = body["participantIds"].get<std::vector<uint64_t>>();
 
     uint64_t id = db_.createConversation(name, participantIds);
@@ -382,6 +423,14 @@ void Controller::messageController_() {
 
     uint64_t senderId = body["senderId"];
     std::string payload = body["payload"];
+
+    if (payload.empty() || payload.size() > 65536) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "payload must be 1–65536 characters"}}.dump(),
+                      "application/json");
+      return;
+    }
+
     auto authenticatedUserId = authenticatedUserId_(req);
     if (!authenticatedUserId.has_value()) {
       res.status = 401;
