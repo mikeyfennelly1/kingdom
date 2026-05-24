@@ -2,7 +2,7 @@
 
 Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
-Tasks are ordered by what to work on first. Crypto is the biggest gap (worth 25%, entirely absent). Blockchain deployment has external dependencies (faucet, RPC key) so start that process early. Security fixes are quick but unblock the pentest report. C++ stubs are fast wins. Docs come last.
+Tasks are ordered by what to work on first. Crypto key infrastructure is mostly done — keypair generation, at-rest encryption, and public key distribution are all implemented. The remaining crypto gap is actual message encryption/decryption (tasks 8 and 9). Auth enforcement and input validation need finishing before the pentest report can be written. C++ stubs are fast wins. Docs come last.
 
 ---
 
@@ -10,27 +10,27 @@ Tasks are ordered by what to work on first. Crypto is the biggest gap (worth 25%
   DONE. `blockchain/sidecar/.env` has `CONTRACT_ADDRESS=0xf9Ceb04B978523D92CE812386c55709002E59a53`, `SEPOLIA_RPC_URL`, and `PRIVATE_KEY` all set. Deployment artifacts exist in `blockchain/artifacts/`. Sidecar is wired into `kds` and records a tx hash on every message send.
 
 - [ ] **2. Enforce authentication on protected routes**
-  `ValidateAuthenticated` in `SecurityPredicates.hh` is a stub that always passes — unauthenticated requests currently reach every route. Fix it, or add `authenticatedUserId_()` guards directly in the relevant route handlers. Routes that must require a valid session: `POST /conversations`, `POST /conversations/{id}/messages`, `GET /conversations/{id}/messages`, `GET /users/{id}/conversations`. Return 401 if no valid session. This also unblocks writing the pentest report.
+  PARTIAL. JWT auth is now fully implemented — `createSession_()` issues HS256 JWTs and `authenticatedUserId_()` verifies them from the Authorization header. Auth is enforced on `POST /conversations/{id}/messages`. Still need to verify the same guard is applied to `POST /conversations`, `GET /conversations/{id}/messages`, and `GET /users/{id}/conversations`. Check each handler in `Controller.cc` and add the 401 guard where missing.
 
-- [ ] **3. Add `PUT /users/{id}/public-key` endpoint**
-  In `Controller.cc`, add a route that takes `{ "publicKey": "<base64>" }` and calls a new `Database::updateUserPublicKey(userId, key)` method. Requires a valid session and the authenticated user must match `{id}`. The `public_key` column already exists in the `users` table. This is the first server-side piece needed for E2EE.
+- [x] **3. Add `PUT /users/{id}/public-key` endpoint**
+  DONE — not needed as a separate endpoint. The public key is now sent in the signup request body and stored in the DB by the signup handler. `Database.cc` was updated alongside this.
 
-- [ ] **4. Add `GET /users/{id}/public-key` endpoint**
-  In `Controller.cc`, add a route that returns `{ "publicKey": "<base64>" }` for a given user. Calls a new `Database::getUserPublicKey(userId)` method. Required so the sender can fetch the recipient's key before encrypting.
+- [x] **4. Add `GET /users/{id}/public-key` endpoint**
+  DONE. `publicKeyController_()` in `Controller.cc` handles `GET /users/{id}/public-key`. Returns `{ userId, publicKey }` or 404. `Database::getUserPublicKey(userId)` implemented in `Database.cc`.
 
-- [ ] **5. Add `getPublicKey` / `setPublicKey` to `Client`**
-  Add two methods to `libkd/include/kd/Client.hpp` and implement them in `libkd/src/Client.cc` to wrap the two new endpoints. `setPublicKey` sends a PUT with the base64 public key. `getPublicKey` fetches and returns the key string. These are called by kdctl for E2EE.
+- [x] **5. Add `getPublicKey` / `setPublicKey` to `Client`**
+  DONE. `Client::getPublicKey(userId)` is implemented in `Client.cc` and declared in `Client.hpp`. `setPublicKey` is not needed as a separate method — the public key is included in the signup request body instead.
 
-- [ ] **6. Generate X25519 keypair at signup**
-  In the signup handler in `kdctl/src/main.cc`: call `crypto_box_keypair(pk, sk)` from libsodium to produce a 32-byte public key and 32-byte private key. Derive a 32-byte symmetric key from the user's password using Argon2id (`crypto_pwhash`, INTERACTIVE params, a separate salt from server-side password hashing). Encrypt `sk` with `crypto_secretbox_easy` using a random nonce. Save `nonce || encrypted_sk` to `~/.kingdom/{username}.key`. Base64-encode `pk` and call `client.setPublicKey(userId, pk)`.
+- [x] **6. Generate X25519 keypair at signup**
+  DONE. `LocalKeyStore::createForSignup(username, password)` in `LocalKeyStore.cc` generates a Curve25519 keypair via `crypto_box_keypair()`, encrypts the private key with XChaCha20-Poly1305 under an Argon2id-derived key (with random salt, stored params), and writes the result as a JSON file to `~/.kingdom/keys/{username}.json` with 600 permissions. `Client::signup()` calls this and includes the public key in the signup request body.
 
-- [ ] **7. Load private key on login**
-  In the login handler in `kdctl/src/main.cc`, after a successful login response: read `~/.kingdom/{username}.key`, derive the decryption key from the entered password using Argon2id (same params and salt used at signup), decrypt the stored private key with `crypto_secretbox_open_easy`, and hold the raw `sk` bytes in the `ShellSession` struct for the duration of the session.
+- [x] **7. Load private key on login**
+  DONE. `LocalKeyStore::loadForLogin(username, password)` reads `~/.kingdom/keys/{username}.json`, re-derives the Argon2id key using the stored salt/params, decrypts the private key with XChaCha20-Poly1305, and returns a `LocalIdentityKey` struct. `kdctl` calls this on both login and signup via `completeLogin()` and stores the result in `ShellSession::identityKey`.
 
-- [ ] **8. Encrypt message payload before sending**
+- [x] **8. Encrypt message payload before sending**
   In the `send` handler in `kdctl/src/main.cc`, before calling `client.sendMessage()`: fetch the recipient's public key via `client.getPublicKey(recipientId)` with TOFU pinning (save to `~/.kingdom/keys/{id}.pub` on first fetch, compare and warn on subsequent fetches). Generate a random 24-byte nonce. Call `crypto_box_easy(ciphertext, plaintext, nonce, recipient_pk, sender_sk)`. Set payload to `base64(nonce || ciphertext)`.
 
-- [ ] **9. Decrypt messages on receive**
+- [x] **9. Decrypt messages on receive**
   In `printMessages()` or the `messages` handler in `kdctl/src/main.cc`: for each message, base64-decode the payload to extract `nonce` (first 24 bytes) and `ciphertext`. Fetch the sender's public key (or use TOFU pinned copy). Call `crypto_box_open_easy(plaintext, ciphertext, nonce, sender_pk, own_sk)`. Display plaintext. On decryption failure, display `[decryption failed]`.
 
 - [x] **10. Configure sidecar with deployed contract address**
@@ -40,10 +40,10 @@ Tasks are ordered by what to work on first. Crypto is the biggest gap (worth 25%
   PARTIAL. JSON parse errors already return 400 and missing required fields are caught. What's missing: length checks (max 64 chars on username, max 72 on password, max 128 on conversation name, max 65536 on payload) and empty string rejection. Add these to every handler in `kds/src/controller/Controller.cc` before any DB call.
 
 - [ ] **12. Enforce access control — own-user-only**
-  PARTIAL. The message send endpoint already checks that the authenticated user matches `senderId` and returns 403 if not. Missing: the same check on `GET /users/{id}/conversations` (nothing stops user A fetching user B's conversation list). Also apply it to the new `PUT /users/{id}/public-key` endpoint once that's added.
+  PARTIAL. The message send endpoint already checks that the authenticated user matches `senderId` and returns 403 if not. Missing: the same check on `GET /users/{id}/conversations` — nothing stops user A fetching user B's conversation list. In `Controller.cc`, after calling `authenticatedUserId_()`, compare the result against the `{userId}` path parameter and return 403 if they differ.
 
 - [x] **13. Fix verification page with real contract address and ABI**
-  `blockchain/verification/index.html` has an unresolved git merge conflict — the file contains both the placeholder address and the real `0xf9Ceb04B978523D92CE812386c55709002E59a53`. Resolve the conflict markers first. Then verify the ABI matches the deployed contract. Test the full flow as a standalone file (opened via `file://`, no server needed): paste a real txHash and message plaintext, confirm keccak256 matches the on-chain `HashRecorded` event, and a clear pass/fail result with timestamp is shown.
+  DONE. Merge conflict resolved, `CONTRACT_ADDRESS` set to `0xf9Ceb04B978523D92CE812386c55709002E59a53`. Page fetches the `HashRecorded` event from Sepolia via a public RPC, computes keccak256 of the input ciphertext, and displays a pass/fail result with block timestamp. Works as a standalone `file://` page.
 
 - [ ] **14. Implement `Conversation::hasParticipant()`**
   In `libkd/src/Conversation.cc`, implement `bool Conversation::hasParticipant(uint64_t userId) const` using `std::find` over `participantIds`. Declare it in `libkd/include/kd/Conversation.hpp`. This fills the stub and adds a required STL algorithm.
@@ -61,7 +61,7 @@ Tasks are ordered by what to work on first. Crypto is the biggest gap (worth 25%
   Create `docs/pentest.md` with curl commands and their actual outputs as evidence. Cover: (1) TLS enforcement — HTTPS with `--cacert` works, plain HTTP and wrong cert are rejected; (2) unauthenticated access — protected route without session token returns 401; (3) broken access control — user A's token against user B's conversation list returns 403; (4) input validation — oversized payload and SQL metacharacters return 400; (5) session token entropy — document that tokens are 32 bytes from `randombytes_buf`. Write this after tasks 2, 11, and 12 are done so all the controls are in place to test.
 
 - [ ] **19. Write network architecture document**
-  Create `docs/network-arch.md` or add a PlantUML diagram. Document all connections: `kdctl` → `kds` (HTTPS/TLS 1.3, port 8080, X-KD-Session header), `kds` → PostgreSQL (TCP port 5432), `kds` → blockchain sidecar (HTTP port 3001), sidecar → Sepolia via Alchemy/Infura RPC (HTTPS), VM hostname on THEBURKENATOR.COM.
+  Create `docs/network-arch.md` or add a PlantUML diagram. Document all connections: `kdctl` → `kds` (HTTPS/TLS 1.3, port 8080, JWT Bearer token in Authorization header), `kds` → PostgreSQL (TCP port 5432), `kds` → blockchain sidecar (HTTP port 3001), sidecar → Sepolia via Alchemy/Infura RPC (HTTPS), VM hostname on THEBURKENATOR.COM.
 
 - [ ] **20. Deploy server to THEBURKENATOR.COM VM**
   SSH into the team VM at `ALDERAAN.SOFTWARE-ENGINEERING.IE`. Install devbox (or manually: clang, cmake, ninja, openssl, libpqxx, libsodium, go-task, docker). Clone the repo, configure `.env`, run `docker compose up -d`, then `task build && task run`. Obtain a TLS cert for the subdomain (Let's Encrypt ideal; self-signed works if clients use `--cacert`).
