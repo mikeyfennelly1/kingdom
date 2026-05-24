@@ -2,6 +2,7 @@
 #include <iostream>
 #include <kd/Client.hpp>
 #include <kd/LocalKeyStore.hpp>
+#include <kd/Message.hpp>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -38,8 +39,7 @@ std::vector<uint64_t> parseIds(const std::string& line) {
 
 void printMessages(const nlohmann::json& msgs) {
   for (const auto& msg : msgs) {
-    std::cout << "[" << msg["timestamp"] << "] "
-              << "User " << msg["senderId"] << ": " << msg["payload"] << std::endl;
+    std::cout << msg.get<kd::Message>().formatted() << std::endl;
   }
 }
 
