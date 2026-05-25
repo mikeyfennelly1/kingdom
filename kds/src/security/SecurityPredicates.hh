@@ -29,9 +29,18 @@ class ValidateAuthenticated : public SecurityPredicate {
  public:
   auto Validate(const httplib::Request& req) -> std::optional<SecurityError> override {
     spdlog::debug("Executing SecurityPredicate: ValidateAuthenticated");
+
+    // Public routes that do not require authentication
+    static const std::vector<std::string> kPublicPaths = {"/login", "/signup", "/health", "/"};
+    for (const auto& path : kPublicPaths) {
+      if (req.path == path) {
+        return std::nullopt;
+      }
+    }
+
     auto token = bearerToken(req);
     if (!token.has_value()) {
-      return std::nullopt;  // No token present — individual handlers enforce if required
+      return SecurityError{"authentication required", 401};
     }
     const char* secret = std::getenv("KD_JWT_SECRET");
     if (secret == nullptr) {
