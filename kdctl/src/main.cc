@@ -105,6 +105,13 @@ void printShellHelp() {
 void runShell(kd::Client& client, const std::string& serverUrl) {
   ShellSession session;
 
+  try {
+    client.getHealth();
+  } catch (const std::exception& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return;
+  }
+
   std::cout << "Kingdom Control shell" << std::endl;
   std::cout << "server: " << serverUrl << std::endl;
   printShellHelp();
