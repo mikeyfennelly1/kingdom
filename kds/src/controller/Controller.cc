@@ -78,6 +78,7 @@ void Controller::setupRoutes() {
   healthController_();
   authController_();
   publicKeyController_();
+  usersController_();
   basicApiInfo_();
 
   // conversations
@@ -265,6 +266,22 @@ void Controller::healthController_() {
   svr_.Get("/health", [](const httplib::Request&, httplib::Response& res) -> void {
     nlohmann::json status = {{"status", "ok"}};
     res.set_content(status.dump(), "application/json");
+  });
+}
+
+void Controller::usersController_() {
+  svr_.Get("/users", [this](const httplib::Request& req, httplib::Response& res) -> void {
+    if (!authenticatedUserId_(req).has_value()) {
+      res.status = 401;
+      res.set_content(nlohmann::json{{"error", "login required"}}.dump(), "application/json");
+      return;
+    }
+    auto users = db_.getAllUsers();
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& u : users) {
+      arr.push_back({{"id", u.id}, {"username", u.username}});
+    }
+    res.set_content(arr.dump(), "application/json");
   });
 }
 

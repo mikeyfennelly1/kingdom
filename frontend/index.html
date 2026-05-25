@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kingdom — Secure Messaging</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/modules/libsodium-wrappers.js"></script>
+  <script src="nacl.js"></script>
 </head>
 <body>
 
@@ -104,8 +104,8 @@
       <h2>New Conversation</h2>
       <label for="conv-name-input">Name</label>
       <input id="conv-name-input" placeholder="e.g. General" />
-      <label for="conv-participants-input">Participant IDs <span class="muted">(space-separated, your ID is added automatically)</span></label>
-      <input id="conv-participants-input" placeholder="e.g. 2 3 4" />
+      <label>Participants <span class="muted">(your account is added automatically)</span></label>
+      <div id="user-picker" class="user-picker"></div>
       <div class="modal-actions">
         <button id="modal-cancel" class="secondary-btn">Cancel</button>
         <button id="modal-create">Create</button>

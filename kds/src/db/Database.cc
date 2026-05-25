@@ -95,6 +95,18 @@ std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
   return result[0][0].as<std::string>();
 }
 
+std::vector<UserRow> Database::getAllUsers() {
+  pqxx::work txn(conn_);
+  auto result = txn.exec("SELECT id, username FROM users ORDER BY id ASC");
+  txn.commit();
+
+  std::vector<UserRow> users;
+  for (const auto& row : result) {
+    users.push_back({row[0].as<uint64_t>(), row[1].as<std::string>(), "", ""});
+  }
+  return users;
+}
+
 uint64_t Database::createConversation(const std::string& name,
                                       const std::vector<uint64_t>& participantIds) {
   pqxx::work txn(conn_);

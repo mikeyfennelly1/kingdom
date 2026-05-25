@@ -26,6 +26,9 @@ class Database {
   // Fetch a user's published public key. Returns std::nullopt if the user does not exist.
   std::optional<std::string> getUserPublicKey(uint64_t userId);
 
+  // List all registered users (id + username only, no password hash).
+  std::vector<UserRow> getAllUsers();
+
   // Create a conversation and add participants. Returns conversation id.
   uint64_t createConversation(const std::string& name, const std::vector<uint64_t>& participantIds);
 

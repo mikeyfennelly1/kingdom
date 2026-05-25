@@ -44,106 +44,116 @@ async function api(method, path, body) {
   return data;
 }
 
-// ─── Crypto helpers ───────────────────────────────────────────────────────────
-async function sodiumReady() {
-  await sodium.ready;
+is th// ─── Crypto ───────────────────────────────────────────────────────────────────
+// tweetnacl: nacl.box = X25519+XSalsa20-Poly1305, identical to C++ crypto_box_easy
+// Web Crypto API: PBKDF2-SHA256 + AES-256-GCM for at-rest key storage in localStorage
+
+function b64Encode(bytes) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function b64Decode(str) {
+  return Uint8Array.from(atob(str), c => c.charCodeAt(0));
 }
 
 function generateKeyPair() {
-  return sodium.crypto_box_keypair();
+  const kp = nacl.box.keyPair();
+  return { publicKey: kp.publicKey, privateKey: kp.secretKey };
 }
 
-function deriveKEK(password, salt, opsLimit, memLimit) {
-  return sodium.crypto_pwhash(
-    sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
-    password,
-    salt,
-    opsLimit,
-    memLimit,
-    sodium.crypto_pwhash_ALG_ARGON2ID13,
+async function deriveStorageKey(password, salt) {
+  const raw = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey'],
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
+    raw,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
   );
 }
 
-function buildKeyFile(username, publicKey, privateKey, password) {
-  const salt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
-  const opsLimit = sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE;
-  const memLimit = sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE;
-
-  const kek = deriveKEK(password, salt, opsLimit, memLimit);
-  const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+async function buildKeyFile(username, publicKey, privateKey, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const storageKey = await deriveStorageKey(password, salt);
   const ad = new TextEncoder().encode(username);
 
-  const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-    privateKey, ad, null, nonce, kek,
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: ad },
+    storageKey,
+    privateKey,
   );
-  sodium.memzero(kek);
 
   return {
-    version: 1,
+    version: 2,
     username,
-    publicKey: sodium.to_base64(publicKey, sodium.base64_variants.ORIGINAL),
+    publicKey: b64Encode(publicKey),
     privateKey: {
-      algorithm: 'XChaCha20-Poly1305',
-      ciphertext: sodium.to_base64(ciphertext, sodium.base64_variants.ORIGINAL),
-      nonce: sodium.to_base64(nonce, sodium.base64_variants.ORIGINAL),
+      algorithm: 'AES-256-GCM',
+      ciphertext: b64Encode(new Uint8Array(ciphertext)),
+      iv: b64Encode(iv),
     },
-    kdf: {
-      algorithm: 'Argon2id',
-      salt: sodium.to_base64(salt, sodium.base64_variants.ORIGINAL),
-      opsLimit,
-      memLimit,
-    },
+    kdf: { algorithm: 'PBKDF2-SHA256', salt: b64Encode(salt), iterations: 600000 },
   };
 }
 
-function unlockKeyFile(keyFile, password) {
-  if (keyFile.version !== 1) throw new Error('Unsupported key file version');
+async function unlockKeyFile(keyFile, password) {
+  if (keyFile.version !== 2) throw new Error('Unsupported key file version');
 
-  const salt = sodium.from_base64(keyFile.kdf.salt, sodium.base64_variants.ORIGINAL);
-  const nonce = sodium.from_base64(keyFile.privateKey.nonce, sodium.base64_variants.ORIGINAL);
-  const ciphertext = sodium.from_base64(keyFile.privateKey.ciphertext, sodium.base64_variants.ORIGINAL);
+  const salt = b64Decode(keyFile.kdf.salt);
+  const iv = b64Decode(keyFile.privateKey.iv);
+  const ciphertext = b64Decode(keyFile.privateKey.ciphertext);
   const ad = new TextEncoder().encode(keyFile.username);
-  const kek = deriveKEK(password, salt, keyFile.kdf.opsLimit, keyFile.kdf.memLimit);
+  const storageKey = await deriveStorageKey(password, salt);
 
   let privateKeyBytes;
   try {
-    privateKeyBytes = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
-      null, ciphertext, ad, nonce, kek,
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv, additionalData: ad },
+      storageKey,
+      ciphertext,
     );
+    privateKeyBytes = new Uint8Array(decrypted);
   } catch {
-    sodium.memzero(kek);
     throw new Error('Wrong password or corrupted key file');
   }
-  sodium.memzero(kek);
 
-  return {
-    publicKey: sodium.from_base64(keyFile.publicKey, sodium.base64_variants.ORIGINAL),
-    privateKey: privateKeyBytes,
-  };
+  return { publicKey: b64Decode(keyFile.publicKey), privateKey: privateKeyBytes };
 }
 
+// nacl.box = X25519 + XSalsa20-Poly1305 — identical construction to C++ crypto_box_easy
+// payload format: base64(nonce[24] || ciphertext) — matches C++ libkd exactly
 function encryptMessage(plaintext, senderPrivKey, recipientPubKeyB64) {
-  const recipientPk = sodium.from_base64(recipientPubKeyB64, sodium.base64_variants.ORIGINAL);
-  const nonce = sodium.randombytes_buf(sodium.crypto_box_NONCEBYTES);
+  const recipientPk = b64Decode(recipientPubKeyB64.trim());
+  if (recipientPk.length !== 32) {
+    throw new Error(`recipient public key decoded to ${recipientPk.length} bytes (expected 32) — key: "${recipientPubKeyB64.substring(0, 20)}..."`);
+  }
+  if (senderPrivKey.length !== 32) {
+    throw new Error(`sender private key is ${senderPrivKey.length} bytes (expected 32)`);
+  }
+  const nonce = nacl.randomBytes(nacl.box.nonceLength); // 24 bytes
   const msg = new TextEncoder().encode(plaintext);
-  const ciphertext = sodium.crypto_box_easy(msg, nonce, recipientPk, senderPrivKey);
+  const ciphertext = nacl.box(msg, nonce, recipientPk, senderPrivKey);
 
   const combined = new Uint8Array(nonce.length + ciphertext.length);
   combined.set(nonce);
   combined.set(ciphertext, nonce.length);
-  return sodium.to_base64(combined, sodium.base64_variants.ORIGINAL);
+  return b64Encode(combined);
 }
 
 function decryptMessage(payloadB64, recipientPrivKey, senderPubKeyB64) {
   try {
-    const combined = sodium.from_base64(payloadB64, sodium.base64_variants.ORIGINAL);
-    if (combined.length < sodium.crypto_box_NONCEBYTES + sodium.crypto_box_MACBYTES) return null;
+    const combined = b64Decode(payloadB64);
+    if (combined.length < nacl.box.nonceLength + nacl.box.overheadLength) return null;
 
-    const nonce = combined.slice(0, sodium.crypto_box_NONCEBYTES);
-    const ciphertext = combined.slice(sodium.crypto_box_NONCEBYTES);
-    const senderPk = sodium.from_base64(senderPubKeyB64, sodium.base64_variants.ORIGINAL);
+    const nonce = combined.slice(0, nacl.box.nonceLength);
+    const ciphertext = combined.slice(nacl.box.nonceLength);
+    const senderPk = b64Decode(senderPubKeyB64);
 
-    const plaintext = sodium.crypto_box_open_easy(ciphertext, nonce, senderPk, recipientPrivKey);
+    const plaintext = nacl.box.open(ciphertext, nonce, senderPk, recipientPrivKey);
+    if (!plaintext) return null;
     return new TextDecoder().decode(plaintext);
   } catch {
     return null;
@@ -168,36 +178,40 @@ function loadKeyFile(username) {
 async function getPublicKey(userId) {
   if (state.publicKeyCache[userId]) return state.publicKeyCache[userId];
   const data = await api('GET', `/users/${userId}/public-key`);
-  state.publicKeyCache[userId] = data.publicKey;
-  return data.publicKey;
+  const key = data.publicKey;
+  if (!key || key.trim().length === 0) {
+    throw new Error(`User ${userId} has no public key registered. They must sign up or log in via the app first.`);
+  }
+  const decoded = b64Decode(key.trim());
+  if (decoded.length !== 32) {
+    throw new Error(`User ${userId} public key is invalid (decoded to ${decoded.length} bytes, expected 32).`);
+  }
+  state.publicKeyCache[userId] = key.trim();
+  return state.publicKeyCache[userId];
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 async function doSignup(username, password) {
-  await sodiumReady();
   const kp = generateKeyPair();
-  const publicKeyB64 = sodium.to_base64(kp.publicKey, sodium.base64_variants.ORIGINAL);
+  const publicKeyB64 = b64Encode(kp.publicKey);
 
   const result = await api('POST', '/signup', { username, password, publicKey: publicKeyB64 });
 
-  // Store encrypted key file
-  const keyFile = buildKeyFile(username, kp.publicKey, kp.privateKey, password);
-  sodium.memzero(kp.privateKey);
+  const keyFile = await buildKeyFile(username, kp.publicKey, kp.privateKey, password);
   saveKeyFile(keyFile);
 
-  return { result, identity: unlockKeyFile(keyFile, password) };
+  const identity = await unlockKeyFile(keyFile, password);
+  return { result, identity };
 }
 
 async function doLogin(username, password) {
-  await sodiumReady();
   const result = await api('POST', '/login', { username, password });
 
-  // Unlock local key file
   const keyFile = loadKeyFile(username);
   if (!keyFile) {
     throw new Error('No local key file found for this username. Did you sign up on this device?');
   }
-  const identity = unlockKeyFile(keyFile, password);
+  const identity = await unlockKeyFile(keyFile, password);
   return { result, identity };
 }
 
@@ -207,7 +221,7 @@ function startSession(result, identity, username) {
   state.username = username;
   state.identity = identity;
   state.publicKeyCache[result.id] = result.publicKey
-    || sodium.to_base64(identity.publicKey, sodium.base64_variants.ORIGINAL);
+    || b64Encode(identity.publicKey);
 }
 
 async function doLogout() {
@@ -246,6 +260,11 @@ async function loadMessages(convId) {
   const data = await api('GET', `/conversations/${convId}/messages`);
   state.messages = Array.isArray(data) ? data : [];
   state.messages.sort((a, b) => a.timestamp - b.timestamp);
+
+  // Pre-fetch public keys for all senders so decryption works
+  const senderIds = [...new Set(state.messages.map(m => m.senderId))];
+  await Promise.allSettled(senderIds.map(id => getPublicKey(id)));
+
   renderMessages();
 }
 
@@ -257,6 +276,32 @@ async function sendMessage(convId, text, recipientId) {
     senderId: state.userId,
     payload,
   });
+}
+
+async function populateUserPicker() {
+  const picker = document.getElementById('user-picker');
+  picker.innerHTML = '<div class="user-picker-empty">Loading users…</div>';
+  try {
+    const users = await api('GET', '/users');
+    const others = users.filter(u => u.id !== state.userId);
+    if (others.length === 0) {
+      picker.innerHTML = '<div class="user-picker-empty">No other users registered yet.</div>';
+      return;
+    }
+    picker.innerHTML = '';
+    for (const u of others) {
+      const item = document.createElement('label');
+      item.className = 'user-picker-item';
+      item.innerHTML = `
+        <input type="checkbox" value="${u.id}" />
+        <span class="picker-name">${escHtml(u.username)}</span>
+        <span class="picker-id">#${u.id}</span>
+      `;
+      picker.appendChild(item);
+    }
+  } catch (err) {
+    picker.innerHTML = `<div class="user-picker-empty">Failed to load users: ${escHtml(err.message)}</div>`;
+  }
 }
 
 // ─── Rendering ───────────────────────────────────────────────────────────────
@@ -341,12 +386,23 @@ function renderMessages() {
     const div = document.createElement('div');
     div.className = `message ${isOwn ? 'own' : 'other'}`;
 
-    // Decrypt
+    // Decrypt.
+    // nacl.box needs the *other* person's public key regardless of direction:
+    //   - You received it → other person = sender → use sender's pubkey
+    //   - You sent it     → other person = recipient → use recipient's pubkey
     let displayText = null;
     if (state.identity) {
-      const senderPkB64 = state.publicKeyCache[msg.senderId];
-      if (senderPkB64) {
-        displayText = decryptMessage(msg.payload, state.identity.privateKey, senderPkB64);
+      let peerPkB64;
+      if (isOwn) {
+        // Find the other participant in this conversation
+        const conv = state.conversations.find(c => c.id === state.activeConvId);
+        const others = conv ? conv.participantIds.filter(id => id !== state.userId) : [];
+        peerPkB64 = others.length === 1 ? state.publicKeyCache[others[0]] : null;
+      } else {
+        peerPkB64 = state.publicKeyCache[msg.senderId];
+      }
+      if (peerPkB64) {
+        displayText = decryptMessage(msg.payload, state.identity.privateKey, peerPkB64);
       }
     }
 
@@ -424,9 +480,7 @@ function setLoading(btnId, loading) {
 }
 
 // ─── Event wiring ─────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  await sodiumReady();
-
+document.addEventListener('DOMContentLoaded', () => {
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -485,11 +539,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // New conversation button
-  document.getElementById('new-conv-btn').addEventListener('click', () => {
+  document.getElementById('new-conv-btn').addEventListener('click', async () => {
     clearModalError();
     document.getElementById('conv-name-input').value = '';
-    document.getElementById('conv-participants-input').value = '';
     document.getElementById('modal-overlay').classList.remove('hidden');
+    await populateUserPicker();
   });
 
   // Modal cancel
@@ -508,16 +562,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('modal-create').addEventListener('click', async () => {
     clearModalError();
     const name = document.getElementById('conv-name-input').value.trim();
-    const participantsRaw = document.getElementById('conv-participants-input').value.trim();
+    if (!name) { showModalError('Conversation name is required'); return; }
 
-    if (!name) {
-      showModalError('Conversation name is required');
-      return;
-    }
-
-    const participantIds = participantsRaw
-      ? participantsRaw.split(/\s+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n))
-      : [];
+    const checked = document.querySelectorAll('#user-picker input[type=checkbox]:checked');
+    const participantIds = Array.from(checked).map(cb => parseInt(cb.value, 10));
 
     try {
       await createConversation(name, participantIds);

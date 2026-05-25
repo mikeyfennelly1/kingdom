@@ -40,6 +40,7 @@ class Controller {
   void healthController_();
   void authController_();
   void publicKeyController_();
+  void usersController_();
   void conversationController_();
   void messageController_();
   void basicApiInfo_();
