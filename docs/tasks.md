@@ -81,7 +81,7 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [x] **Cr1. Add HKDF**
   The spec explicitly requires HKDF with explicit `info` strings for domain separation. Nothing in the codebase uses HKDF. Add a `LocalKeyStore::deriveKey(sharedSecret, info)` helper using `EVP_KDF` (HKDF-SHA256 from OpenSSL) and use it when deriving the key-encryption key from the Argon2id output, passing `"kd-key-encryption-v1"` as the info string. This demonstrates understanding of domain separation.
 
-- [ ] **Cr2. Implement TOFU key pinning**
+- [x] **Cr2. Implement TOFU key pinning**
   `Client::getPublicKey` fetches from the server on every call with no caching or pinning. A compromised server can silently substitute any key. On first contact with a user, store their public key in `~/.kingdom/keys/known_keys.json` (keyed by userId). On subsequent lookups compare and throw if the key has changed, warning the user explicitly.
 
 - [ ] **Cr3. Bind ciphertext to conversation context**

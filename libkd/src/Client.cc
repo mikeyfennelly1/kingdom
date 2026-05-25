@@ -2,7 +2,9 @@
 
 #include <httplib.h>
 
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <system_error>
 
@@ -21,7 +23,8 @@ httplib::Client makeClient(const std::string& baseUrl, const std::string& caCert
 
 std::string connectError(const std::string& baseUrl, const std::string& caCertPath) {
   if (caCertPath.empty() && baseUrl.rfind("https://", 0) == 0) {
-    return "TLS certificate verification failed — no CA certificate provided. Use --ca-cert to specify one.";
+    return "TLS certificate verification failed — no CA certificate provided. Use --ca-cert to "
+           "specify one.";
   }
   return "Failed to connect to server at " + baseUrl;
 }
@@ -31,6 +34,76 @@ httplib::Headers authHeaders(const std::string& authToken) {
   if (!authToken.empty())
     headers.emplace("Authorization", "Bearer " + authToken);
   return headers;
+}
+
+std::filesystem::path knownKeysPath() {
+  const char* home = std::getenv("HOME");
+  if (home == nullptr || std::string(home).empty()) {
+    throw std::runtime_error("HOME is not set; cannot choose known keys file path");
+  }
+  return std::filesystem::path(home) / ".kingdom" / "keys" / "known_keys.json";
+}
+
+nlohmann::json readKnownKeys(const std::filesystem::path& path) {
+  if (!std::filesystem::exists(path)) {
+    return nlohmann::json::object();
+  }
+
+  std::ifstream input(path);
+  if (!input) {
+    throw std::runtime_error("Failed to open known keys file for reading: " + path.string());
+  }
+
+  auto body = nlohmann::json::parse(input, nullptr, false);
+  if (body.is_discarded() || !body.is_object()) {
+    throw std::runtime_error("Known keys file is not valid JSON object: " + path.string());
+  }
+  return body;
+}
+
+void writeKnownKeys(const std::filesystem::path& path, const nlohmann::json& knownKeys) {
+  std::filesystem::create_directories(path.parent_path());
+
+  std::ofstream output(path, std::ios::out | std::ios::trunc);
+  if (!output) {
+    throw std::runtime_error("Failed to open known keys file for writing: " + path.string());
+  }
+  output << knownKeys.dump(2) << '\n';
+  if (!output) {
+    throw std::runtime_error("Failed to write known keys file: " + path.string());
+  }
+
+  std::filesystem::permissions(path,
+                               std::filesystem::perms::owner_read |
+                                   std::filesystem::perms::owner_write,
+                               std::filesystem::perm_options::replace);
+}
+
+std::string pinPublicKey(uint64_t userId, const std::string& publicKey) {
+  const auto path = knownKeysPath();
+  auto knownKeys = readKnownKeys(path);
+  const auto key = std::to_string(userId);
+
+  if (!knownKeys.contains(key)) {
+    knownKeys[key] = publicKey;
+    writeKnownKeys(path, knownKeys);
+    return publicKey;
+  }
+
+  if (!knownKeys[key].is_string()) {
+    throw std::runtime_error("Known keys file has invalid entry for user " + key + ": " +
+                             path.string());
+  }
+
+  const auto pinnedKey = knownKeys[key].get<std::string>();
+  if (pinnedKey != publicKey) {
+    throw std::runtime_error("WARNING: public key changed for user " + key +
+                             ". Refusing to use the server-provided key because it does not match "
+                             "the key pinned in " +
+                             path.string());
+  }
+
+  return publicKey;
 }
 
 }  // namespace
@@ -161,7 +234,10 @@ std::string Client::getPublicKey(uint64_t userId) {
   if (auto res = cli.Get(path)) {
     if (res->status == 200) {
       auto body = nlohmann::json::parse(res->body);
-      return body["publicKey"].get<std::string>();
+      if (!body.contains("publicKey") || !body["publicKey"].is_string()) {
+        throw std::runtime_error("Server public-key response is missing publicKey");
+      }
+      return pinPublicKey(userId, body["publicKey"].get<std::string>());
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
