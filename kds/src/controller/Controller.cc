@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -313,6 +314,14 @@ void Controller::conversationController_() {
     }
 
     auto participantIds = body["participantIds"].get<std::vector<uint64_t>>();
+
+    std::set<uint64_t> seen(participantIds.begin(), participantIds.end());
+    if (seen.size() != participantIds.size()) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "participantIds must not contain duplicates"}}.dump(),
+                      "application/json");
+      return;
+    }
 
     uint64_t id = db_.createConversation(name, participantIds);
     spdlog::info("Created conversation '{}' with id {}", name, id);
