@@ -1,37 +1,33 @@
 # Stage 1: Build
-FROM jetpackio/devbox:0.17.0 AS builder
+FROM nixos/nix:2.31.5 AS builder
 
 # Set up the working directory
 WORKDIR /app
-USER root:root
-RUN mkdir -p /app && chown ${DEVBOX_USER}:${DEVBOX_USER} /app
-USER ${DEVBOX_USER}:${DEVBOX_USER}
 
-# Copy only devbox files first to leverage Docker layer caching
-COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} devbox.json devbox.lock ./
+# Copy nix configuration first to leverage Docker layer caching
+COPY config/build.shell.nix ./config/
 
-# Install the environment defined in devbox.json
-# Using DEVBOX_DEBUG=1 for more info and NIX_CONFIG to increase timeouts
-RUN DEVBOX_DEBUG=1 NIX_CONFIG="connect-timeout = 30" devbox install
+# Pre-fetch and realize the build environment
+RUN nix-shell ./config/build.shell.nix --run "true"
 
 # Copy the rest of the source code
-COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} . .
+COPY . .
 
 # Build the project using the build script
+# This script uses nix-shell ./config/build.shell.nix internally
 RUN ./scripts/build.sh
 
 # Stage 2: Runtime
-FROM jetpackio/devbox:0.17.0
+FROM nixos/nix:2.31.5
 
 # Set up the working directory
 WORKDIR /app
-USER root:root
-RUN mkdir -p /app && chown ${DEVBOX_USER}:${DEVBOX_USER} /app
-USER ${DEVBOX_USER}:${DEVBOX_USER}
 
-# Copy devbox files and install runtime environment
-COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} devbox.json devbox.lock ./
-RUN devbox install
+# Copy nix configuration
+COPY config/build.shell.nix ./config/
+
+# Realize the environment so all dependencies (libraries) are in the Nix store
+RUN nix-shell ./config/build.shell.nix --run "true"
 
 # Copy binaries from the builder stage
 COPY --from=builder /app/build/kds/kds /app/kds
@@ -44,5 +40,5 @@ EXPOSE 8080
 ENV KD_LOG_LEVEL=info
 ENV KD_PORT=8080
 
-# Run the server using devbox run to ensure environment is set up
-ENTRYPOINT ["devbox", "run", "/app/kds"]
+# Run the server using nix-shell to ensure the environment (libraries) is set up
+ENTRYPOINT ["nix-shell", "./config/build.shell.nix", "--run", "/app/kds"]
