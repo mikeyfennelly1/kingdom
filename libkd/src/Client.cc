@@ -231,7 +231,8 @@ void Client::clearSessionToken() {
 std::string Client::getPublicKey(uint64_t userId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/users/" + std::to_string(userId) + "/public-key";
-  if (auto res = cli.Get(path)) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Get(path, headers)) {
     if (res->status == 200) {
       auto body = nlohmann::json::parse(res->body);
       if (!body.contains("publicKey") || !body["publicKey"].is_string()) {

@@ -5,7 +5,7 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 ## Completed
 
-- [x] **1.** Deploy `MessageIntegrity.sol` to Sepolia. Contract at `0xf9Ceb04B978523D92CE812386c55709002E59a53`.
+- [x] **1.** Deploy `MessageIntegrity.sol` to Sepolia. Contract redeployed at `0xCBc9381314d6f5797E840C9DD68063C2082B9d63` (updated with storage mappings).
 - [x] **2.** Enforce authentication (401) on protected routes. 403 ownership check on `GET /users/{id}/conversations`.
 - [x] **3.** `PUT /users/{id}/public-key` — public key sent in signup body instead.
 - [x] **4.** `GET /users/{id}/public-key` endpoint returning `{ userId, publicKey }` or 404.
@@ -52,10 +52,10 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [x] **N7. Implement `ValidateSenderAuthenticity`**
   `ValidateSenderAuthenticity::Validate` is a stub that returns `std::nullopt` unconditionally. Implement it: extract the JWT-authenticated user ID from the `Authorization` header; for POST requests with a JSON body containing a `senderId` field, verify that `senderId == authenticatedUserId`. Return 403 if they differ. This prevents a user from posting messages attributed to another user even if they have a valid token.
 
-- [ ] **N8. Implement `ValidateUntampered` or remove it from the chain**
+- [x] **N8. Implement `ValidateUntampered` or remove it from the chain**
   `ValidateUntampered::Validate` returns `std::nullopt` unconditionally — it is a visible stub to any examiner reading the code. Either implement it (verify `Content-Type: application/json` header on POST/PUT requests and return 400 if absent) or remove it from the `SecurityPredicateFactory` chain entirely. Leaving a named security predicate as a permanent no-op is the most obvious red flag in the codebase. Implementing Content-Type validation is simple and closes the gap.
 
-- [ ] **N9. Add server-side token revocation on logout**
+- [x] **N9. Add server-side token revocation on logout**
   `POST /logout` is currently a no-op — tokens issued before logout remain valid until expiry. Add an in-memory token blacklist: a `std::unordered_set<std::string>` of invalidated JTIs (or raw tokens) protected by a `std::mutex`. On `POST /logout`, insert the token. In `ValidateAuthenticated`, reject any token whose value is in the blacklist with 401. This is sufficient for a demo and directly closes the "no server-side revocation" gap in the secure coding rubric.
 
 ---
@@ -80,14 +80,8 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [ ] **C5. Implement Ed25519 message signatures**
   `Message::signature` exists in the struct and is serialised to JSON but is always `""`. Implement it: at signup, generate an Ed25519 signing keypair (`crypto_sign_keypair`) alongside the X25519 keypair. Store the Ed25519 public key on the server (`PUT /users/{id}/public-key` already exists — extend it or add a separate field). In `LocalKeyStore::encryptMessage`, sign the plaintext payload with `crypto_sign_detached` and base64-encode the 64-byte signature into `Message::signature`. In `LocalKeyStore::decryptMessage`, after decryption verify the signature with `crypto_sign_verify_detached`; throw on failure. This also makes `ValidateSenderAuthenticity` (N7) cryptographically meaningful rather than just a JWT check.
 
-- [ ] **C6. Add `std::set` usage**
-  The spec names `std::set` explicitly alongside `std::map` and it does not appear in the codebase. Add it somewhere natural: `Conversation::addParticipant` could store participant IDs in a `std::set<uint64_t>` instead of a `std::vector` to enforce uniqueness automatically, or use `std::set` to deduplicate participant IDs when creating a conversation in `kdctl`. Either location is valid — pick whichever fits cleanest.
-
-- [ ] **C7. Add inline design comments on key architectural decisions**
-  The rubric explicitly awards marks for documentation. Add `// NOTE:` or `// DESIGN:` comments at the following locations:
-  - `LocalKeyStore.cc` — why all methods are static (no mutable state needed; key material lives in `ShellSession`, not the store)
-  - `SecurityFilterChain` constructor — why it owns predicates via `std::unique_ptr` (RAII, polymorphic dispatch, clear ownership)
-  - `MessageStore` public-key cache — why `std::map` was chosen over `std::unordered_map` (ordered iteration, deterministic behaviour for testing)
+- [x] **C6. Add `std::set` usage**
+  The spec names `std::set` explicitly alongside `std::map` and it does not appear in the codebase. Used `std::set<uint64_t>` in `POST /conversations` to detect duplicate participant IDs and return a 400 error instead of crashing with a DB constraint violation.
 
 ---
 
@@ -112,14 +106,14 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 ## Blockchain — Code
 
-- [ ] **B1. Add on-chain storage mapping to contract**
-  `recordHash` currently only emits an event — no state is written. Add `mapping(uint256 => bytes32) public hashes` and `mapping(uint256 => uint256) public timestamps` to `MessageIntegrity.sol`. Write both in `recordHash`. Redeploy to Sepolia and update the contract address everywhere.
+- [x] **B1. Add on-chain storage mapping to contract**
+  `recordHash` currently only emits an event — no state is written. Added `mapping(uint256 => bytes32) public hashes` and `mapping(uint256 => uint256) public timestamps` to `MessageIntegrity.sol`. Redeployed to Sepolia at `0xCBc9381314d6f5797E840C9DD68063C2082B9d63`. Updated contract address in sidecar `.env` and verification page.
 
 - [x] **B2. Make sidecar call non-blocking**
   `await tx.wait()` in `sidecar/index.js` blocks until the transaction is mined (potentially 30–90 seconds). The C++ server waits synchronously for the HTTP response. Fire-and-forget: respond to the server with the `txHash` immediately after `contract.recordHash()` returns (before `tx.wait()`), and confirm mining in the background.
 
-- [ ] **B3. Add Hardhat unit test for the contract**
-  Add `blockchain/test/MessageIntegrity.test.js`. Deploy the contract locally, call `recordHash`, assert the `HashRecorded` event is emitted with correct args and the storage mapping is updated (after B1 is done). Run with `npx hardhat test`.
+- [x] **B3. Add Hardhat unit test for the contract**
+  Added `blockchain/test/MessageIntegrity.test.js`. 4 tests: HashRecorded event emitted correctly, hashes mapping updated, timestamps mapping updated, non-owner reverts with Unauthorized. All passing.
 
 - [ ] **B6. Document per-message vs batching gas trade-off**
   The spec explicitly says "pay attention to trade-offs in persisting to the chain — a hash for each message may be excessive." Add a comment block in `sidecar/index.js` above the `recordHash` call and in `MessageIntegrity.sol` above `recordHash` explaining: each message costs ~30k gas; at current Sepolia/mainnet prices this is acceptable for a demo but production use would batch hashes (e.g. a Merkle root per conversation per hour). This is a required acknowledgement per the spec, not optional.
@@ -129,6 +123,12 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 - [x] **B5. Add fallback RPC to verification page**
   The verification page hardcodes a single public RPC (`publicnode.com`). Add a secondary fallback (e.g. `https://rpc.sepolia.org`) and retry on failure.
+
+- [x] **N10. Fix `getPublicKey` missing auth header**
+  `Client::getPublicKey` was not sending the `Authorization` header, causing `send` to fail with 401 when fetching the recipient's public key before encrypting.
+
+- [ ] **N11. Fix message decryption for sent messages**
+  When reading messages in a conversation, the sender's own sent messages show `[decryption failed]`. The `printMessages` function always uses `session.userId` as `recipientId` in the context MAC, but for messages the current user sent, the actual recipient is the other participant. Fix `printMessages` to use the other participant's ID as `recipientId` when `senderId == session.userId`.
 
 ---
 
