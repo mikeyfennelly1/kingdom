@@ -1,5 +1,8 @@
 #include "kd/LocalKeyStore.hpp"
 
+#include <openssl/core_names.h>
+#include <openssl/evp.h>
+#include <openssl/kdf.h>
 #include <sodium.h>
 
 #include <algorithm>
@@ -15,6 +18,9 @@ namespace {
 
 constexpr unsigned long long kKdfOpsLimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
 constexpr size_t kKdfMemLimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
+constexpr const char* kKdfAlgorithm = "Argon2id";
+constexpr const char* kKdfHkdfAlgorithm = "Argon2id+HKDF-SHA256";
+constexpr const char* kKeyEncryptionInfo = "kd-key-encryption-v1";
 
 void ensureSodiumInitialized() {
   if (sodium_init() < 0) {
@@ -90,6 +96,44 @@ void writeJsonFile(const std::filesystem::path& path, const nlohmann::json& body
                                std::filesystem::perm_options::replace);
 }
 
+std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> deriveKey(
+    const std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES>& sharedSecret,
+    const std::string& info, const std::array<unsigned char, crypto_pwhash_SALTBYTES>& salt) {
+  std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> derivedKey{};
+
+  EVP_KDF* kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
+  if (kdf == nullptr) {
+    throw std::runtime_error("Failed to fetch HKDF implementation");
+  }
+
+  EVP_KDF_CTX* ctx = EVP_KDF_CTX_new(kdf);
+  EVP_KDF_free(kdf);
+  if (ctx == nullptr) {
+    throw std::runtime_error("Failed to create HKDF context");
+  }
+
+  char digestName[] = "SHA256";
+  OSSL_PARAM params[] = {
+      OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
+      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+                                        const_cast<unsigned char*>(sharedSecret.data()),
+                                        sharedSecret.size()),
+      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
+                                        const_cast<unsigned char*>(salt.data()), salt.size()),
+      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, const_cast<char*>(info.data()),
+                                        info.size()),
+      OSSL_PARAM_construct_end()};
+
+  const int result = EVP_KDF_derive(ctx, derivedKey.data(), derivedKey.size(), params);
+  EVP_KDF_CTX_free(ctx);
+  if (result != 1) {
+    sodium_memzero(derivedKey.data(), derivedKey.size());
+    throw std::runtime_error("Failed to derive HKDF key");
+  }
+
+  return derivedKey;
+}
+
 std::string sanitizedUsername(const std::string& username) {
   std::string value;
   value.reserve(username.size());
@@ -122,12 +166,13 @@ RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& userna
   std::array<unsigned char, crypto_pwhash_SALTBYTES> salt{};
   randombytes_buf(salt.data(), salt.size());
 
-  std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> keyEncryptionKey{};
-  if (crypto_pwhash(keyEncryptionKey.data(), keyEncryptionKey.size(), password.c_str(),
-                    password.size(), salt.data(), kKdfOpsLimit, kKdfMemLimit,
-                    crypto_pwhash_ALG_ARGON2ID13) != 0) {
-    throw std::runtime_error("Failed to derive local key-encryption key");
+  std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> argon2Secret{};
+  if (crypto_pwhash(argon2Secret.data(), argon2Secret.size(), password.c_str(), password.size(),
+                    salt.data(), kKdfOpsLimit, kKdfMemLimit, crypto_pwhash_ALG_ARGON2ID13) != 0) {
+    throw std::runtime_error("Failed to derive local key-encryption secret");
   }
+  auto keyEncryptionKey = deriveKey(argon2Secret, kKeyEncryptionInfo, salt);
+  sodium_memzero(argon2Secret.data(), argon2Secret.size());
 
   std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES> nonce{};
   randombytes_buf(nonce.data(), nonce.size());
@@ -154,7 +199,9 @@ RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& userna
                            {"ciphertext", base64Encode(ciphertext.data(), ciphertext.size())},
                            {"nonce", base64Encode(nonce)}}},
                          {"kdf",
-                          {{"algorithm", "Argon2id"},
+                          {{"algorithm", kKdfHkdfAlgorithm},
+                           {"hkdf",
+                            nlohmann::json{{"digest", "SHA-256"}, {"info", kKeyEncryptionInfo}}},
                            {"salt", base64Encode(salt)},
                            {"opsLimit", kKdfOpsLimit},
                            {"memLimit", kKdfMemLimit}}}};
@@ -186,9 +233,20 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
     throw std::runtime_error("Local key file is missing encryption parameters: " +
                              keyPath.string());
   }
-  if (privateKeyJson["algorithm"].get<std::string>() != "XChaCha20-Poly1305" ||
-      kdfJson["algorithm"].get<std::string>() != "Argon2id") {
+  const auto privateKeyAlgorithm = privateKeyJson["algorithm"].get<std::string>();
+  const auto kdfAlgorithm = kdfJson["algorithm"].get<std::string>();
+  if (privateKeyAlgorithm != "XChaCha20-Poly1305" ||
+      (kdfAlgorithm != kKdfAlgorithm && kdfAlgorithm != kKdfHkdfAlgorithm)) {
     throw std::runtime_error("Unsupported local key file crypto parameters: " + keyPath.string());
+  }
+  if (kdfAlgorithm == kKdfHkdfAlgorithm) {
+    if (!kdfJson.contains("hkdf") || !kdfJson["hkdf"].contains("digest") ||
+        !kdfJson["hkdf"].contains("info") ||
+        kdfJson["hkdf"]["digest"].get<std::string>() != "SHA-256" ||
+        kdfJson["hkdf"]["info"].get<std::string>() != kKeyEncryptionInfo) {
+      throw std::runtime_error("Unsupported HKDF parameters in local key file: " +
+                               keyPath.string());
+    }
   }
 
   auto salt =
@@ -200,12 +258,19 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
   auto opsLimit = kdfJson["opsLimit"].get<unsigned long long>();
   auto memLimit = kdfJson["memLimit"].get<size_t>();
 
-  std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> keyEncryptionKey{};
-  if (crypto_pwhash(keyEncryptionKey.data(), keyEncryptionKey.size(), password.c_str(),
-                    password.size(), salt.data(), opsLimit, memLimit,
-                    crypto_pwhash_ALG_ARGON2ID13) != 0) {
-    throw std::runtime_error("Failed to derive local key-encryption key");
+  std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> argon2Secret{};
+  if (crypto_pwhash(argon2Secret.data(), argon2Secret.size(), password.c_str(), password.size(),
+                    salt.data(), opsLimit, memLimit, crypto_pwhash_ALG_ARGON2ID13) != 0) {
+    throw std::runtime_error("Failed to derive local key-encryption secret");
   }
+
+  std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> keyEncryptionKey{};
+  if (kdfAlgorithm == kKdfHkdfAlgorithm) {
+    keyEncryptionKey = deriveKey(argon2Secret, kKeyEncryptionInfo, salt);
+  } else {
+    keyEncryptionKey = argon2Secret;
+  }
+  sodium_memzero(argon2Secret.data(), argon2Secret.size());
 
   LocalIdentityKey identity{file["publicKey"].get<std::string>(), {}};
   unsigned long long privateKeySize = 0;
@@ -225,8 +290,8 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
 }
 
 std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
-                                           const LocalIdentityKey& sender,
-                                           const std::string& recipientPkB64) {
+                                          const LocalIdentityKey& sender,
+                                          const std::string& recipientPkB64) {
   ensureSodiumInitialized();
 
   auto recipientPk = base64Decode(recipientPkB64, "recipientPublicKey");
@@ -238,8 +303,7 @@ std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
   randombytes_buf(nonce.data(), nonce.size());
 
   std::vector<unsigned char> ciphertext(plaintext.size() + crypto_box_MACBYTES);
-  if (crypto_box_easy(ciphertext.data(),
-                      reinterpret_cast<const unsigned char*>(plaintext.data()),
+  if (crypto_box_easy(ciphertext.data(), reinterpret_cast<const unsigned char*>(plaintext.data()),
                       static_cast<unsigned long long>(plaintext.size()), nonce.data(),
                       recipientPk.data(), sender.privateKey.data()) != 0) {
     throw std::runtime_error("Encryption failed");
@@ -252,8 +316,8 @@ std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
 }
 
 std::string LocalKeyStore::decryptMessage(const std::string& payloadB64,
-                                           const LocalIdentityKey& recipient,
-                                           const std::string& senderPkB64) {
+                                          const LocalIdentityKey& recipient,
+                                          const std::string& senderPkB64) {
   ensureSodiumInitialized();
 
   auto combined = base64Decode(payloadB64, "payload");

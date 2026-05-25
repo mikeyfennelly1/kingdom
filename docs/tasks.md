@@ -78,7 +78,7 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 ## Cryptography — Code
 
-- [ ] **Cr1. Add HKDF**
+- [x] **Cr1. Add HKDF**
   The spec explicitly requires HKDF with explicit `info` strings for domain separation. Nothing in the codebase uses HKDF. Add a `LocalKeyStore::deriveKey(sharedSecret, info)` helper using `EVP_KDF` (HKDF-SHA256 from OpenSSL) and use it when deriving the key-encryption key from the Argon2id output, passing `"kd-key-encryption-v1"` as the info string. This demonstrates understanding of domain separation.
 
 - [ ] **Cr2. Implement TOFU key pinning**
