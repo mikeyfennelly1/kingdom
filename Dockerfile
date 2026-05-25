@@ -1,46 +1,39 @@
 # Stage 1: Build
-FROM ubuntu:24.04 AS builder
+FROM jetpackio/devbox:0.17.0 AS builder
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    ninja-build \
-    libssl-dev \
-    libpq-dev \
-    libpqxx-dev \
-    libsodium-dev \
-    pkg-config \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
+# Set up the working directory
 WORKDIR /app
+USER root:root
+RUN mkdir -p /app && chown ${DEVBOX_USER}:${DEVBOX_USER} /app
+USER ${DEVBOX_USER}:${DEVBOX_USER}
 
-# Copy the entire project
-COPY . .
+# Copy only devbox files first to leverage Docker layer caching
+COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} devbox.json devbox.lock ./
 
-# Build the project
-RUN cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release
-RUN cmake --build build
+# Install the environment defined in devbox.json
+# Using DEVBOX_DEBUG=1 for more info and NIX_CONFIG to increase timeouts
+RUN DEVBOX_DEBUG=1 NIX_CONFIG="connect-timeout = 30" devbox install
+
+# Copy the rest of the source code
+COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} . .
+
+# Build the project using the devbox environment
+# We use 'devbox run' to ensure the environment (compilers, libs) is active
+RUN devbox run cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release
+RUN devbox run cmake --build build
 
 # Stage 2: Runtime
-FROM ubuntu:24.04
+FROM jetpackio/devbox:0.17.0
 
-# Install runtime dependencies (OpenSSL, PostgreSQL, Sodium)
-RUN apt-get update && apt-get install -y \
-    libssl3 \
-    libpq5 \
-    libpqxx-7.8t64 \
-    libsodium23 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
+# Set up the working directory
 WORKDIR /app
+USER root:root
+RUN mkdir -p /app && chown ${DEVBOX_USER}:${DEVBOX_USER} /app
+USER ${DEVBOX_USER}:${DEVBOX_USER}
+
+# Copy devbox files and install runtime environment
+COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} devbox.json devbox.lock ./
+RUN devbox install
 
 # Copy binaries from the builder stage
 COPY --from=builder /app/build/kds/kds /app/kds
@@ -53,5 +46,5 @@ EXPOSE 8080
 ENV KD_LOG_LEVEL=info
 ENV KD_PORT=8080
 
-# Run the server by default
-ENTRYPOINT ["/app/kds"]
+# Run the server using devbox run to ensure environment is set up
+ENTRYPOINT ["devbox", "run", "/app/kds"]
