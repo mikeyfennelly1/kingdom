@@ -2,4 +2,11 @@
 
 source .env
 
-ansible-playbook ansible/deploy.yml -i ansible/inventory.ini --vault-password-file="${ANSIBLE_VAULT_KEY_FILE}"
+REPO_VERSION=${1:-"main"}
+
+echo "Deploying version: $REPO_VERSION"
+
+ansible-playbook ansible/deploy.yml \
+  -i ansible/inventory.ini \
+  --extra-vars "repo_version=$REPO_VERSION" \
+  --vault-password-file="${ANSIBLE_VAULT_KEY_FILE}"

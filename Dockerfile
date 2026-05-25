@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     cmake \
     ninja-build \
     libssl-dev \
+    libpq-dev \
+    libpqxx-dev \
     pkg-config \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -27,9 +29,11 @@ RUN cmake --build build
 # Stage 2: Runtime
 FROM ubuntu:24.04
 
-# Install runtime dependencies (OpenSSL)
+# Install runtime dependencies (OpenSSL, PostgreSQL)
 RUN apt-get update && apt-get install -y \
     libssl3 \
+    libpq5 \
+    libpqxx-7.0t64 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
