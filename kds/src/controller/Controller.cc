@@ -365,6 +365,11 @@ void Controller::messageController_() {
                       "application/json");
       return;
     }
+    if (!db_.isParticipant(convId, *authenticatedUserId)) {
+      res.status = 403;
+      res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
+      return;
+    }
 
     auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::system_clock::now().time_since_epoch())
