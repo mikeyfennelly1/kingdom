@@ -79,13 +79,24 @@ void writeKnownKeys(const std::filesystem::path& path, const nlohmann::json& kno
                                std::filesystem::perm_options::replace);
 }
 
+std::string pinningAnchor(const std::string& publicKey) {
+  auto bundle = nlohmann::json::parse(publicKey, nullptr, false);
+  if (bundle.is_object() && bundle.contains("identityKey") && bundle.contains("signingKey")) {
+    return nlohmann::json{{"identityKey", bundle["identityKey"]},
+                          {"signingKey", bundle["signingKey"]}}
+        .dump();
+  }
+  return publicKey;
+}
+
 std::string pinPublicKey(uint64_t userId, const std::string& publicKey) {
   const auto path = knownKeysPath();
   auto knownKeys = readKnownKeys(path);
   const auto key = std::to_string(userId);
+  const auto anchor = pinningAnchor(publicKey);
 
   if (!knownKeys.contains(key)) {
-    knownKeys[key] = publicKey;
+    knownKeys[key] = anchor;
     writeKnownKeys(path, knownKeys);
     return publicKey;
   }
@@ -96,8 +107,8 @@ std::string pinPublicKey(uint64_t userId, const std::string& publicKey) {
   }
 
   const auto pinnedKey = knownKeys[key].get<std::string>();
-  if (pinnedKey != publicKey) {
-    throw std::runtime_error("WARNING: public key changed for user " + key +
+  if (pinnedKey != anchor) {
+    throw std::runtime_error("WARNING: identity key changed for user " + key +
                              ". Refusing to use the server-provided key because it does not match "
                              "the key pinned in " +
                              path.string());
@@ -162,7 +173,7 @@ nlohmann::json Client::signup(const std::string& username, const std::string& pa
   auto cli = makeClient(baseUrl_, caCertPath_);
   nlohmann::json body = {{"username", username},
                          {"password", password},
-                         {"publicKey", keyMaterial.publicKey}};
+                         {"publicKey", keyMaterial.publicKeyBundle}};
   if (auto res = cli.Post("/signup", body.dump(), "application/json")) {
     if (res->status == 200 || res->status == 201) {
       auto response = nlohmann::json::parse(res->body);
@@ -239,6 +250,20 @@ std::string Client::getPublicKey(uint64_t userId) {
         throw std::runtime_error("Server public-key response is missing publicKey");
       }
       return pinPublicKey(userId, body["publicKey"].get<std::string>());
+    }
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
+}
+
+void Client::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
+  auto cli = makeClient(baseUrl_, caCertPath_);
+  std::string path = "/users/" + std::to_string(userId) + "/one-time-prekeys/" +
+                     std::to_string(preKeyId) + "/consume";
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Post(path, headers, "", "application/json")) {
+    if (res->status == 200 || res->status == 204 || res->status == 404) {
+      return;
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }

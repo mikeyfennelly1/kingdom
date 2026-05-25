@@ -3,9 +3,11 @@
 #include <sodium.h>
 
 #include <array>
+#include <filesystem>
 #include <kd/Conversation.hpp>
 #include <kd/LocalKeyStore.hpp>
 #include <kd/MessageStore.hpp>
+#include <nlohmann/json.hpp>
 #include <string>
 
 #include "../src/security/SecurityFilterChain.hh"
@@ -60,71 +62,122 @@ std::string encodeBase64(const std::array<unsigned char, N>& data) {
   return encoded;
 }
 
+std::vector<unsigned char> decodeBase64(const std::string& encoded) {
+  std::vector<unsigned char> decoded(encoded.size(), 0);
+  size_t decodedSize = 0;
+  if (sodium_base642bin(decoded.data(), decoded.size(), encoded.c_str(), encoded.size(), nullptr,
+                        &decodedSize, nullptr, sodium_base64_VARIANT_ORIGINAL) != 0) {
+    throw std::runtime_error("invalid base64");
+  }
+  decoded.resize(decodedSize);
+  return decoded;
+}
+
+void appendUint64Le(std::vector<unsigned char>& out, uint64_t value) {
+  for (size_t i = 0; i < 8; ++i) {
+    out.push_back(static_cast<unsigned char>((value >> (i * 8)) & 0xff));
+  }
+}
+
+std::string signPreKey(uint64_t id, const std::string& publicKey,
+                       const std::array<unsigned char, kSigningSecretKeySize>& signingSecretKey) {
+  std::vector<unsigned char> input;
+  const std::string info = "kd-x3dh-signed-prekey-signature-v1";
+  input.insert(input.end(), info.begin(), info.end());
+  appendUint64Le(input, id);
+  auto publicKeyBytes = decodeBase64(publicKey);
+  input.insert(input.end(), publicKeyBytes.begin(), publicKeyBytes.end());
+
+  std::array<unsigned char, crypto_sign_BYTES> signature{};
+  crypto_sign_detached(signature.data(), nullptr, input.data(), input.size(),
+                       signingSecretKey.data());
+  return encodeBase64(signature);
+}
+
+LocalPreKey makePreKey(uint64_t id) {
+  LocalPreKey preKey;
+  preKey.id = id;
+  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> publicKey{};
+  crypto_box_keypair(publicKey.data(), preKey.privateKey.data());
+  preKey.publicKey = encodeBase64(publicKey);
+  return preKey;
+}
+
+LocalIdentityKey makeIdentity() {
+  LocalIdentityKey identity;
+  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> publicKey{};
+  crypto_box_keypair(publicKey.data(), identity.privateKey.data());
+  identity.publicKey = encodeBase64(publicKey);
+
+  std::array<unsigned char, crypto_sign_PUBLICKEYBYTES> signingPublicKey{};
+  crypto_sign_keypair(signingPublicKey.data(), identity.signingSecretKey.data());
+  identity.signingPublicKey = encodeBase64(signingPublicKey);
+  identity.signedPreKey = makePreKey(1);
+  identity.oneTimePreKeys.push_back(makePreKey(11));
+  return identity;
+}
+
+std::string bundleFor(const LocalIdentityKey& identity) {
+  nlohmann::json oneTimePreKeys = nlohmann::json::array();
+  for (const auto& preKey : identity.oneTimePreKeys) {
+    oneTimePreKeys.push_back({{"id", preKey.id}, {"publicKey", preKey.publicKey}});
+  }
+
+  return nlohmann::json{{"version", 1},
+                        {"algorithm", "KD-X3DH-BUNDLE-V1"},
+                        {"identityKey", identity.publicKey},
+                        {"signingKey", identity.signingPublicKey},
+                        {"signedPreKey",
+                         {{"id", identity.signedPreKey.id},
+                          {"publicKey", identity.signedPreKey.publicKey},
+                          {"signature",
+                           signPreKey(identity.signedPreKey.id, identity.signedPreKey.publicKey,
+                                      identity.signingSecretKey)}}},
+                        {"oneTimePreKeys", oneTimePreKeys}}
+      .dump();
+}
+
 }  // namespace
 
-TEST(LocalKeyStoreTest, ContextBoundMessageRejectsWrongConversation) {
+TEST(LocalKeyStoreTest, X3dhMessageDecryptsWithCorrectContext) {
   ASSERT_GE(sodium_init(), 0);
 
-  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> alicePublic{};
-  std::array<unsigned char, crypto_box_SECRETKEYBYTES> alicePrivate{};
-  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> bobPublic{};
-  std::array<unsigned char, crypto_box_SECRETKEYBYTES> bobPrivate{};
-  crypto_box_keypair(alicePublic.data(), alicePrivate.data());
-  crypto_box_keypair(bobPublic.data(), bobPrivate.data());
+  auto alice = makeIdentity();
+  auto bob = makeIdentity();
+  const auto aliceBundle = bundleFor(alice);
+  const auto bobBundle = bundleFor(bob);
 
-  LocalIdentityKey alice{encodeBase64(alicePublic), alicePrivate};
-  LocalIdentityKey bob{encodeBase64(bobPublic), bobPrivate};
+  const auto payload = LocalKeyStore::encryptMessage("hello", alice, bobBundle, 7, 1, 2);
 
-  const auto payload = LocalKeyStore::encryptMessage("hello", alice, bob.publicKey, 7, 1, 2);
+  EXPECT_EQ(LocalKeyStore::decryptMessage(payload, bob, aliceBundle, 7, 1, 2), "hello");
+}
 
-  EXPECT_EQ(LocalKeyStore::decryptMessage(payload, bob, alice.publicKey, 7, 1, 2), "hello");
-  EXPECT_THROW(LocalKeyStore::decryptMessage(payload, bob, alice.publicKey, 8, 1, 2),
+TEST(LocalKeyStoreTest, X3dhMessageRejectsWrongConversationContext) {
+  ASSERT_GE(sodium_init(), 0);
+
+  auto alice = makeIdentity();
+  auto bob = makeIdentity();
+  const auto aliceBundle = bundleFor(alice);
+  const auto bobBundle = bundleFor(bob);
+
+  const auto payload = LocalKeyStore::encryptMessage("hello", alice, bobBundle, 7, 1, 2);
+
+  EXPECT_THROW(LocalKeyStore::decryptMessage(payload, bob, aliceBundle, 8, 1, 2),
                std::runtime_error);
 }
 
-// To test failure, we'd ideally have a way to inject a failing predicate.
-// Since the factory is static and hardcoded, we'll stick to basic success for now
-// until we refactor for better injectability if needed.
-
-TEST(LocalKeyStoreTest, EncryptDecryptRoundtrip) {
+TEST(LocalKeyStoreTest, X3dhMessageRejectsMissingUsedOneTimePreKey) {
   ASSERT_GE(sodium_init(), 0);
 
-  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> alicePublic{};
-  std::array<unsigned char, crypto_box_SECRETKEYBYTES> alicePrivate{};
-  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> bobPublic{};
-  std::array<unsigned char, crypto_box_SECRETKEYBYTES> bobPrivate{};
-  crypto_box_keypair(alicePublic.data(), alicePrivate.data());
-  crypto_box_keypair(bobPublic.data(), bobPrivate.data());
+  auto alice = makeIdentity();
+  auto bob = makeIdentity();
+  const auto aliceBundle = bundleFor(alice);
+  const auto bobBundle = bundleFor(bob);
 
-  LocalIdentityKey alice{encodeBase64(alicePublic), alicePrivate};
-  LocalIdentityKey bob{encodeBase64(bobPublic), bobPrivate};
+  const auto payload = LocalKeyStore::encryptMessage("hello", alice, bobBundle, 7, 1, 2);
 
-  const std::string plaintext = "hello kingdom";
-  const auto payload = LocalKeyStore::encryptMessage(plaintext, alice, bob.publicKey, 1, 1, 2);
-  const auto decrypted = LocalKeyStore::decryptMessage(payload, bob, alice.publicKey, 1, 1, 2);
-
-  EXPECT_EQ(decrypted, plaintext);
-}
-
-TEST(LocalKeyStoreTest, DecryptFailsWithWrongKey) {
-  ASSERT_GE(sodium_init(), 0);
-
-  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> alicePublic{};
-  std::array<unsigned char, crypto_box_SECRETKEYBYTES> alicePrivate{};
-  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> bobPublic{};
-  std::array<unsigned char, crypto_box_SECRETKEYBYTES> bobPrivate{};
-  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> evePublic{};
-  std::array<unsigned char, crypto_box_SECRETKEYBYTES> evePrivate{};
-  crypto_box_keypair(alicePublic.data(), alicePrivate.data());
-  crypto_box_keypair(bobPublic.data(), bobPrivate.data());
-  crypto_box_keypair(evePublic.data(), evePrivate.data());
-
-  LocalIdentityKey alice{encodeBase64(alicePublic), alicePrivate};
-  LocalIdentityKey eve{encodeBase64(evePublic), evePrivate};
-
-  const auto payload = LocalKeyStore::encryptMessage("secret", alice, encodeBase64(bobPublic), 1, 1, 2);
-
-  EXPECT_THROW(LocalKeyStore::decryptMessage(payload, eve, alice.publicKey, 1, 1, 2),
+  EXPECT_EQ(LocalKeyStore::decryptMessage(payload, bob, aliceBundle, 7, 1, 2), "hello");
+  EXPECT_THROW(LocalKeyStore::decryptMessage(payload, bob, aliceBundle, 7, 1, 2),
                std::runtime_error);
 }
 
@@ -161,3 +214,19 @@ TEST(ConversationTest, HasParticipantReturnsFalseForNonMember) {
 }
 
 }  // namespace kd
+
+TEST(MessageStoreTest, SavesAndLoadsPlaintextByMessageId) {
+  const auto path = std::filesystem::temp_directory_path() /
+                    "kingdom-message-store-test.json";
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+
+  kd::MessageStore writer(path);
+  writer.savePlaintext(42, 7, 1, 123456, "cached hello");
+
+  kd::MessageStore reader(path);
+  ASSERT_EQ(reader.getPlaintext(42), std::optional<std::string>("cached hello"));
+  EXPECT_EQ(reader.getPlaintext(43), std::nullopt);
+
+  std::filesystem::remove(path, ignored);
+}
