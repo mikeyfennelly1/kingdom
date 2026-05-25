@@ -66,7 +66,7 @@ void Controller::setupRoutes() {
     return httplib::Server::HandlerResponse::Unhandled;
   });
 
-    svr_.set_post_routing_handler([](const httplib::Request&, httplib::Response& res) {
+  svr_.set_post_routing_handler([](const httplib::Request&, httplib::Response& res) {
     res.set_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     res.set_header("X-Content-Type-Options", "nosniff");
     res.set_header("X-Frame-Options", "DENY");
@@ -285,6 +285,26 @@ void Controller::publicKeyController_() {
              res.set_content(nlohmann::json{{"userId", userId}, {"publicKey", *publicKey}}.dump(),
                              "application/json");
            });
+
+  svr_.Post(R"(/users/(\d+)/one-time-prekeys/(\d+)/consume)",
+            [this](const httplib::Request& req, httplib::Response& res) -> void {
+              auto authenticatedUserId = authenticatedUserId_(req);
+              if (!authenticatedUserId.has_value()) {
+                res.status = 401;
+                res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
+                                "application/json");
+                return;
+              }
+              uint64_t userId = std::stoull(std::string(req.matches[1]));
+              uint64_t preKeyId = std::stoull(std::string(req.matches[2]));
+              if (!db_.consumeOneTimePreKey(userId, preKeyId)) {
+                res.status = 404;
+                res.set_content(nlohmann::json{{"error", "one-time prekey not found"}}.dump(),
+                                "application/json");
+                return;
+              }
+              res.set_content(nlohmann::json{{"status", "consumed"}}.dump(), "application/json");
+            });
 }
 
 void Controller::conversationController_() {

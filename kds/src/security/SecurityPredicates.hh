@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
@@ -103,6 +104,10 @@ class ValidateAuthenticated : public SecurityPredicate {
       if (req.path == path) {
         return std::nullopt;
       }
+    }
+    static const std::regex kPublicKeyPath("^/users/[0-9]+/public-key$");
+    if (std::regex_match(req.path, kPublicKeyPath)) {
+      return std::nullopt;
     }
 
     auto token = bearerToken(req);

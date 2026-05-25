@@ -53,25 +53,31 @@ void printMessages(const nlohmann::json& msgs) {
   }
 }
 
-void printMessages(const nlohmann::json& msgs, kd::Client& client,
-                   const kd::LocalIdentityKey& identity, uint64_t recipientId,
-                   kd::MessageStore& store) {
+void printMessages(const nlohmann::json& msgs, kd::Client& client, kd::LocalIdentityKey& identity,
+                   uint64_t recipientId, kd::MessageStore& store) {
   for (const auto& msg : msgs) {
+    const auto message = msg.get<kd::Message>();
     std::string displayText;
-    try {
-      uint64_t senderId = msg["senderId"].get<uint64_t>();
-      auto cached = store.getCachedPublicKey(senderId);
-      std::string senderPk = cached.has_value() ? *cached : client.getPublicKey(senderId);
-      store.cachePublicKey(senderId, senderPk);
-      displayText =
-          kd::LocalKeyStore::decryptMessage(msg["payload"].get<std::string>(), identity, senderPk,
-                                            msg["conversationId"].get<uint64_t>(), senderId,
-                                            recipientId);
-    } catch (const std::exception&) {
-      displayText = "[decryption failed]";
+
+    if (auto cachedPlaintext = store.getPlaintext(message.id); cachedPlaintext.has_value()) {
+      displayText = *cachedPlaintext;
+    } else {
+      try {
+        auto cached = store.getCachedPublicKey(message.senderId);
+        std::string senderPk = cached.has_value() ? *cached : client.getPublicKey(message.senderId);
+        store.cachePublicKey(message.senderId, senderPk);
+        displayText = kd::LocalKeyStore::decryptMessage(message.payload, identity, senderPk,
+                                                        message.conversationId, message.senderId,
+                                                        recipientId);
+        store.savePlaintext(message.id, message.conversationId, message.senderId,
+                            message.timestamp, displayText);
+      } catch (const std::exception&) {
+        displayText = "[decryption failed]";
+      }
     }
-    std::cout << "[" << msg["timestamp"] << "] "
-              << "User " << msg["senderId"] << ": " << displayText << std::endl;
+
+    std::cout << "[" << message.timestamp << "] "
+              << "User " << message.senderId << ": " << displayText << std::endl;
   }
 }
 
@@ -90,6 +96,7 @@ void completeLogin(ShellSession& session, kd::Client& client, const nlohmann::js
     auto identityKey = kd::LocalKeyStore::loadForLogin(username, password);
     rememberLogin(session, user);
     session.identityKey = std::move(identityKey);
+    session.messageStore = kd::MessageStore(username);
     std::cout << "Local private key unlocked." << std::endl;
   } catch (const std::exception& e) {
     client.clearAuthToken();
@@ -199,6 +206,10 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
             kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk,
                                               convId, session.userId, recipientId);
         std::cout << client.sendMessage(convId, session.userId, payload).dump(4) << std::endl;
+        auto usedPreKeyId = kd::LocalKeyStore::oneTimePreKeyIdFromPayload(payload);
+        if (usedPreKeyId.has_value()) {
+          client.consumeOneTimePreKey(recipientId, *usedPreKeyId);
+        }
       } else if (command == "messages") {
         auto convId = promptId("conversation id: ");
         auto msgs = client.getMessages(convId);
