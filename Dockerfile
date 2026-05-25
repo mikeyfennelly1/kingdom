@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libpq-dev \
     libpqxx-dev \
+    libsodium-dev \
     pkg-config \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -29,11 +30,12 @@ RUN cmake --build build
 # Stage 2: Runtime
 FROM ubuntu:24.04
 
-# Install runtime dependencies (OpenSSL, PostgreSQL)
+# Install runtime dependencies (OpenSSL, PostgreSQL, Sodium)
 RUN apt-get update && apt-get install -y \
     libssl3 \
     libpq5 \
     libpqxx-7.8t64 \
+    libsodium23 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
