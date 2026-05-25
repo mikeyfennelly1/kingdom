@@ -31,19 +31,19 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 ## Networks & Cybersecurity — Code
 
-- [ ] **N1. Fix access control on message retrieval**
+- [x] **N1. Fix access control on message retrieval**
   `GET /conversations/:id/messages` does not check that the authenticated user is a participant. Any authenticated user can read any conversation. Query `conversation_participants` and return 403 if the user is not a member.
 
-- [ ] **N2. Fix access control on message send**
+- [x] **N2. Fix access control on message send**
   `POST /conversations/:id/messages` does not verify the sender is a participant. Add the same participant check before inserting.
 
-- [ ] **N3. Fix client auth token on read calls**
+- [x] **N3. Fix client auth token on read calls**
   `Client::getConversations()` and `Client::getMessages()` do not send the `Authorization: Bearer` header. Server returns 401 on both calls for any authenticated session. Add the header to these requests in `Client.cc`.
 
-- [ ] **N4. Make TLS verification the default**
+- [x] **N4. Make TLS verification the default**
   When `caCertPath` is empty and the URL is HTTPS, `makeClient` falls back to a plain unverified `httplib::Client`. Certificate verification should be the default; skipping it should require an explicit flag. Fix `Client.cc` so HTTPS always enables verification (using system CA store if no custom cert is provided).
 
-- [ ] **N5. Add security response headers**
+- [x] **N5. Add security response headers**
   Add `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, and `X-Frame-Options: DENY` to all server responses via a post-routing handler in `Controller.cc`.
 
 - [ ] **N6. Fix `ValidateAuthenticated` to reject missing tokens**

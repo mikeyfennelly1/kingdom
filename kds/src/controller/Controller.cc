@@ -64,6 +64,12 @@ void Controller::setupRoutes() {
     return httplib::Server::HandlerResponse::Unhandled;
   });
 
+    svr_.set_post_routing_handler([](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    res.set_header("X-Content-Type-Options", "nosniff");
+    res.set_header("X-Frame-Options", "DENY");
+  });
+
   notFoundHandler_();
   healthController_();
   authController_();
