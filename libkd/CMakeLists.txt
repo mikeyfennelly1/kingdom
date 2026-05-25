@@ -3,6 +3,7 @@ add_library(kd SHARED
     src/Message.cc
     src/Client.cc
     src/LocalKeyStore.cc
+    src/MessageStore.cc
 )
 
 target_link_libraries(kd

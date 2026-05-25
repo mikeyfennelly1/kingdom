@@ -4,6 +4,7 @@
 #include <kd/Client.hpp>
 #include <kd/LocalKeyStore.hpp>
 #include <kd/Message.hpp>
+#include <kd/MessageStore.hpp>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -15,6 +16,7 @@ struct ShellSession {
   std::string username;
   std::optional<kd::LocalIdentityKey> identityKey;
   std::vector<kd::Message> messageCache;
+  kd::MessageStore messageStore;
 };
 
 std::string promptLine(const std::string& prompt) {
@@ -52,12 +54,15 @@ void printMessages(const nlohmann::json& msgs) {
 }
 
 void printMessages(const nlohmann::json& msgs, kd::Client& client,
-                   const kd::LocalIdentityKey& identity, uint64_t recipientId) {
+                   const kd::LocalIdentityKey& identity, uint64_t recipientId,
+                   kd::MessageStore& store) {
   for (const auto& msg : msgs) {
     std::string displayText;
     try {
-      const auto senderId = msg["senderId"].get<uint64_t>();
-      auto senderPk = client.getPublicKey(senderId);
+      uint64_t senderId = msg["senderId"].get<uint64_t>();
+      auto cached = store.getCachedPublicKey(senderId);
+      std::string senderPk = cached.has_value() ? *cached : client.getPublicKey(senderId);
+      store.cachePublicKey(senderId, senderPk);
       displayText =
           kd::LocalKeyStore::decryptMessage(msg["payload"].get<std::string>(), identity, senderPk,
                                             msg["conversationId"].get<uint64_t>(), senderId,
@@ -205,7 +210,7 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
           session.messageCache.push_back(m.get<kd::Message>());
         }
         if (session.loggedIn && session.identityKey.has_value()) {
-          printMessages(msgs, client, *session.identityKey, session.userId);
+          printMessages(msgs, client, *session.identityKey, session.userId, session.messageStore);
         } else {
           printMessages(msgs);
         }
