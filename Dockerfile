@@ -33,7 +33,7 @@ FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y \
     libssl3 \
     libpq5 \
-    libpqxx-7.0t64 \
+    libpqxx-7.8t64 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
