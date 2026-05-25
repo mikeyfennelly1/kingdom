@@ -52,20 +52,26 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [x] **N7. Implement `ValidateSenderAuthenticity`**
   `ValidateSenderAuthenticity::Validate` is a stub that returns `std::nullopt` unconditionally. Implement it: extract the JWT-authenticated user ID from the `Authorization` header; for POST requests with a JSON body containing a `senderId` field, verify that `senderId == authenticatedUserId`. Return 403 if they differ. This prevents a user from posting messages attributed to another user even if they have a valid token.
 
+- [ ] **N8. Implement `ValidateUntampered` or remove it from the chain**
+  `ValidateUntampered::Validate` returns `std::nullopt` unconditionally — it is a visible stub to any examiner reading the code. Either implement it (verify `Content-Type: application/json` header on POST/PUT requests and return 400 if absent) or remove it from the `SecurityPredicateFactory` chain entirely. Leaving a named security predicate as a permanent no-op is the most obvious red flag in the codebase. Implementing Content-Type validation is simple and closes the gap.
+
+- [ ] **N9. Add server-side token revocation on logout**
+  `POST /logout` is currently a no-op — tokens issued before logout remain valid until expiry. Add an in-memory token blacklist: a `std::unordered_set<std::string>` of invalidated JTIs (or raw tokens) protected by a `std::mutex`. On `POST /logout`, insert the token. In `ValidateAuthenticated`, reject any token whose value is in the blacklist with 401. This is sufficient for a demo and directly closes the "no server-side revocation" gap in the secure coding rubric.
+
 ---
 
 ## C++ — Code
 
-- [ ] **C1. Exception handling on numeric input**
+- [x] **C1. Exception handling on numeric input**
   `promptId()` in `kdctl/main.cc` calls `std::stoull` with no `try`/`catch`. Non-numeric input crashes the process. Wrap in a try/catch for `std::invalid_argument` and `std::out_of_range` and print an error instead.
 
-- [ ] **C2. Add `std::map` or `std::set` usage**
+- [x] **C2. Add `std::map` or `std::set` usage**
   The spec names these containers explicitly and neither appears in the codebase. Introduce `std::map<uint64_t, std::string>` as a public-key cache in `MessageStore` (keyed by userId) to avoid redundant server lookups and demonstrate the container.
 
 - [ ] **C3. Remove or implement `kd::User`**
   `kd::User` exists in a header with `NLOHMANN_DEFINE_TYPE_INTRUSIVE` but is never instantiated. Either use it in `Controller.cc` to deserialise user responses (replacing raw JSON field access) or delete it. Dead code is a visible weakness.
 
-- [ ] **C4. Add meaningful unit tests**
+- [x] **C4. Add meaningful unit tests**
   `SecurityTests.cc` tests only that construction doesn't throw. Add at least:
   - `LocalKeyStore` encrypt/decrypt roundtrip
   - `MessageStore::findBySender` filtering correctness
@@ -73,6 +79,15 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 - [ ] **C5. Implement Ed25519 message signatures**
   `Message::signature` exists in the struct and is serialised to JSON but is always `""`. Implement it: at signup, generate an Ed25519 signing keypair (`crypto_sign_keypair`) alongside the X25519 keypair. Store the Ed25519 public key on the server (`PUT /users/{id}/public-key` already exists — extend it or add a separate field). In `LocalKeyStore::encryptMessage`, sign the plaintext payload with `crypto_sign_detached` and base64-encode the 64-byte signature into `Message::signature`. In `LocalKeyStore::decryptMessage`, after decryption verify the signature with `crypto_sign_verify_detached`; throw on failure. This also makes `ValidateSenderAuthenticity` (N7) cryptographically meaningful rather than just a JWT check.
+
+- [ ] **C6. Add `std::set` usage**
+  The spec names `std::set` explicitly alongside `std::map` and it does not appear in the codebase. Add it somewhere natural: `Conversation::addParticipant` could store participant IDs in a `std::set<uint64_t>` instead of a `std::vector` to enforce uniqueness automatically, or use `std::set` to deduplicate participant IDs when creating a conversation in `kdctl`. Either location is valid — pick whichever fits cleanest.
+
+- [ ] **C7. Add inline design comments on key architectural decisions**
+  The rubric explicitly awards marks for documentation. Add `// NOTE:` or `// DESIGN:` comments at the following locations:
+  - `LocalKeyStore.cc` — why all methods are static (no mutable state needed; key material lives in `ShellSession`, not the store)
+  - `SecurityFilterChain` constructor — why it owns predicates via `std::unique_ptr` (RAII, polymorphic dispatch, clear ownership)
+  - `MessageStore` public-key cache — why `std::map` was chosen over `std::unordered_map` (ordered iteration, deterministic behaviour for testing)
 
 ---
 
@@ -100,16 +115,19 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [ ] **B1. Add on-chain storage mapping to contract**
   `recordHash` currently only emits an event — no state is written. Add `mapping(uint256 => bytes32) public hashes` and `mapping(uint256 => uint256) public timestamps` to `MessageIntegrity.sol`. Write both in `recordHash`. Redeploy to Sepolia and update the contract address everywhere.
 
-- [ ] **B2. Make sidecar call non-blocking**
+- [x] **B2. Make sidecar call non-blocking**
   `await tx.wait()` in `sidecar/index.js` blocks until the transaction is mined (potentially 30–90 seconds). The C++ server waits synchronously for the HTTP response. Fire-and-forget: respond to the server with the `txHash` immediately after `contract.recordHash()` returns (before `tx.wait()`), and confirm mining in the background.
 
 - [ ] **B3. Add Hardhat unit test for the contract**
-  Add `blockchain/test/MessageIntegrity.test.js`. Deploy the contract locally, call `recordHash`, assert the `HashRecorded` event is emitted with correct args and the storage mapping is updated. Run with `npx hardhat test`.
+  Add `blockchain/test/MessageIntegrity.test.js`. Deploy the contract locally, call `recordHash`, assert the `HashRecorded` event is emitted with correct args and the storage mapping is updated (after B1 is done). Run with `npx hardhat test`.
 
-- [ ] **B4. Remove `.env` from git and rotate key**
+- [ ] **B6. Document per-message vs batching gas trade-off**
+  The spec explicitly says "pay attention to trade-offs in persisting to the chain — a hash for each message may be excessive." Add a comment block in `sidecar/index.js` above the `recordHash` call and in `MessageIntegrity.sol` above `recordHash` explaining: each message costs ~30k gas; at current Sepolia/mainnet prices this is acceptable for a demo but production use would batch hashes (e.g. a Merkle root per conversation per hour). This is a required acknowledgement per the spec, not optional.
+
+- [x] **B4. Remove `.env` from git and rotate key**
   `blockchain/sidecar/.env` containing `PRIVATE_KEY` is committed. Add `blockchain/sidecar/.env` and `blockchain/.env` to `.gitignore`. Generate a new testnet wallet and update the deployed contract owner if needed.
 
-- [ ] **B5. Add fallback RPC to verification page**
+- [x] **B5. Add fallback RPC to verification page**
   The verification page hardcodes a single public RPC (`publicnode.com`). Add a secondary fallback (e.g. `https://rpc.sepolia.org`) and retry on failure.
 
 ---
