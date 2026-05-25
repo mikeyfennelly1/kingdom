@@ -3,7 +3,9 @@
 #include <sodium.h>
 
 #include <array>
+#include <kd/Conversation.hpp>
 #include <kd/LocalKeyStore.hpp>
+#include <kd/MessageStore.hpp>
 #include <string>
 
 #include "../src/security/SecurityFilterChain.hh"
@@ -83,5 +85,79 @@ TEST(LocalKeyStoreTest, ContextBoundMessageRejectsWrongConversation) {
 // To test failure, we'd ideally have a way to inject a failing predicate.
 // Since the factory is static and hardcoded, we'll stick to basic success for now
 // until we refactor for better injectability if needed.
+
+TEST(LocalKeyStoreTest, EncryptDecryptRoundtrip) {
+  ASSERT_GE(sodium_init(), 0);
+
+  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> alicePublic{};
+  std::array<unsigned char, crypto_box_SECRETKEYBYTES> alicePrivate{};
+  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> bobPublic{};
+  std::array<unsigned char, crypto_box_SECRETKEYBYTES> bobPrivate{};
+  crypto_box_keypair(alicePublic.data(), alicePrivate.data());
+  crypto_box_keypair(bobPublic.data(), bobPrivate.data());
+
+  LocalIdentityKey alice{encodeBase64(alicePublic), alicePrivate};
+  LocalIdentityKey bob{encodeBase64(bobPublic), bobPrivate};
+
+  const std::string plaintext = "hello kingdom";
+  const auto payload = LocalKeyStore::encryptMessage(plaintext, alice, bob.publicKey, 1, 1, 2);
+  const auto decrypted = LocalKeyStore::decryptMessage(payload, bob, alice.publicKey, 1, 1, 2);
+
+  EXPECT_EQ(decrypted, plaintext);
+}
+
+TEST(LocalKeyStoreTest, DecryptFailsWithWrongKey) {
+  ASSERT_GE(sodium_init(), 0);
+
+  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> alicePublic{};
+  std::array<unsigned char, crypto_box_SECRETKEYBYTES> alicePrivate{};
+  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> bobPublic{};
+  std::array<unsigned char, crypto_box_SECRETKEYBYTES> bobPrivate{};
+  std::array<unsigned char, crypto_box_PUBLICKEYBYTES> evePublic{};
+  std::array<unsigned char, crypto_box_SECRETKEYBYTES> evePrivate{};
+  crypto_box_keypair(alicePublic.data(), alicePrivate.data());
+  crypto_box_keypair(bobPublic.data(), bobPrivate.data());
+  crypto_box_keypair(evePublic.data(), evePrivate.data());
+
+  LocalIdentityKey alice{encodeBase64(alicePublic), alicePrivate};
+  LocalIdentityKey eve{encodeBase64(evePublic), evePrivate};
+
+  const auto payload = LocalKeyStore::encryptMessage("secret", alice, encodeBase64(bobPublic), 1, 1, 2);
+
+  EXPECT_THROW(LocalKeyStore::decryptMessage(payload, eve, alice.publicKey, 1, 1, 2),
+               std::runtime_error);
+}
+
+TEST(MessageStoreTest, FindBySenderReturnsOnlyMatchingMessages) {
+  MessageStore store;
+  store.add(Message{1, 10, 100, "msg1", "", 1000, ""});
+  store.add(Message{2, 20, 100, "msg2", "", 2000, ""});
+  store.add(Message{3, 10, 100, "msg3", "", 3000, ""});
+
+  auto results = store.findBySender(10);
+  ASSERT_EQ(results.size(), 2U);
+  EXPECT_EQ(results[0].id, 1U);
+  EXPECT_EQ(results[1].id, 3U);
+}
+
+TEST(MessageStoreTest, FindBySenderReturnsEmptyForUnknownSender) {
+  MessageStore store;
+  store.add(Message{1, 10, 100, "msg1", "", 1000, ""});
+
+  auto results = store.findBySender(99);
+  EXPECT_TRUE(results.empty());
+}
+
+TEST(ConversationTest, HasParticipantReturnsTrueForMember) {
+  Conversation conv;
+  conv.participantIds = {1, 2, 3};
+  EXPECT_TRUE(conv.hasParticipant(2));
+}
+
+TEST(ConversationTest, HasParticipantReturnsFalseForNonMember) {
+  Conversation conv;
+  conv.participantIds = {1, 2, 3};
+  EXPECT_FALSE(conv.hasParticipant(99));
+}
 
 }  // namespace kd
