@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -21,6 +22,9 @@ constexpr size_t kKdfMemLimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
 constexpr const char* kKdfAlgorithm = "Argon2id";
 constexpr const char* kKdfHkdfAlgorithm = "Argon2id+HKDF-SHA256";
 constexpr const char* kKeyEncryptionInfo = "kd-key-encryption-v1";
+constexpr const char* kMessageMacInfo = "kd-message-context-mac-v1";
+constexpr const char* kMessageMacSalt = "kd-message-context-mac-salt-v1";
+constexpr std::array<unsigned char, 4> kMessagePayloadMagic{'K', 'D', 'M', '1'};
 
 void ensureSodiumInitialized() {
   if (sodium_init() < 0) {
@@ -132,6 +136,76 @@ std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> deriveKey
   }
 
   return derivedKey;
+}
+
+std::array<unsigned char, crypto_auth_KEYBYTES> deriveMessageMacKey(
+    const unsigned char* sharedSecret, size_t sharedSecretSize) {
+  static_assert(crypto_auth_KEYBYTES == 32);
+  std::array<unsigned char, crypto_auth_KEYBYTES> macKey{};
+
+  EVP_KDF* kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
+  if (kdf == nullptr) {
+    throw std::runtime_error("Failed to fetch HKDF implementation");
+  }
+
+  EVP_KDF_CTX* ctx = EVP_KDF_CTX_new(kdf);
+  EVP_KDF_free(kdf);
+  if (ctx == nullptr) {
+    throw std::runtime_error("Failed to create HKDF context");
+  }
+
+  char digestName[] = "SHA256";
+  OSSL_PARAM params[] = {
+      OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
+      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+                                        const_cast<unsigned char*>(sharedSecret), sharedSecretSize),
+      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT, const_cast<char*>(kMessageMacSalt),
+                                        std::char_traits<char>::length(kMessageMacSalt)),
+      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, const_cast<char*>(kMessageMacInfo),
+                                        std::char_traits<char>::length(kMessageMacInfo)),
+      OSSL_PARAM_construct_end()};
+
+  const int result = EVP_KDF_derive(ctx, macKey.data(), macKey.size(), params);
+  EVP_KDF_CTX_free(ctx);
+  if (result != 1) {
+    sodium_memzero(macKey.data(), macKey.size());
+    throw std::runtime_error("Failed to derive message MAC key");
+  }
+
+  return macKey;
+}
+
+std::array<unsigned char, crypto_auth_KEYBYTES> deriveMessageMacKey(
+    const std::vector<unsigned char>& peerPublicKey,
+    const std::array<unsigned char, kPrivateKeySize>& privateKey) {
+  std::array<unsigned char, crypto_box_BEFORENMBYTES> sharedSecret{};
+  if (crypto_box_beforenm(sharedSecret.data(), peerPublicKey.data(), privateKey.data()) != 0) {
+    throw std::runtime_error("Failed to derive message shared secret");
+  }
+
+  auto macKey = deriveMessageMacKey(sharedSecret.data(), sharedSecret.size());
+  sodium_memzero(sharedSecret.data(), sharedSecret.size());
+  return macKey;
+}
+
+void appendUint64Le(std::vector<unsigned char>& out, uint64_t value) {
+  for (size_t i = 0; i < 8; ++i) {
+    out.push_back(static_cast<unsigned char>((value >> (i * 8)) & 0xff));
+  }
+}
+
+std::vector<unsigned char> buildContextMacInput(
+    uint64_t conversationId, uint64_t senderId, uint64_t recipientId,
+    const std::array<unsigned char, crypto_box_NONCEBYTES>& nonce,
+    const std::vector<unsigned char>& ciphertext) {
+  std::vector<unsigned char> input;
+  input.reserve(24 + nonce.size() + ciphertext.size());
+  appendUint64Le(input, conversationId);
+  appendUint64Le(input, senderId);
+  appendUint64Le(input, recipientId);
+  input.insert(input.end(), nonce.begin(), nonce.end());
+  input.insert(input.end(), ciphertext.begin(), ciphertext.end());
+  return input;
 }
 
 std::string sanitizedUsername(const std::string& username) {
@@ -291,7 +365,9 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
 
 std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
                                           const LocalIdentityKey& sender,
-                                          const std::string& recipientPkB64) {
+                                          const std::string& recipientPkB64,
+                                          uint64_t conversationId, uint64_t senderId,
+                                          uint64_t recipientId) {
   ensureSodiumInitialized();
 
   auto recipientPk = base64Decode(recipientPkB64, "recipientPublicKey");
@@ -309,7 +385,21 @@ std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
     throw std::runtime_error("Encryption failed");
   }
 
+  auto macKey = deriveMessageMacKey(recipientPk, sender.privateKey);
+  auto macInput = buildContextMacInput(conversationId, senderId, recipientId, nonce, ciphertext);
+
+  std::array<unsigned char, crypto_auth_BYTES> mac{};
+  if (crypto_auth(mac.data(), macInput.data(), static_cast<unsigned long long>(macInput.size()),
+                  macKey.data()) != 0) {
+    sodium_memzero(macKey.data(), macKey.size());
+    throw std::runtime_error("Failed to authenticate message context");
+  }
+  sodium_memzero(macKey.data(), macKey.size());
+
   std::vector<unsigned char> combined;
+  combined.reserve(kMessagePayloadMagic.size() + mac.size() + nonce.size() + ciphertext.size());
+  combined.insert(combined.end(), kMessagePayloadMagic.begin(), kMessagePayloadMagic.end());
+  combined.insert(combined.end(), mac.begin(), mac.end());
   combined.insert(combined.end(), nonce.begin(), nonce.end());
   combined.insert(combined.end(), ciphertext.begin(), ciphertext.end());
   return base64Encode(combined.data(), combined.size());
@@ -317,26 +407,48 @@ std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
 
 std::string LocalKeyStore::decryptMessage(const std::string& payloadB64,
                                           const LocalIdentityKey& recipient,
-                                          const std::string& senderPkB64) {
+                                          const std::string& senderPkB64, uint64_t conversationId,
+                                          uint64_t senderId, uint64_t recipientId) {
   ensureSodiumInitialized();
 
   auto combined = base64Decode(payloadB64, "payload");
-  if (combined.size() < crypto_box_NONCEBYTES + crypto_box_MACBYTES) {
-    throw std::runtime_error("Payload too short to be valid ciphertext");
+  constexpr size_t kHeaderSize = 4 + crypto_auth_BYTES + crypto_box_NONCEBYTES;
+  if (combined.size() < kHeaderSize + crypto_box_MACBYTES) {
+    throw std::runtime_error("Payload too short to be valid context-bound ciphertext");
+  }
+  if (!std::equal(kMessagePayloadMagic.begin(), kMessagePayloadMagic.end(), combined.begin())) {
+    throw std::runtime_error("Unsupported legacy or unknown message payload format");
   }
 
+  size_t offset = kMessagePayloadMagic.size();
+  std::array<unsigned char, crypto_auth_BYTES> mac{};
+  std::copy(combined.begin() + offset, combined.begin() + offset + mac.size(), mac.begin());
+  offset += mac.size();
+
   std::array<unsigned char, crypto_box_NONCEBYTES> nonce{};
-  std::copy(combined.begin(), combined.begin() + crypto_box_NONCEBYTES, nonce.begin());
+  std::copy(combined.begin() + offset, combined.begin() + offset + nonce.size(), nonce.begin());
+  offset += nonce.size();
+
+  std::vector<unsigned char> ciphertext(combined.begin() + offset, combined.end());
 
   auto senderPk = base64Decode(senderPkB64, "senderPublicKey");
   if (senderPk.size() != crypto_box_PUBLICKEYBYTES) {
     throw std::runtime_error("Invalid sender public key size");
   }
 
-  const size_t ciphertextLen = combined.size() - crypto_box_NONCEBYTES;
-  std::vector<unsigned char> plaintext(ciphertextLen - crypto_box_MACBYTES);
-  if (crypto_box_open_easy(plaintext.data(), combined.data() + crypto_box_NONCEBYTES,
-                           static_cast<unsigned long long>(ciphertextLen), nonce.data(),
+  auto macKey = deriveMessageMacKey(senderPk, recipient.privateKey);
+  auto macInput = buildContextMacInput(conversationId, senderId, recipientId, nonce, ciphertext);
+  const int macResult =
+      crypto_auth_verify(mac.data(), macInput.data(),
+                         static_cast<unsigned long long>(macInput.size()), macKey.data());
+  sodium_memzero(macKey.data(), macKey.size());
+  if (macResult != 0) {
+    throw std::runtime_error("Message context authentication failed");
+  }
+
+  std::vector<unsigned char> plaintext(ciphertext.size() - crypto_box_MACBYTES);
+  if (crypto_box_open_easy(plaintext.data(), ciphertext.data(),
+                           static_cast<unsigned long long>(ciphertext.size()), nonce.data(),
                            senderPk.data(), recipient.privateKey.data()) != 0) {
     throw std::runtime_error("Decryption failed");
   }

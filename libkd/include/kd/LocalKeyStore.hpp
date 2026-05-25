@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -25,15 +26,17 @@ class LocalKeyStore {
                                                  const std::string& password);
   static LocalIdentityKey loadForLogin(const std::string& username, const std::string& password);
 
-  // Encrypt plaintext for a recipient. Returns base64(nonce || ciphertext).
+  // Encrypt plaintext for a recipient. Returns base64(KDM1 || mac || nonce || ciphertext).
   static std::string encryptMessage(const std::string& plaintext, const LocalIdentityKey& sender,
-                                    const std::string& recipientPkB64);
+                                    const std::string& recipientPkB64, uint64_t conversationId,
+                                    uint64_t senderId, uint64_t recipientId);
 
   // Decrypt a payload produced by encryptMessage. Returns plaintext.
-  // Throws on decryption failure (wrong key, tampered ciphertext).
+  // Throws on decryption failure (wrong key, tampered ciphertext, wrong context).
   static std::string decryptMessage(const std::string& payloadB64,
                                     const LocalIdentityKey& recipient,
-                                    const std::string& senderPkB64);
+                                    const std::string& senderPkB64, uint64_t conversationId,
+                                    uint64_t senderId, uint64_t recipientId);
 
  private:
   static std::filesystem::path defaultKeyPath_(const std::string& username);

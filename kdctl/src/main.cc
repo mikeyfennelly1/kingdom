@@ -52,13 +52,16 @@ void printMessages(const nlohmann::json& msgs) {
 }
 
 void printMessages(const nlohmann::json& msgs, kd::Client& client,
-                   const kd::LocalIdentityKey& identity) {
+                   const kd::LocalIdentityKey& identity, uint64_t recipientId) {
   for (const auto& msg : msgs) {
     std::string displayText;
     try {
-      auto senderPk = client.getPublicKey(msg["senderId"].get<uint64_t>());
+      const auto senderId = msg["senderId"].get<uint64_t>();
+      auto senderPk = client.getPublicKey(senderId);
       displayText =
-          kd::LocalKeyStore::decryptMessage(msg["payload"].get<std::string>(), identity, senderPk);
+          kd::LocalKeyStore::decryptMessage(msg["payload"].get<std::string>(), identity, senderPk,
+                                            msg["conversationId"].get<uint64_t>(), senderId,
+                                            recipientId);
     } catch (const std::exception&) {
       displayText = "[decryption failed]";
     }
@@ -170,9 +173,9 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto participantIds = parseIds(promptLine("participants: "));
         if (session.loggedIn) {
           bool alreadyIncluded =
-              std::find_if(participantIds.begin(), participantIds.end(),
-                           [&session](uint64_t id) { return id == session.userId; }) !=
-              participantIds.end();
+              std::find_if(participantIds.begin(), participantIds.end(), [&session](uint64_t id) {
+                return id == session.userId;
+              }) != participantIds.end();
           if (!alreadyIncluded) {
             participantIds.push_back(session.userId);
           }
@@ -188,7 +191,8 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto messageText = promptLine("message: ");
         auto recipientPk = client.getPublicKey(recipientId);
         auto payload =
-            kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk);
+            kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk,
+                                              convId, session.userId, recipientId);
         std::cout << client.sendMessage(convId, session.userId, payload).dump(4) << std::endl;
       } else if (command == "messages") {
         auto convId = promptId("conversation id: ");
@@ -201,7 +205,7 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
           session.messageCache.push_back(m.get<kd::Message>());
         }
         if (session.loggedIn && session.identityKey.has_value()) {
-          printMessages(msgs, client, *session.identityKey);
+          printMessages(msgs, client, *session.identityKey, session.userId);
         } else {
           printMessages(msgs);
         }
@@ -212,8 +216,8 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
                      std::back_inserter(results),
                      [senderId](const kd::Message& m) { return m.senderId == senderId; });
         if (results.empty()) {
-          std::cout << "No cached messages from user " << senderId
-                    << ". Run 'messages' first." << std::endl;
+          std::cout << "No cached messages from user " << senderId << ". Run 'messages' first."
+                    << std::endl;
         } else {
           for (const auto& m : results) {
             std::cout << m.formatted() << std::endl;

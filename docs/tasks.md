@@ -84,7 +84,7 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [x] **Cr2. Implement TOFU key pinning**
   `Client::getPublicKey` fetches from the server on every call with no caching or pinning. A compromised server can silently substitute any key. On first contact with a user, store their public key in `~/.kingdom/keys/known_keys.json` (keyed by userId). On subsequent lookups compare and throw if the key has changed, warning the user explicitly.
 
-- [ ] **Cr3. Bind ciphertext to conversation context**
+- [x] **Cr3. Bind ciphertext to conversation context**
   `crypto_box_easy` has no associated data field. A server can copy ciphertext from one conversation into another — the recipient cannot detect this. Prepend a MAC over `conversationId || senderId || recipientId || nonce || ciphertext` using `crypto_auth` (HMAC-SHA512256) with a key derived from the DH shared secret. Verify the MAC before decrypting.
 
 - [ ] **Cr4. Upgrade Argon2id parameters for at-rest key**
