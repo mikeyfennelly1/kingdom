@@ -46,10 +46,10 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [x] **N5. Add security response headers**
   Add `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, and `X-Frame-Options: DENY` to all server responses via a post-routing handler in `Controller.cc`.
 
-- [ ] **N6. Fix `ValidateAuthenticated` to reject missing tokens**
+- [x] **N6. Fix `ValidateAuthenticated` to reject missing tokens**
   `ValidateAuthenticated::Validate` currently returns `std::nullopt` (pass) when no `Authorization` header is present — it only rejects malformed or invalid tokens. A request with no auth header at all passes through the filter and reaches the route handler. Fix it to return a 401 response whenever the header is absent or does not start with `Bearer `.
 
-- [ ] **N7. Implement `ValidateSenderAuthenticity`**
+- [x] **N7. Implement `ValidateSenderAuthenticity`**
   `ValidateSenderAuthenticity::Validate` is a stub that returns `std::nullopt` unconditionally. Implement it: extract the JWT-authenticated user ID from the `Authorization` header; for POST requests with a JSON body containing a `senderId` field, verify that `senderId == authenticatedUserId`. Return 403 if they differ. This prevents a user from posting messages attributed to another user even if they have a valid token.
 
 ---

@@ -26,7 +26,13 @@ std::string promptLine(const std::string& prompt) {
 
 uint64_t promptId(const std::string& prompt) {
   auto value = promptLine(prompt);
-  return std::stoull(value);
+  try {
+    return std::stoull(value);
+  } catch (const std::invalid_argument&) {
+    throw std::runtime_error("invalid id: '" + value + "' is not a number");
+  } catch (const std::out_of_range&) {
+    throw std::runtime_error("invalid id: '" + value + "' is out of range");
+  }
 }
 
 std::vector<uint64_t> parseIds(const std::string& line) {
