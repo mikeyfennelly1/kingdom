@@ -57,7 +57,17 @@ class ValidateUntampered : public SecurityPredicate {
  public:
   auto Validate(const httplib::Request& req) -> std::optional<SecurityError> override {
     spdlog::debug("Executing SecurityPredicate: ValidateUntampered");
-    return std::nullopt;  // Stub
+
+    if (req.method != "POST" && req.method != "PUT") {
+      return std::nullopt;
+    }
+
+    const auto contentType = req.get_header_value("Content-Type");
+    if (contentType.empty() || contentType.find("application/json") == std::string::npos) {
+      return SecurityError{"Content-Type must be application/json", 400};
+    }
+
+    return std::nullopt;
   }
 };
 
