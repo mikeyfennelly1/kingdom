@@ -207,4 +207,14 @@ void Database::updateMessageBlockchainDigest(uint64_t msgId, const std::string& 
   txn.commit();
 }
 
+bool Database::isParticipant(uint64_t conversationId, uint64_t userId) {
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(userId)};
+  auto result = txn.exec(
+      "SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2",
+      params);
+  txn.commit();
+  return !result.empty();
+}
+
 }  // namespace kd

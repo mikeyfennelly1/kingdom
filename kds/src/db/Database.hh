@@ -42,6 +42,9 @@ class Database {
   // Update the blockchain_digest field of a message after on-chain recording.
   void updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest);
 
+  // Returns true if userId is a participant in conversationId.
+  bool isParticipant(uint64_t conversationId, uint64_t userId);
+
  private:
   void initSchema_();
 

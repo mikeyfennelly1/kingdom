@@ -409,6 +409,11 @@ void Controller::messageController_() {
                return;
              }
              uint64_t convId = std::stoull(std::string(req.matches[1]));
+             if (!db_.isParticipant(convId, *authenticatedUserId)) {
+               res.status = 403;
+               res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
+               return;
+             }
              auto msgs = db_.getMessagesByConversationId(convId);
              nlohmann::json result = msgs;
              res.set_content(result.dump(), "application/json");
