@@ -61,7 +61,8 @@ nlohmann::json Client::getInfo() {
 nlohmann::json Client::getConversations(uint64_t userId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/users/" + std::to_string(userId) + "/conversations";
-  if (auto res = cli.Get(path.c_str())) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Get(path, headers)) {
     if (res->status == 200) {
       return nlohmann::json::parse(res->body);
     }
@@ -164,7 +165,8 @@ nlohmann::json Client::createConversation(const std::string& name,
                                           const std::vector<uint64_t>& participantIds) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   nlohmann::json body = {{"name", name}, {"participantIds", participantIds}};
-  if (auto res = cli.Post("/conversations", body.dump(), "application/json")) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Post("/conversations", headers, body.dump(), "application/json")) {
     if (res->status == 200 || res->status == 201)
       return nlohmann::json::parse(res->body);
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
@@ -190,7 +192,8 @@ nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
 nlohmann::json Client::getMessages(uint64_t conversationId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
-  if (auto res = cli.Get(path)) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Get(path, headers)) {
     if (res->status == 200)
       return nlohmann::json::parse(res->body);
     throw std::runtime_error("Server returned status " + std::to_string(res->status));

@@ -1,7 +1,6 @@
 add_library(kd SHARED
     src/Conversation.cc
     src/Message.cc
-    src/MessageStore.cc
     src/Client.cc
     src/LocalKeyStore.cc
 )
