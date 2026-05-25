@@ -2,13 +2,34 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdlib>
+#include <mutex>
 #include <string>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 #include "JwtUtils.hh"
 #include "SecurityPredicate.hh"
 
 namespace kd {
+
+// In-memory blacklist for revoked JWT tokens. Populated on logout.
+// Tokens are stored verbatim and checked in ValidateAuthenticated.
+class TokenBlacklist {
+ public:
+  static void revoke(const std::string& token) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    tokens_.insert(token);
+  }
+
+  static bool isRevoked(const std::string& token) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return tokens_.count(token) > 0;
+  }
+
+ private:
+  inline static std::unordered_set<std::string> tokens_;
+  inline static std::mutex mutex_;
+};
 
 class ValidateSenderAuthenticity : public SecurityPredicate {
  public:
@@ -94,6 +115,9 @@ class ValidateAuthenticated : public SecurityPredicate {
     }
     if (!verifiedJwtPayload(*token, std::string(secret)).has_value()) {
       return SecurityError{"invalid or expired session token", 401};
+    }
+    if (TokenBlacklist::isRevoked(*token)) {
+      return SecurityError{"session has been revoked", 401};
     }
     return std::nullopt;
   }

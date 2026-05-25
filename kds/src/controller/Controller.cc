@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "../security/JwtUtils.hh"
+#include "../security/SecurityPredicates.hh"
 
 namespace kd {
 
@@ -240,10 +241,15 @@ void Controller::authController_() {
                     "application/json");
   });
 
-  // Logout endpoint
+  // Logout endpoint — revokes the token server-side so it cannot be reused
   svr_.Post("/logout", [](const httplib::Request& req, httplib::Response& res) {
-    spdlog::info("Logout request received: {}", req.body);
-    nlohmann::json response = {{"status", "success"}, {"message", "Token cleared client-side"}};
+    spdlog::info("Logout request received");
+    auto token = bearerToken(req);
+    if (token.has_value()) {
+      TokenBlacklist::revoke(*token);
+      spdlog::info("Token revoked");
+    }
+    nlohmann::json response = {{"status", "success"}, {"message", "Logged out"}};
     res.set_content(response.dump(), "application/json");
   });
 }
