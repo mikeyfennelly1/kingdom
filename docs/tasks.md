@@ -46,6 +46,12 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [ ] **N5. Add security response headers**
   Add `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, and `X-Frame-Options: DENY` to all server responses via a post-routing handler in `Controller.cc`.
 
+- [ ] **N6. Fix `ValidateAuthenticated` to reject missing tokens**
+  `ValidateAuthenticated::Validate` currently returns `std::nullopt` (pass) when no `Authorization` header is present — it only rejects malformed or invalid tokens. A request with no auth header at all passes through the filter and reaches the route handler. Fix it to return a 401 response whenever the header is absent or does not start with `Bearer `.
+
+- [ ] **N7. Implement `ValidateSenderAuthenticity`**
+  `ValidateSenderAuthenticity::Validate` is a stub that returns `std::nullopt` unconditionally. Implement it: extract the JWT-authenticated user ID from the `Authorization` header; for POST requests with a JSON body containing a `senderId` field, verify that `senderId == authenticatedUserId`. Return 403 if they differ. This prevents a user from posting messages attributed to another user even if they have a valid token.
+
 ---
 
 ## C++ — Code
@@ -65,8 +71,8 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
   - `MessageStore::findBySender` filtering correctness
   - `Conversation::hasParticipant` true/false cases
 
-- [ ] **C5. Remove `Message::signature` or implement it**
-  The field exists in the struct, is serialised to JSON, but is always `""`. It implies a capability that doesn't exist. Either remove it, or populate it with an Ed25519 signature over the payload using the sender's key (via `crypto_sign_detached`).
+- [ ] **C5. Implement Ed25519 message signatures**
+  `Message::signature` exists in the struct and is serialised to JSON but is always `""`. Implement it: at signup, generate an Ed25519 signing keypair (`crypto_sign_keypair`) alongside the X25519 keypair. Store the Ed25519 public key on the server (`PUT /users/{id}/public-key` already exists — extend it or add a separate field). In `LocalKeyStore::encryptMessage`, sign the plaintext payload with `crypto_sign_detached` and base64-encode the 64-byte signature into `Message::signature`. In `LocalKeyStore::decryptMessage`, after decryption verify the signature with `crypto_sign_verify_detached`; throw on failure. This also makes `ValidateSenderAuthenticity` (N7) cryptographically meaningful rather than just a JWT check.
 
 ---
 
@@ -83,6 +89,9 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 - [ ] **Cr4. Upgrade Argon2id parameters for at-rest key**
   `OPSLIMIT_INTERACTIVE` / `MEMLIMIT_INTERACTIVE` are tuned for fast interactive login, not for protecting a long-lived private key on disk. Change `LocalKeyStore::createForSignup()` to use `crypto_pwhash_OPSLIMIT_MODERATE` / `crypto_pwhash_MEMLIMIT_MODERATE` when deriving the key-encryption key.
+
+- [ ] **Cr5. Acknowledge forward secrecy absence in code**
+  The spec rubric explicitly requires that "forward secrecy properties (or their absence) are acknowledged honestly." The current implementation uses static long-term X25519 keys — compromise of a private key retroactively exposes all past messages. Add a `// NOTE:` comment block in `LocalKeyStore.cc` above `encryptMessage` documenting this: state that static keys are used, that there is no ephemeral key exchange or ratcheting, and what the implication is (no forward secrecy). This is a required acknowledgement, not optional.
 
 ---
 
