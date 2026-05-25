@@ -41,9 +41,12 @@ app.post("/record", async (req, res) => {
 
   try {
     const tx = await contract.recordHash(conversationId, hash);
-    await tx.wait();
-    console.log(`Recorded hash for conversation ${conversationId}: ${hash} (tx: ${tx.hash})`);
+    // Respond immediately with the tx hash — do not block on mining confirmation.
     res.json({ txHash: tx.hash });
+    // Confirm mining in the background.
+    tx.wait()
+      .then(() => console.log(`Confirmed on-chain: conversation ${conversationId} hash ${hash} (tx: ${tx.hash})`))
+      .catch((err) => console.error(`Mining failed for tx ${tx.hash}:`, err.message));
   } catch (err) {
     console.error(`Failed to record hash for conversation ${conversationId}:`, err.message);
     res.status(500).json({ error: "failed to record hash on-chain" });

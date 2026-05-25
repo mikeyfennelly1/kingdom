@@ -3,3 +3,5 @@
 /.env
 /.gitignored
 certs/*.key
+blockchain/.env
+blockchain/sidecar/.env
