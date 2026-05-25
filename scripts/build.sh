@@ -5,8 +5,9 @@
 cd "$(dirname "$0")/.."
 
 # Define the build command
-# We use cmake and ninja directly since go-task is excluded from the shell
-BUILD_CMD="cmake -B build -GNinja && cmake --build build"
+# Default to Release build for optimized performance unless specified otherwise
+BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
+BUILD_CMD="cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} && cmake --build build"
 
 echo "========================================================="
 echo " Building Kingdom with Pinned Nix Dependencies "

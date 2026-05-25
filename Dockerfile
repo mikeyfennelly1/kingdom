@@ -17,10 +17,8 @@ RUN DEVBOX_DEBUG=1 NIX_CONFIG="connect-timeout = 30" devbox install
 # Copy the rest of the source code
 COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} . .
 
-# Build the project using the devbox environment
-# We use 'devbox run' to ensure the environment (compilers, libs) is active
-RUN devbox run cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release
-RUN devbox run cmake --build build
+# Build the project using the build script
+RUN ./scripts/build.sh
 
 # Stage 2: Runtime
 FROM jetpackio/devbox:0.17.0
