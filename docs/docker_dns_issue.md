@@ -61,7 +61,32 @@ Docker runs an internal DNS server at **`127.0.0.11`**.
 *   **Hypothesis A:** The 5-second timeout is a hardcoded limit in the specific version of `devbox` (0.17.0) for its initial "pre-flight" network checks.
 *   **Hypothesis B:** DNS resolution is taking ~4.5 seconds due to `ndots` or IPv6 timeouts, leaving only 0.5 seconds for the actual HTTPS handshake, which then fails.
 
-## 5. Recommended Next Steps
-1.  **Explicit DNS:** Pass `--dns 8.8.8.8` to the build command to bypass host DNS glitches.
-2.  **Network Host Mode:** Temporarily use `--network host` during the build to see if the Docker bridge network is the bottleneck.
-3.  **MTU Reduction:** Force a lower MTU (e.g., 1400) in the Docker daemon or via build arguments.
+## 6. Advanced Network Diagnostics
+To gain visibility into where packets are being dropped or delayed, the following tools can be used from within a Docker container to simulate the `devbox` traffic.
+
+### A. Using `mtr` (My Traceroute)
+`mtr` combines ping and traceroute to provide a per-hop analysis. Crucially, it should be run using TCP on port 443 to match HTTPS traffic patterns.
+
+```bash
+docker run --rm -it alpine sh -c "apk add mtr && mtr -r -w -T -P 443 cache.nixos.org"
+```
+
+**Flags:**
+* `-r`: Report mode (non-interactive).
+* `-w`: Wide report (full hostnames).
+* `-T`: Use TCP instead of ICMP.
+* `-P 443`: Target the HTTPS port.
+
+**Analysis:**
+* **Hop 1 (172.x.x.x):** If loss occurs here, the issue is local to the Docker bridge/MTU.
+* **Intermediate Hops:** `???` or `100% loss` indicates a specific router or ISP backbone is dropping the packets.
+* **Final Hop:** If the trace completes but the build still fails, the issue is likely at the TLS handshake or Application layer.
+
+### B. Packet Inspection with `tcpdump`
+If `mtr` confirms the path is clear, `tcpdump` can be used to observe the TCP handshake (SYN/ACK) in real-time.
+
+```bash
+docker run --rm --cap-add=NET_ADMIN -it alpine sh -c "apk add tcpdump && tcpdump -i eth0 host cache.nixos.org"
+```
+
+This will reveal if the connection is being explicitly **Reset (RST)** by a middlebox or if the remote end is failing to respond after the initial SYN packet.
