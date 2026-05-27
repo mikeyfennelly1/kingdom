@@ -14,10 +14,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: determinate-systems/nix-installer-action@main
+       uses: DeterminateSystems/nix-installer-action@main
 
       - name: Setup Nix cache
-        uses: determinate-systems/magic-nix-cache-action@main
+        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Make build script executable
         run: chmod +x ./scripts/build.sh
