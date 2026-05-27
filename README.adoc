@@ -140,13 +140,11 @@ exit                Quit
 [source,bash]
 ----
 ./build/kdctl/kdctl health
-./build/kdctl/kdctl signup -u alice -p hunter2
-./build/kdctl/kdctl login -u alice -p hunter2
-./build/kdctl/kdctl conversations -u <user-id>
-./build/kdctl/kdctl create-conversation -n "My Chat" -p <user-id> -p <user-id>
-./build/kdctl/kdctl send -c <conversation-id> -u <sender-id> -m "Hello"
-./build/kdctl/kdctl messages -c <conversation-id>
+./build/kdctl/kdctl info
 ----
+
+Authenticated messaging commands are available in the interactive shell, where the CLI can keep
+session state and unlock the local private key needed for end-to-end encryption.
 
 == Blockchain Sidecar
 
