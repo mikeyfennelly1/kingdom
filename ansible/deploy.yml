@@ -1,0 +1,95 @@
+# Ansible Playbook for deploying microservices to coruscant VM.
+#
+# The purpose of this playbook is to enable us to do the equivalent of
+# a `helm apply` on our infrastructure, so that the version of application
+# images can develop asymmetrically, and application releases not be coupled
+# to deployments.
+#
+# Note that you must have permissions to SSH into the VM to be able
+# to execute this playbook.
+
+- name: kds and postgres deployments
+  hosts: deployment_vm
+  vars_files:
+    - vars/app_values.yml
+    - vars/secrets.yml
+
+  tasks:
+    - name: Ensure pull destination exists
+      ansible.builtin.file:
+        path: "{{ repo_pull_dest }}"
+        state: directory
+        owner: deployment
+        group: deployment
+        mode: '0755'
+
+    - name: Pull parent repo
+      tags: pull
+      ansible.builtin.git:
+        repo: "{{ repo_ssh_url }}"
+        dest: "{{ repo_pull_dest }}"
+        version: "{{ repo_version | default('main') }}"
+        accept_hostkey: yes
+        recursive: no
+        force: yes
+      environment:
+        GIT_SSH_COMMAND: "ssh -i {{ gh_pull_key_file }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+    - name: Ensure certs directory exists
+      ansible.builtin.file:
+        path: "{{ repo_pull_dest }}/certs"
+        state: directory
+        owner: deployment
+        group: deployment
+        mode: '0755'
+
+    - name: Generate self-signed certificate if missing
+      ansible.builtin.shell: |
+        openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
+          -keyout certs/server.key \
+          -out certs/server.crt \
+          -subj "/CN=localhost" \
+          -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+      args:
+        chdir: "{{ repo_pull_dest }}"
+        creates: "{{ repo_pull_dest }}/certs/server.key"
+
+    - name: Write .env file
+      ansible.builtin.copy:
+        dest: "{{ repo_pull_dest }}/.env"
+        content: |
+          # Server Config
+          KD_PORT={{ kd_port | default(8080) }}
+          KD_LOG_LEVEL={{ kd_log_level | default('info') }}
+          KD_JWT_SECRET={{ kd_jwt_secret | default('change_me_to_a_secure_random_string_at_least_32_chars_long') }}
+          KD_TLS_CERT=certs/server.crt
+          KD_TLS_KEY=certs/server.key
+          
+          # Database Config
+          POSTGRES_PASSWORD={{ postgres_password }}
+          POSTGRES_USER={{ postgres_user }}
+          POSTGRES_DB={{ postgres_db }}
+          POSTGRES_PORT={{ postgres_port | default(5432) }}
+          POSTGRES_HOST=db
+          
+          # App Database URL
+          KD_DB_URL=postgres://{{ postgres_user }}:{{ postgres_password }}@db:5432/{{ postgres_db }}
+
+    - name: Stop old containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ repo_pull_dest }}"
+        state: absent
+      become: yes
+      ignore_errors: yes
+
+    - name: Pull latest images
+      community.docker.docker_compose_v2:
+        project_src: "{{ repo_pull_dest }}"
+        pull: always
+      become: yes
+
+    - name: Start stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ repo_pull_dest }}"
+        state: present
+      become: yes

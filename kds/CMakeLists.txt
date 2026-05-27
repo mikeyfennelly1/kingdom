@@ -1,7 +1,14 @@
+set(PKG_CONFIG_EXECUTABLE $ENV{PKG_CONFIG})
+
 file(GLOB_RECURSE KD_SERVER_SOURCES src/*.cc)
 
 add_executable(kds
     ${KD_SERVER_SOURCES}
+)
+
+add_custom_command(TARGET kds POST_BUILD
+  COMMAND ${CMAKE_SOURCE_DIR}/cmake/check-nix-linkage.sh
+          $<TARGET_FILE:kds>
 )
 
 target_link_libraries(kds

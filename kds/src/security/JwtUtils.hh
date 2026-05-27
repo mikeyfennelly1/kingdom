@@ -4,9 +4,11 @@
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <sodium.h>
 
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
@@ -93,14 +95,10 @@ inline std::string signJwtInput(const std::string& signingInput, const std::stri
 inline std::optional<std::string> bearerToken(const httplib::Request& req) {
   const auto header = req.get_header_value("Authorization");
   constexpr std::string_view prefix = "Bearer ";
-  if (header.rfind(prefix, 0) != 0) {
+  if (header.size() <= prefix.size() || header.compare(0, prefix.size(), prefix) != 0) {
     return std::nullopt;
   }
-  auto token = header.substr(prefix.size());
-  if (token.empty()) {
-    return std::nullopt;
-  }
-  return token;
+  return header.substr(prefix.size());
 }
 
 inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token,
@@ -110,6 +108,7 @@ inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token
     return std::nullopt;
   }
   const auto secondDot = token.find('.', firstDot + 1);
+
   if (secondDot == std::string::npos || token.find('.', secondDot + 1) != std::string::npos) {
     return std::nullopt;
   }
