@@ -6,12 +6,14 @@
 #include <openssl/hmac.h>
 #include <sodium.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace kd {
 
@@ -93,59 +95,10 @@ inline std::string signJwtInput(const std::string& signingInput, const std::stri
 inline std::optional<std::string> bearerToken(const httplib::Request& req) {
   const auto header = req.get_header_value("Authorization");
   constexpr std::string_view prefix = "Bearer ";
-  if (header.rfind(prefix, 0) != 0) {
+  if (header.size() <= prefix.size() || header.compare(0, prefix.size(), prefix) != 0) {
     return std::nullopt;
   }
-  auto token = header.substr(prefix.size());
-  if (token.empty()) {
-    return std::nullopt;
-  }
-  return token;
-  return std::chrono::duration_cast<std::chrono::seconds>(
-             std::chrono::system_clock::now().time_since_epoch())
-      .count();
-}
-
-inline std::string base64UrlEncode(const std::string& input) {
-  std::string output;
-  output.resize(sodium_base64_ENCODED_LEN(input.size(), sodium_base64_VARIANT_URLSAFE_NO_PADDING));
-  sodium_bin2base64(output.data(), output.size(),
-                    reinterpret_cast<const unsigned char*>(input.data()), input.size(),
-                    sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-  if (!output.empty() && output.back() == '\0') {
-    output.pop_back();
-  }
-  return output;
-}
-
-inline std::optional<std::string> base64UrlDecode(const std::string& input) {
-  std::vector<unsigned char> bin(input.size());
-  size_t binLen;
-  const char* end;
-  if (sodium_base642bin(bin.data(), bin.size(), input.data(), input.size(), nullptr, &binLen, &end,
-                        sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0) {
-    return std::nullopt;
-  }
-  return std::string(reinterpret_cast<char*>(bin.data()), binLen);
-}
-
-inline std::string signJwtInput(const std::string& input, const std::string& secret) {
-  unsigned char mac[crypto_auth_hmacsha256_BYTES];
-  unsigned char key[crypto_auth_hmacsha256_KEYBYTES];
-  std::memset(key, 0, sizeof(key));
-  std::memcpy(key, secret.data(), std::min(secret.size(), (size_t)crypto_auth_hmacsha256_KEYBYTES));
-
-  crypto_auth_hmacsha256(mac, reinterpret_cast<const unsigned char*>(input.data()), input.size(),
-                         key);
-  return base64UrlEncode(std::string(reinterpret_cast<char*>(mac), sizeof(mac)));
-}
-
-inline std::optional<std::string> bearerToken(const httplib::Request& req) {
-  auto auth = req.get_header_value("Authorization");
-  if (auth.size() > 7 && auth.substr(0, 7) == "Bearer ") {
-    return auth.substr(7);
-  }
-  return std::nullopt;
+  return header.substr(prefix.size());
 }
 
 inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token,
@@ -183,36 +136,6 @@ inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token
     return std::nullopt;
   }
   return payload;
-  size_t firstDot = token.find('.');
-  size_t lastDot = token.rfind('.');
-  if (firstDot == std::string::npos || lastDot == std::string::npos || firstDot == lastDot) {
-    return std::nullopt;
-  }
-
-  std::string signingInput = token.substr(0, lastDot);
-  std::string signature = token.substr(lastDot + 1);
-
-  if (signJwtInput(signingInput, secret) != signature) {
-    return std::nullopt;
-  }
-
-  std::string payloadBase64 = token.substr(firstDot + 1, lastDot - firstDot - 1);
-  auto payloadStr = base64UrlDecode(payloadBase64);
-  if (!payloadStr) {
-    return std::nullopt;
-  }
-
-  try {
-    auto payload = nlohmann::json::parse(*payloadStr);
-    if (payload.contains("exp") && payload["exp"].is_number()) {
-      if (payload["exp"].get<uint64_t>() < epochSeconds()) {
-        return std::nullopt;
-      }
-    }
-    return payload;
-  } catch (...) {
-    return std::nullopt;
-  }
 }
 
 }  // namespace kd
