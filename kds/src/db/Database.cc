@@ -275,7 +275,6 @@ std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversa
     msg.senderId = row[1].as<uint64_t>();
     msg.conversationId = row[2].as<uint64_t>();
     msg.payload = row[3].as<std::string>();
-    msg.signature = "";
     msg.timestamp = row[4].as<uint64_t>();
     msg.blockchainDigest = row[5].as<std::string>();
     messages.push_back(std::move(msg));
@@ -303,7 +302,6 @@ std::vector<kd::Message> Database::getMessagesByConversationIdForUser(uint64_t c
     msg.senderId = row[1].as<uint64_t>();
     msg.conversationId = row[2].as<uint64_t>();
     msg.payload = row[3].as<std::string>();
-    msg.signature = "";
     msg.timestamp = row[4].as<uint64_t>();
     msg.blockchainDigest = row[5].as<std::string>();
     messages.push_back(std::move(msg));
