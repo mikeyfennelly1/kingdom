@@ -230,3 +230,19 @@ TEST(MessageStoreTest, SavesAndLoadsPlaintextByMessageId) {
 
   std::filesystem::remove(path, ignored);
 }
+
+TEST(MessageStoreTest, DeletePlaintextRemovesCachedMessage) {
+  const auto path = std::filesystem::temp_directory_path() /
+                    "kingdom-message-store-delete-test.json";
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+
+  kd::MessageStore store(path);
+  store.savePlaintext(42, 7, 1, 123456, "cached hello");
+  ASSERT_EQ(store.getPlaintext(42), std::optional<std::string>("cached hello"));
+
+  store.deletePlaintext(42);
+  EXPECT_EQ(store.getPlaintext(42), std::nullopt);
+
+  std::filesystem::remove(path, ignored);
+}

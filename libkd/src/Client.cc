@@ -298,6 +298,20 @@ nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
+nlohmann::json Client::deleteMessage(uint64_t conversationId, uint64_t messageId) {
+  auto cli = makeClient(baseUrl_, caCertPath_);
+  std::string path = "/conversations/" + std::to_string(conversationId) + "/messages/" +
+                     std::to_string(messageId);
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Delete(path, headers)) {
+    if (res->status == 200) {
+      return nlohmann::json::parse(res->body);
+    }
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
+}
+
 nlohmann::json Client::getMessages(uint64_t conversationId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
