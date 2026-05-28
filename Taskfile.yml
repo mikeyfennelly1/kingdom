@@ -2,10 +2,9 @@ version: '3'
 
 tasks:
   build:
-    desc: Compiles the project using CMake and Ninja
+    desc: Compiles the project using CMake and Ninja (via Nix shell)
     cmds:
-      - cmake -B build -GNinja
-      - cmake --build build
+      - ./scripts/build.sh
 
   run:
     desc: Builds and executes the kds binary

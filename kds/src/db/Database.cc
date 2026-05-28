@@ -2,8 +2,10 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string_view>
 
@@ -105,6 +107,43 @@ std::vector<UserRow> Database::getAllUsers() {
     users.push_back({row[0].as<uint64_t>(), row[1].as<std::string>(), "", ""});
   }
   return users;
+}
+
+bool Database::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(userId)};
+  auto result =
+      txn.exec("SELECT COALESCE(public_key, '') FROM users WHERE id = $1 FOR UPDATE", params);
+  if (result.empty()) {
+    txn.commit();
+    return false;
+  }
+
+  auto bundle = nlohmann::json::parse(result[0][0].as<std::string>(), nullptr, false);
+  if (bundle.is_discarded() || !bundle.is_object() || !bundle.contains("oneTimePreKeys") ||
+      !bundle["oneTimePreKeys"].is_array()) {
+    txn.commit();
+    return false;
+  }
+
+  auto& oneTimePreKeys = bundle["oneTimePreKeys"];
+  const auto originalSize = oneTimePreKeys.size();
+  oneTimePreKeys.erase(std::remove_if(oneTimePreKeys.begin(), oneTimePreKeys.end(),
+                                      [preKeyId](const auto& key) {
+                                        return key.is_object() && key.contains("id") &&
+                                               key["id"].template get<uint64_t>() == preKeyId;
+                                      }),
+                       oneTimePreKeys.end());
+
+  if (oneTimePreKeys.size() == originalSize) {
+    txn.commit();
+    return false;
+  }
+
+  pqxx::params updateParams{bundle.dump(), static_cast<int64_t>(userId)};
+  txn.exec("UPDATE users SET public_key = $1 WHERE id = $2", updateParams);
+  txn.commit();
+  return true;
 }
 
 uint64_t Database::createConversation(const std::string& name,
@@ -217,6 +256,16 @@ void Database::updateMessageBlockchainDigest(uint64_t msgId, const std::string& 
   pqxx::params params{digest, static_cast<int64_t>(msgId)};
   txn.exec("UPDATE messages SET blockchain_digest = $1 WHERE id = $2", params);
   txn.commit();
+}
+
+bool Database::isParticipant(uint64_t conversationId, uint64_t userId) {
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(userId)};
+  auto result = txn.exec(
+      "SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2",
+      params);
+  txn.commit();
+  return !result.empty();
 }
 
 }  // namespace kd

@@ -1,0 +1,25 @@
+- name: Configure host with ansible
+  hosts: configure_vm
+  become: yes
+
+  tasks:
+    - name: Remove conflicting containerd.io
+      apt:
+        name: containerd.io
+        state: absent
+      tags: containerd_cnf
+
+    - name: Install docker.io
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+      tags: docker_install
+
+    - name: Ensure Docker is running
+      
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      tags: docker_enable

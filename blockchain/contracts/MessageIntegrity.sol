@@ -19,6 +19,9 @@ contract MessageIntegrity {
 
     error Unauthorized();
 
+    mapping(uint256 => bytes32) public hashes;
+    mapping(uint256 => uint256) public timestamps;
+
     constructor() {
         owner = msg.sender;
     }
@@ -32,6 +35,8 @@ contract MessageIntegrity {
     /// @param conversationId The ID of the conversation being recorded
     /// @param hash           keccak256 hash of the ciphertext payload
     function recordHash(uint256 conversationId, bytes32 hash) external onlyOwner {
+        hashes[conversationId] = hash;
+        timestamps[conversationId] = block.timestamp;
         emit HashRecorded(conversationId, hash, block.timestamp);
     }
 }

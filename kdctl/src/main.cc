@@ -15,6 +15,7 @@ struct ShellSession {
   uint64_t userId = 0;
   std::string username;
   std::optional<kd::LocalIdentityKey> identityKey;
+  std::vector<kd::Message> messageCache;
   kd::MessageStore messageStore;
 };
 
@@ -27,7 +28,13 @@ std::string promptLine(const std::string& prompt) {
 
 uint64_t promptId(const std::string& prompt) {
   auto value = promptLine(prompt);
-  return std::stoull(value);
+  try {
+    return std::stoull(value);
+  } catch (const std::invalid_argument&) {
+    throw std::runtime_error("invalid id: '" + value + "' is not a number");
+  } catch (const std::out_of_range&) {
+    throw std::runtime_error("invalid id: '" + value + "' is out of range");
+  }
 }
 
 std::vector<uint64_t> parseIds(const std::string& line) {
@@ -46,19 +53,31 @@ void printMessages(const nlohmann::json& msgs) {
   }
 }
 
-void printMessages(const nlohmann::json& msgs, kd::Client& client,
-                   const kd::LocalIdentityKey& identity) {
+void printMessages(const nlohmann::json& msgs, kd::Client& client, kd::LocalIdentityKey& identity,
+                   uint64_t recipientId, kd::MessageStore& store) {
   for (const auto& msg : msgs) {
+    const auto message = msg.get<kd::Message>();
     std::string displayText;
-    try {
-      auto senderPk = client.getPublicKey(msg["senderId"].get<uint64_t>());
-      displayText =
-          kd::LocalKeyStore::decryptMessage(msg["payload"].get<std::string>(), identity, senderPk);
-    } catch (const std::exception&) {
-      displayText = "[decryption failed]";
+
+    if (auto cachedPlaintext = store.getPlaintext(message.id); cachedPlaintext.has_value()) {
+      displayText = *cachedPlaintext;
+    } else {
+      try {
+        auto cached = store.getCachedPublicKey(message.senderId);
+        std::string senderPk = cached.has_value() ? *cached : client.getPublicKey(message.senderId);
+        store.cachePublicKey(message.senderId, senderPk);
+        displayText = kd::LocalKeyStore::decryptMessage(message.payload, identity, senderPk,
+                                                        message.conversationId, message.senderId,
+                                                        recipientId);
+        store.savePlaintext(message.id, message.conversationId, message.senderId,
+                            message.timestamp, displayText);
+      } catch (const std::exception&) {
+        displayText = "[decryption failed]";
+      }
     }
-    std::cout << "[" << msg["timestamp"] << "] "
-              << "User " << msg["senderId"] << ": " << displayText << std::endl;
+
+    std::cout << "[" << message.timestamp << "] "
+              << "User " << message.senderId << ": " << displayText << std::endl;
   }
 }
 
@@ -77,6 +96,7 @@ void completeLogin(ShellSession& session, kd::Client& client, const nlohmann::js
     auto identityKey = kd::LocalKeyStore::loadForLogin(username, password);
     rememberLogin(session, user);
     session.identityKey = std::move(identityKey);
+    session.messageStore = kd::MessageStore(username);
     std::cout << "Local private key unlocked." << std::endl;
   } catch (const std::exception& e) {
     client.clearAuthToken();
@@ -105,6 +125,13 @@ void printShellHelp() {
 
 void runShell(kd::Client& client, const std::string& serverUrl) {
   ShellSession session;
+
+  try {
+    client.getHealth();
+  } catch (const std::exception& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return;
+  }
 
   std::cout << "Kingdom Control shell" << std::endl;
   std::cout << "server: " << serverUrl << std::endl;
@@ -158,9 +185,9 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto participantIds = parseIds(promptLine("participants: "));
         if (session.loggedIn) {
           bool alreadyIncluded =
-              std::find_if(participantIds.begin(), participantIds.end(),
-                           [&session](uint64_t id) { return id == session.userId; }) !=
-              participantIds.end();
+              std::find_if(participantIds.begin(), participantIds.end(), [&session](uint64_t id) {
+                return id == session.userId;
+              }) != participantIds.end();
           if (!alreadyIncluded) {
             participantIds.push_back(session.userId);
           }
@@ -176,29 +203,37 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto messageText = promptLine("message: ");
         auto recipientPk = client.getPublicKey(recipientId);
         auto payload =
-            kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk);
+            kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk,
+                                              convId, session.userId, recipientId);
         std::cout << client.sendMessage(convId, session.userId, payload).dump(4) << std::endl;
+        auto usedPreKeyId = kd::LocalKeyStore::oneTimePreKeyIdFromPayload(payload);
+        if (usedPreKeyId.has_value()) {
+          client.consumeOneTimePreKey(recipientId, *usedPreKeyId);
+        }
       } else if (command == "messages") {
         auto convId = promptId("conversation id: ");
         auto msgs = client.getMessages(convId);
         std::sort(msgs.begin(), msgs.end(), [](const nlohmann::json& a, const nlohmann::json& b) {
           return a["timestamp"].get<uint64_t>() < b["timestamp"].get<uint64_t>();
         });
-        session.messageStore.clear();
+        session.messageCache.clear();
         for (const auto& m : msgs) {
-          session.messageStore.add(m.get<kd::Message>());
+          session.messageCache.push_back(m.get<kd::Message>());
         }
         if (session.loggedIn && session.identityKey.has_value()) {
-          printMessages(msgs, client, *session.identityKey);
+          printMessages(msgs, client, *session.identityKey, session.userId, session.messageStore);
         } else {
           printMessages(msgs);
         }
       } else if (command == "messages-from") {
         auto senderId = promptId("sender user id: ");
-        auto results = session.messageStore.findBySender(senderId);
+        std::vector<kd::Message> results;
+        std::copy_if(session.messageCache.begin(), session.messageCache.end(),
+                     std::back_inserter(results),
+                     [senderId](const kd::Message& m) { return m.senderId == senderId; });
         if (results.empty()) {
-          std::cout << "No cached messages from user " << senderId
-                    << ". Run 'messages' first." << std::endl;
+          std::cout << "No cached messages from user " << senderId << ". Run 'messages' first."
+                    << std::endl;
         } else {
           for (const auto& m : results) {
             std::cout << m.formatted() << std::endl;
@@ -234,40 +269,6 @@ int main(int argc, char** argv) {
   auto healthCmd = app.add_subcommand("health", "Check server health");
   auto infoCmd = app.add_subcommand("info", "Get server information");
 
-  auto convsCmd = app.add_subcommand("conversations", "List conversations for a user");
-  uint64_t userId = 0;
-  convsCmd->add_option("-u,--user-id", userId, "User ID to fetch conversations for")->required();
-
-  auto signupCmd = app.add_subcommand("signup", "Register a new user");
-  std::string username, password;
-  signupCmd->add_option("-u,--username", username, "Username")->required();
-  signupCmd->add_option("-p,--password", password, "Password")->required();
-
-  auto loginCmd = app.add_subcommand("login", "Log in as a user");
-  loginCmd->add_option("-u,--username", username, "Username")->required();
-  loginCmd->add_option("-p,--password", password, "Password")->required();
-
-  auto logoutCmd = app.add_subcommand("logout", "Log out current session");
-
-  auto createConvCmd = app.add_subcommand("create-conversation", "Create a new conversation");
-  std::string convName;
-  std::vector<uint64_t> participantIds;
-  createConvCmd->add_option("-n,--name", convName, "Conversation name")->required();
-  createConvCmd->add_option("-p,--participant", participantIds, "Participant user ID (repeatable)")
-      ->required();
-
-  auto sendCmd = app.add_subcommand("send", "Send a message to a conversation");
-  uint64_t convId = 0;
-  uint64_t senderId = 0;
-  std::string messageText;
-  sendCmd->add_option("-c,--conversation-id", convId, "Conversation ID")->required();
-  sendCmd->add_option("-u,--sender-id", senderId, "Sender user ID")->required();
-  sendCmd->add_option("-m,--message", messageText, "Message text")->required();
-
-  auto msgsCmd = app.add_subcommand("messages", "List messages in a conversation");
-  uint64_t msgsConvId = 0;
-  msgsCmd->add_option("-c,--conversation-id", msgsConvId, "Conversation ID")->required();
-
   CLI11_PARSE(app, argc, argv);
 
   // Construct URL if not explicitly provided via --server
@@ -284,20 +285,6 @@ int main(int argc, char** argv) {
       std::cout << client.getHealth().dump(4) << std::endl;
     } else if (infoCmd->parsed()) {
       std::cout << client.getInfo().dump(4) << std::endl;
-    } else if (convsCmd->parsed()) {
-      std::cout << client.getConversations(userId).dump(4) << std::endl;
-    } else if (signupCmd->parsed()) {
-      std::cout << client.signup(username, password).dump(4) << std::endl;
-    } else if (loginCmd->parsed()) {
-      std::cout << client.login(username, password).dump(4) << std::endl;
-    } else if (logoutCmd->parsed()) {
-      std::cout << client.logout().dump(4) << std::endl;
-    } else if (createConvCmd->parsed()) {
-      std::cout << client.createConversation(convName, participantIds).dump(4) << std::endl;
-    } else if (sendCmd->parsed()) {
-      std::cout << client.sendMessage(convId, senderId, messageText).dump(4) << std::endl;
-    } else if (msgsCmd->parsed()) {
-      printMessages(client.getMessages(msgsConvId));
     } else {
       std::cout << app.help() << std::endl;
     }

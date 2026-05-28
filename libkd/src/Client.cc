@@ -2,7 +2,9 @@
 
 #include <httplib.h>
 
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <system_error>
 
@@ -12,11 +14,19 @@ namespace {
 
 httplib::Client makeClient(const std::string& baseUrl, const std::string& caCertPath) {
   httplib::Client cli(baseUrl);
+  cli.enable_server_certificate_verification(true);
   if (!caCertPath.empty()) {
     cli.set_ca_cert_path(caCertPath);
-    cli.enable_server_certificate_verification(true);
   }
   return cli;
+}
+
+std::string connectError(const std::string& baseUrl, const std::string& caCertPath) {
+  if (caCertPath.empty() && baseUrl.rfind("https://", 0) == 0) {
+    return "TLS certificate verification failed — no CA certificate provided. Use --ca-cert to "
+           "specify one.";
+  }
+  return "Failed to connect to server at " + baseUrl;
 }
 
 httplib::Headers authHeaders(const std::string& authToken) {
@@ -24,6 +34,87 @@ httplib::Headers authHeaders(const std::string& authToken) {
   if (!authToken.empty())
     headers.emplace("Authorization", "Bearer " + authToken);
   return headers;
+}
+
+std::filesystem::path knownKeysPath() {
+  const char* home = std::getenv("HOME");
+  if (home == nullptr || std::string(home).empty()) {
+    throw std::runtime_error("HOME is not set; cannot choose known keys file path");
+  }
+  return std::filesystem::path(home) / ".kingdom" / "keys" / "known_keys.json";
+}
+
+nlohmann::json readKnownKeys(const std::filesystem::path& path) {
+  if (!std::filesystem::exists(path)) {
+    return nlohmann::json::object();
+  }
+
+  std::ifstream input(path);
+  if (!input) {
+    throw std::runtime_error("Failed to open known keys file for reading: " + path.string());
+  }
+
+  auto body = nlohmann::json::parse(input, nullptr, false);
+  if (body.is_discarded() || !body.is_object()) {
+    throw std::runtime_error("Known keys file is not valid JSON object: " + path.string());
+  }
+  return body;
+}
+
+void writeKnownKeys(const std::filesystem::path& path, const nlohmann::json& knownKeys) {
+  std::filesystem::create_directories(path.parent_path());
+
+  std::ofstream output(path, std::ios::out | std::ios::trunc);
+  if (!output) {
+    throw std::runtime_error("Failed to open known keys file for writing: " + path.string());
+  }
+  output << knownKeys.dump(2) << '\n';
+  if (!output) {
+    throw std::runtime_error("Failed to write known keys file: " + path.string());
+  }
+
+  std::filesystem::permissions(path,
+                               std::filesystem::perms::owner_read |
+                                   std::filesystem::perms::owner_write,
+                               std::filesystem::perm_options::replace);
+}
+
+std::string pinningAnchor(const std::string& publicKey) {
+  auto bundle = nlohmann::json::parse(publicKey, nullptr, false);
+  if (bundle.is_object() && bundle.contains("identityKey") && bundle.contains("signingKey")) {
+    return nlohmann::json{{"identityKey", bundle["identityKey"]},
+                          {"signingKey", bundle["signingKey"]}}
+        .dump();
+  }
+  return publicKey;
+}
+
+std::string pinPublicKey(uint64_t userId, const std::string& publicKey) {
+  const auto path = knownKeysPath();
+  auto knownKeys = readKnownKeys(path);
+  const auto key = std::to_string(userId);
+  const auto anchor = pinningAnchor(publicKey);
+
+  if (!knownKeys.contains(key)) {
+    knownKeys[key] = anchor;
+    writeKnownKeys(path, knownKeys);
+    return publicKey;
+  }
+
+  if (!knownKeys[key].is_string()) {
+    throw std::runtime_error("Known keys file has invalid entry for user " + key + ": " +
+                             path.string());
+  }
+
+  const auto pinnedKey = knownKeys[key].get<std::string>();
+  if (pinnedKey != anchor) {
+    throw std::runtime_error("WARNING: identity key changed for user " + key +
+                             ". Refusing to use the server-provided key because it does not match "
+                             "the key pinned in " +
+                             path.string());
+  }
+
+  return publicKey;
 }
 
 }  // namespace
@@ -42,7 +133,7 @@ nlohmann::json Client::getHealth() {
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   } else {
-    throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+    throw std::runtime_error(connectError(baseUrl_, caCertPath_));
   }
 }
 
@@ -54,20 +145,21 @@ nlohmann::json Client::getInfo() {
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   } else {
-    throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+    throw std::runtime_error(connectError(baseUrl_, caCertPath_));
   }
 }
 
 nlohmann::json Client::getConversations(uint64_t userId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/users/" + std::to_string(userId) + "/conversations";
-  if (auto res = cli.Get(path.c_str())) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Get(path, headers)) {
     if (res->status == 200) {
       return nlohmann::json::parse(res->body);
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   } else {
-    throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+    throw std::runtime_error(connectError(baseUrl_, caCertPath_));
   }
 }
 
@@ -81,7 +173,7 @@ nlohmann::json Client::signup(const std::string& username, const std::string& pa
   auto cli = makeClient(baseUrl_, caCertPath_);
   nlohmann::json body = {{"username", username},
                          {"password", password},
-                         {"publicKey", keyMaterial.publicKey}};
+                         {"publicKey", keyMaterial.publicKeyBundle}};
   if (auto res = cli.Post("/signup", body.dump(), "application/json")) {
     if (res->status == 200 || res->status == 201) {
       auto response = nlohmann::json::parse(res->body);
@@ -97,7 +189,7 @@ nlohmann::json Client::signup(const std::string& username, const std::string& pa
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
   cleanupLocalKey();
-  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::login(const std::string& username, const std::string& password) {
@@ -115,20 +207,20 @@ nlohmann::json Client::login(const std::string& username, const std::string& pas
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
-  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::logout() {
   auto cli = makeClient(baseUrl_, caCertPath_);
   auto headers = authHeaders(authToken_);
-  if (auto res = cli.Post("/logout", headers)) {
+  if (auto res = cli.Post("/logout", headers, "{}", "application/json")) {
     if (res->status == 200) {
       clearAuthToken();
       return nlohmann::json::parse(res->body);
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
-  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 void Client::setAuthToken(const std::string& authToken) {
@@ -150,26 +242,45 @@ void Client::clearSessionToken() {
 std::string Client::getPublicKey(uint64_t userId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/users/" + std::to_string(userId) + "/public-key";
-  if (auto res = cli.Get(path)) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Get(path, headers)) {
     if (res->status == 200) {
       auto body = nlohmann::json::parse(res->body);
-      return body["publicKey"].get<std::string>();
+      if (!body.contains("publicKey") || !body["publicKey"].is_string()) {
+        throw std::runtime_error("Server public-key response is missing publicKey");
+      }
+      return pinPublicKey(userId, body["publicKey"].get<std::string>());
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
-  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
+}
+
+void Client::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
+  auto cli = makeClient(baseUrl_, caCertPath_);
+  std::string path = "/users/" + std::to_string(userId) + "/one-time-prekeys/" +
+                     std::to_string(preKeyId) + "/consume";
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Post(path, headers, "", "application/json")) {
+    if (res->status == 200 || res->status == 204 || res->status == 404) {
+      return;
+    }
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::createConversation(const std::string& name,
                                           const std::vector<uint64_t>& participantIds) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   nlohmann::json body = {{"name", name}, {"participantIds", participantIds}};
-  if (auto res = cli.Post("/conversations", body.dump(), "application/json")) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Post("/conversations", headers, body.dump(), "application/json")) {
     if (res->status == 200 || res->status == 201)
       return nlohmann::json::parse(res->body);
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
-  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
@@ -184,18 +295,19 @@ nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
       return nlohmann::json::parse(res->body);
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
-  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::getMessages(uint64_t conversationId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
-  if (auto res = cli.Get(path)) {
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Get(path, headers)) {
     if (res->status == 200)
       return nlohmann::json::parse(res->body);
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
-  throw std::runtime_error("Failed to connect to server at " + baseUrl_);
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 }  // namespace kd

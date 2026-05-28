@@ -162,8 +162,11 @@
     import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.min.js";
 
     // -- Configuration --
-    const CONTRACT_ADDRESS = "0xf9Ceb04B978523D92CE812386c55709002E59a53";
-    const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
+    const CONTRACT_ADDRESS = "0xCBc9381314d6f5797E840C9DD68063C2082B9d63";
+    const RPC_URLS = [
+      "https://ethereum-sepolia-rpc.publicnode.com",
+      "https://rpc.sepolia.org",
+    ];
 
     const EVENT_ABI = [
       "event HashRecorded(uint256 indexed conversationId, bytes32 hash, uint256 timestamp)"
@@ -188,13 +191,21 @@
       spinner.style.display = "block";
 
       try {
-        const provider = new ethers.JsonRpcProvider(RPC_URL);
+        let provider = null;
+        let receipt = null;
+        for (const url of RPC_URLS) {
+          try {
+            provider = new ethers.JsonRpcProvider(url);
+            receipt = await provider.getTransactionReceipt(txHash);
+            if (receipt) break;
+          } catch (_) {
+            // try next RPC
+          }
+        }
 
         // Compute hash of the provided ciphertext
         const computedHash = ethers.keccak256(ethers.toUtf8Bytes(ciphertext));
 
-        // Fetch the transaction receipt
-        const receipt = await provider.getTransactionReceipt(txHash);
         if (!receipt) {
           showError("Transaction not found on Sepolia. Check the hash and try again.");
           return;

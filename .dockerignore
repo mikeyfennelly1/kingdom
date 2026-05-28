@@ -1,0 +1,8 @@
+build/
+.devbox/
+.git/
+.cache/
+docs/spec.pdf
+*.o
+*.a
+*.so

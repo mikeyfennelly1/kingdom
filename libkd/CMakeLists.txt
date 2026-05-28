@@ -4,6 +4,12 @@ add_library(kd SHARED
     src/MessageStore.cc
     src/Client.cc
     src/LocalKeyStore.cc
+    src/MessageStore.cc
+)
+
+add_custom_command(TARGET kd POST_BUILD
+  COMMAND ${CMAKE_SOURCE_DIR}/cmake/check-nix-linkage.sh
+          $<TARGET_FILE:kd>
 )
 
 target_link_libraries(kd

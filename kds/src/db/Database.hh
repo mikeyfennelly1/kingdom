@@ -29,6 +29,9 @@ class Database {
   // List all registered users (id + username only, no password hash).
   std::vector<UserRow> getAllUsers();
 
+  // Removes a published one-time prekey from the user's JSON key bundle.
+  bool consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId);
+
   // Create a conversation and add participants. Returns conversation id.
   uint64_t createConversation(const std::string& name, const std::vector<uint64_t>& participantIds);
 
@@ -44,6 +47,9 @@ class Database {
 
   // Update the blockchain_digest field of a message after on-chain recording.
   void updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest);
+
+  // Returns true if userId is a participant in conversationId.
+  bool isParticipant(uint64_t conversationId, uint64_t userId);
 
  private:
   void initSchema_();

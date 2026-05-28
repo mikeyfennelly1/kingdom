@@ -6,11 +6,13 @@
 #include <cstdint>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
 
 #include "../security/JwtUtils.hh"
+#include "../security/SecurityPredicates.hh"
 
 namespace kd {
 
@@ -72,6 +74,12 @@ void Controller::setupRoutes() {
       return httplib::Server::HandlerResponse::Handled;
     }
     return httplib::Server::HandlerResponse::Unhandled;
+  });
+
+  svr_.set_post_routing_handler([](const httplib::Request&, httplib::Response& res) {
+    res.set_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    res.set_header("X-Content-Type-Options", "nosniff");
+    res.set_header("X-Frame-Options", "DENY");
   });
 
   notFoundHandler_();
@@ -245,10 +253,15 @@ void Controller::authController_() {
                     "application/json");
   });
 
-  // Logout endpoint
+  // Logout endpoint — revokes the token server-side so it cannot be reused
   svr_.Post("/logout", [](const httplib::Request& req, httplib::Response& res) {
-    spdlog::info("Logout request received: {}", req.body);
-    nlohmann::json response = {{"status", "success"}, {"message", "Token cleared client-side"}};
+    spdlog::info("Logout request received");
+    auto token = bearerToken(req);
+    if (token.has_value()) {
+      TokenBlacklist::revoke(*token);
+      spdlog::info("Token revoked");
+    }
+    nlohmann::json response = {{"status", "success"}, {"message", "Logged out"}};
     res.set_content(response.dump(), "application/json");
   });
 }
@@ -299,6 +312,26 @@ void Controller::publicKeyController_() {
              res.set_content(nlohmann::json{{"userId", userId}, {"publicKey", *publicKey}}.dump(),
                              "application/json");
            });
+
+  svr_.Post(R"(/users/(\d+)/one-time-prekeys/(\d+)/consume)",
+            [this](const httplib::Request& req, httplib::Response& res) -> void {
+              auto authenticatedUserId = authenticatedUserId_(req);
+              if (!authenticatedUserId.has_value()) {
+                res.status = 401;
+                res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
+                                "application/json");
+                return;
+              }
+              uint64_t userId = std::stoull(std::string(req.matches[1]));
+              uint64_t preKeyId = std::stoull(std::string(req.matches[2]));
+              if (!db_.consumeOneTimePreKey(userId, preKeyId)) {
+                res.status = 404;
+                res.set_content(nlohmann::json{{"error", "one-time prekey not found"}}.dump(),
+                                "application/json");
+                return;
+              }
+              res.set_content(nlohmann::json{{"status", "consumed"}}.dump(), "application/json");
+            });
 }
 
 void Controller::conversationController_() {
@@ -328,6 +361,14 @@ void Controller::conversationController_() {
     }
 
     auto participantIds = body["participantIds"].get<std::vector<uint64_t>>();
+
+    std::set<uint64_t> seen(participantIds.begin(), participantIds.end());
+    if (seen.size() != participantIds.size()) {
+      res.status = 400;
+      res.set_content(nlohmann::json{{"error", "participantIds must not contain duplicates"}}.dump(),
+                      "application/json");
+      return;
+    }
 
     uint64_t id = db_.createConversation(name, participantIds);
     spdlog::info("Created conversation '{}' with id {}", name, id);
@@ -392,6 +433,11 @@ void Controller::messageController_() {
                       "application/json");
       return;
     }
+    if (!db_.isParticipant(convId, *authenticatedUserId)) {
+      res.status = 403;
+      res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
+      return;
+    }
 
     auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::system_clock::now().time_since_epoch())
@@ -436,6 +482,11 @@ void Controller::messageController_() {
                return;
              }
              uint64_t convId = std::stoull(std::string(req.matches[1]));
+             if (!db_.isParticipant(convId, *authenticatedUserId)) {
+               res.status = 403;
+               res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
+               return;
+             }
              auto msgs = db_.getMessagesByConversationId(convId);
              nlohmann::json result = msgs;
              res.set_content(result.dump(), "application/json");
