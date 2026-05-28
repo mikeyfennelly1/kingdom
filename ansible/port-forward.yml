@@ -1,0 +1,48 @@
+---
+- name: Configure Port Forwarding
+  hosts: "{{ target_hosts | default('configure_vm') }}"
+  become: yes
+  vars_files:
+    - vars/app_values.yml
+
+  tasks:
+    - name: Enable IPv4 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    - name: Ensure iptables-persistent is installed
+      apt:
+        name: iptables-persistent
+        state: present
+        update_cache: yes
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Forward target port to destination port (PREROUTING)
+      ansible.builtin.iptables:
+        table: nat
+        chain: PREROUTING
+        protocol: "{{ protocol }}"
+        destination_port: "{{ target_port }}"
+        jump: REDIRECT
+        to_ports: "{{ destination_port }}"
+        comment: "Forward {{ target_port }} to {{ destination_port }}"
+
+    - name: Forward target port to destination port (OUTPUT - for local traffic)
+      ansible.builtin.iptables:
+        table: nat
+        chain: OUTPUT
+        protocol: "{{ protocol }}"
+        destination: 127.0.0.1
+        destination_port: "{{ target_port }}"
+        jump: REDIRECT
+        to_ports: "{{ destination_port }}"
+        comment: "Local Forward {{ target_port }} to {{ destination_port }}"
+
+    - name: Save iptables rules
+      shell: netfilter-persistent save
+      changed_when: false
