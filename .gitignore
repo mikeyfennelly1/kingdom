@@ -5,3 +5,4 @@
 certs/*.key
 blockchain/.env
 blockchain/sidecar/.env
+.clangd

@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 # Define the build command
 # Default to Release build for optimized performance unless specified otherwise
 BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
-BUILD_CMD="cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} && cmake --build build"
+BUILD_CMD="cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build build"
 
 echo "========================================================="
 echo " Building Kingdom with Pinned Nix Dependencies "
