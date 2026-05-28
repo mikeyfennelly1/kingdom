@@ -137,4 +137,10 @@ void MessageStore::savePlaintext(uint64_t messageId, uint64_t conversationId, ui
   writeStore(storePath_, store);
 }
 
+void MessageStore::deletePlaintext(uint64_t messageId) const {
+  auto store = readStore(storePath_);
+  store["messages"].erase(std::to_string(messageId));
+  writeStore(storePath_, store);
+}
+
 }  // namespace kd

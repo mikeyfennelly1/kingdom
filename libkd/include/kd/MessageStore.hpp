@@ -27,6 +27,7 @@ class MessageStore {
   [[nodiscard]] std::optional<std::string> getPlaintext(uint64_t messageId) const;
   void savePlaintext(uint64_t messageId, uint64_t conversationId, uint64_t senderId,
                      uint64_t timestamp, const std::string& plaintext) const;
+  void deletePlaintext(uint64_t messageId) const;
 
  private:
   std::vector<Message> messages_;

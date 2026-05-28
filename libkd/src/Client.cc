@@ -213,7 +213,7 @@ nlohmann::json Client::login(const std::string& username, const std::string& pas
 nlohmann::json Client::logout() {
   auto cli = makeClient(baseUrl_, caCertPath_);
   auto headers = authHeaders(authToken_);
-  if (auto res = cli.Post("/logout", headers)) {
+  if (auto res = cli.Post("/logout", headers, "{}", "application/json")) {
     if (res->status == 200) {
       clearAuthToken();
       return nlohmann::json::parse(res->body);
@@ -293,6 +293,20 @@ nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
   if (auto res = cli.Post(path, headers, body.dump(), "application/json")) {
     if (res->status == 200 || res->status == 201)
       return nlohmann::json::parse(res->body);
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
+}
+
+nlohmann::json Client::deleteMessage(uint64_t conversationId, uint64_t messageId) {
+  auto cli = makeClient(baseUrl_, caCertPath_);
+  std::string path = "/conversations/" + std::to_string(conversationId) + "/messages/" +
+                     std::to_string(messageId);
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Delete(path, headers)) {
+    if (res->status == 200) {
+      return nlohmann::json::parse(res->body);
+    }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));

@@ -1,4 +1,4 @@
-name: Build
+name: build
 
 on:
   pull_request:
@@ -7,14 +7,13 @@ on:
 
 jobs:
   build:
-    name: Build Kingdom
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Nix
-       uses: DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@main
 
       - name: Setup Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@main

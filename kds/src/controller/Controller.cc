@@ -454,6 +454,37 @@ void Controller::messageController_() {
     res.set_content(result.dump(), "application/json");
   });
 
+  svr_.Delete(R"(/conversations/(\d+)/messages/(\d+))",
+              [this](const httplib::Request& req, httplib::Response& res) -> void {
+                auto authenticatedUserId = authenticatedUserId_(req);
+                if (!authenticatedUserId.has_value()) {
+                  res.status = 401;
+                  res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
+                                  "application/json");
+                  return;
+                }
+
+                uint64_t convId = std::stoull(std::string(req.matches[1]));
+                uint64_t messageId = std::stoull(std::string(req.matches[2]));
+                if (!db_.isParticipant(convId, *authenticatedUserId)) {
+                  res.status = 403;
+                  res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(),
+                                  "application/json");
+                  return;
+                }
+
+                if (!db_.deleteMessage(convId, messageId, *authenticatedUserId)) {
+                  res.status = 404;
+                  res.set_content(nlohmann::json{{"error", "message not found"}}.dump(),
+                                  "application/json");
+                  return;
+                }
+
+                res.set_content(nlohmann::json{{"status", "deleted"},
+                                               {"messageId", messageId}}.dump(),
+                                "application/json");
+              });
+
   svr_.Get(R"(/conversations/(\d+)/messages)",
            [this](const httplib::Request& req, httplib::Response& res) -> void {
              auto authenticatedUserId = authenticatedUserId_(req);
