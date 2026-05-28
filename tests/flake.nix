@@ -3,8 +3,8 @@
 pkgs.mkShell {
   buildInputs = [
     pkgs.nodejs_20_x
-    pkgs.nodePackages.typescript@5.4.5
-    pkgs.nodePackages.ts-node
+    pkgs.nodePackages.typescript
+    pkgs.nodintroduction tacticts-node
   ];
 
   shellHook = ''
