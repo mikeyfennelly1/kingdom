@@ -77,8 +77,8 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
   - `MessageStore::findBySender` filtering correctness
   - `Conversation::hasParticipant` true/false cases
 
-- [ ] **C5. Implement Ed25519 message signatures**
-  `Message::signature` exists in the struct and is serialised to JSON but is always `""`. Implement it: at signup, generate an Ed25519 signing keypair (`crypto_sign_keypair`) alongside the X25519 keypair. Store the Ed25519 public key on the server (`PUT /users/{id}/public-key` already exists — extend it or add a separate field). In `LocalKeyStore::encryptMessage`, sign the plaintext payload with `crypto_sign_detached` and base64-encode the 64-byte signature into `Message::signature`. In `LocalKeyStore::decryptMessage`, after decryption verify the signature with `crypto_sign_verify_detached`; throw on failure. This also makes `ValidateSenderAuthenticity` (N7) cryptographically meaningful rather than just a JWT check.
+- [ ] **C5. Remove unused `Message::signature` stub**
+  `Message::signature` exists in the struct, is serialised via `NLOHMANN_DEFINE_TYPE_INTRUSIVE`, and is hardcoded to `""` in `Database.cc:234`. It is never populated. Explicit message signatures are not needed: X3DH provides implicit sender authentication via `DH1 = X25519(sender.IK_priv, recipient.SPK_pub)` — if AEAD decryption succeeds, the recipient has cryptographic proof only the holder of the sender's identity private key could have produced the message. Adding explicit Ed25519 signatures would break deniability (a deliberate property of the design). Remove the `signature` field from `Message.hpp`, the `NLOHMANN_DEFINE_TYPE_INTRUSIVE` macro, and `Database.cc`. This turns dead code into an honest struct.
 
 - [x] **C6. Add `std::set` usage**
   The spec names `std::set` explicitly alongside `std::map` and it does not appear in the codebase. Used `std::set<uint64_t>` in `POST /conversations` to detect duplicate participant IDs and return a 400 error instead of crashing with a DB constraint violation.
@@ -96,8 +96,8 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 - [x] **Cr3. Bind ciphertext to conversation context**
   `crypto_box_easy` has no associated data field. A server can copy ciphertext from one conversation into another — the recipient cannot detect this. Prepend a MAC over `conversationId || senderId || recipientId || nonce || ciphertext` using `crypto_auth` (HMAC-SHA512256) with a key derived from the DH shared secret. Verify the MAC before decrypting.
 
-- [ ] **Cr4. Upgrade Argon2id parameters for at-rest key**
-  `OPSLIMIT_INTERACTIVE` / `MEMLIMIT_INTERACTIVE` are tuned for fast interactive login, not for protecting a long-lived private key on disk. Change `LocalKeyStore::createForSignup()` to use `crypto_pwhash_OPSLIMIT_MODERATE` / `crypto_pwhash_MEMLIMIT_MODERATE` when deriving the key-encryption key.
+- [x] **Cr4. Upgrade Argon2id parameters for at-rest key**
+  Already done. `LocalKeyStore.cc` uses `crypto_pwhash_OPSLIMIT_MODERATE` / `crypto_pwhash_MEMLIMIT_MODERATE` for the key-encryption key. Server login uses `OPSLIMIT_INTERACTIVE` (correct — fast verification). Client key file uses `OPSLIMIT_MODERATE` (correct — stronger, executed once at login).
 
 - [ ] **Cr5. Acknowledge forward secrecy absence in code**
   The spec rubric explicitly requires that "forward secrecy properties (or their absence) are acknowledged honestly." The current implementation uses static long-term X25519 keys — compromise of a private key retroactively exposes all past messages. Add a `// NOTE:` comment block in `LocalKeyStore.cc` above `encryptMessage` documenting this: state that static keys are used, that there is no ephemeral key exchange or ratcheting, and what the implication is (no forward secrecy). This is a required acknowledgement, not optional.
@@ -117,6 +117,9 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 - [ ] **B6. Document per-message vs batching gas trade-off**
   The spec explicitly says "pay attention to trade-offs in persisting to the chain — a hash for each message may be excessive." Add a comment block in `sidecar/index.js` above the `recordHash` call and in `MessageIntegrity.sol` above `recordHash` explaining: each message costs ~30k gas; at current Sepolia/mainnet prices this is acceptable for a demo but production use would batch hashes (e.g. a Merkle root per conversation per hour). This is a required acknowledgement per the spec, not optional.
+
+- [ ] **B7. Fix overwriting hash mapping in contract**
+  `hashes[conversationId] = hash` overwrites the stored hash each time a new message is sent to the same conversation. Only the most recent message per conversation can be verified — historical messages cannot. Fix by keying on `(conversationId, msgId)` using a nested mapping: `mapping(uint256 => mapping(uint256 => bytes32)) public hashes` and `mapping(uint256 => mapping(uint256 => uint256)) public timestamps`. Update `recordHash` signature to accept `msgId`, update the sidecar to pass `msgId`, and update the verification page to accept a `msgId` input. This also requires redeploying the contract to Sepolia.
 
 - [x] **B4. Remove `.env` from git and rotate key**
   `blockchain/sidecar/.env` containing `PRIVATE_KEY` is committed. Add `blockchain/sidecar/.env` and `blockchain/.env` to `.gitignore`. Generate a new testnet wallet and update the deployed contract owner if needed.
@@ -141,10 +144,10 @@ Deadline: **Wednesday 3rd June 2026 at 5:00 PM**
 
 ## Docs / Submission
 
-- [ ] **Doc1.** Cryptographic design document (`docs/crypto-design.md`)
-- [ ] **Doc2.** Penetration testing report (`docs/pentest.md`)
-- [ ] **Doc3.** Network architecture document (`docs/network-arch.md`)
-- [ ] **Doc4.** Update README with E2EE and blockchain setup instructions
-- [ ] **Doc5.** Cover document (`cover.md`)
-- [ ] **Doc6.** AI prompt artefacts log (`docs/ai-log.md`) — keep up to date
-- [ ] **Doc7.** Final submission check — all files committed, binaries build clean, spec checklist complete
+- [x] **Doc1.** Cryptographic design document — written to `docs/reports/crypto.md`. Covers threat model (all 4 attacker classes), construction walkthrough with ASCII diagrams, parameter-level justification of every primitive, RFC citations, known limitations.
+- [ ] **Doc2.** Penetration testing report (`docs/reports/pentest.md`) — **not written, 10-mark criterion**
+- [ ] **Doc3.** Network architecture document (`docs/reports/network.md`) — **not written, required submission doc**
+- [ ] **Doc4.** Update README with build, E2EE usage, and blockchain setup instructions
+- [x] **Doc5.** Cover document — written to `docs/reports/cover.md`. Fill in Fionn's and Mikey's student IDs before submission.
+- [ ] **Doc6.** AI prompt artefacts log (`docs/ai-log.md`) — keep up to date before submission
+- [ ] **Doc7.** Final submission check — all files committed, binaries build clean, server deployed, spec checklist complete
