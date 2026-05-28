@@ -18,6 +18,7 @@ const state = {
   userId: null,
   username: null,
   identity: null,        // LocalIdentity — see shape below
+  storageKey: null,      // CryptoKey (AES-GCM) — used to encrypt/decrypt sent message cache
   conversations: [],
   activeConvId: null,
   messages: [],
@@ -264,7 +265,7 @@ async function unlockKeyFile(keyFile, password) {
   const pm      = JSON.parse(new TextDecoder().decode(plain));
   const usedIds = keyFile.usedOneTimePreKeyIds || [];
 
-  return {
+  const identity = {
     publicKey:        b64Decode(keyFile.publicKeyBundle.identityKey),
     privateKey:       b64Decode(pm.identityPrivateKey),
     signingPublicKey: b64Decode(keyFile.publicKeyBundle.signingKey),
@@ -282,6 +283,8 @@ async function unlockKeyFile(keyFile, password) {
         privateKey: b64Decode(pk.privateKey),
       })),
   };
+
+  return { identity, storageKey };
 }
 
 // ─── Key storage (localStorage) ────────────────────────────────────────────
@@ -289,6 +292,68 @@ async function unlockKeyFile(keyFile, password) {
 function lsKey(username) { return `kingdom:key:${username}`; }
 function saveKeyFile(kf)  { localStorage.setItem(lsKey(kf.username), JSON.stringify(kf)); }
 function loadKeyFile(u)   { const r = localStorage.getItem(lsKey(u)); return r ? JSON.parse(r) : null; }
+
+// ─── TOFU key pinning ──────────────────────────────────────────────────────
+// Persists the identity+signing key of each contacted user to localStorage.
+// If a fetched bundle's keys differ from the pin, encryption is blocked.
+
+function tofuLsKey(userId) { return `kingdom:tofu:${state.username}:${userId}`; }
+
+function checkTofu(userId, bundle) {
+  const stored = localStorage.getItem(tofuLsKey(userId));
+  if (!stored) {
+    // First contact — pin the keys now.
+    localStorage.setItem(tofuLsKey(userId), JSON.stringify({
+      identityKey: bundle.identityKey,
+      signingKey:  bundle.signingKey,
+    }));
+    return;
+  }
+  const pin = JSON.parse(stored);
+  if (pin.identityKey !== bundle.identityKey || pin.signingKey !== bundle.signingKey) {
+    throw new Error(
+      `Key mismatch for user ${userId} — possible MITM attack.\n` +
+      `Pinned:   ${pin.identityKey.slice(0, 12)}…\n` +
+      `Received: ${bundle.identityKey.slice(0, 12)}…`,
+    );
+  }
+}
+
+// ─── Sent-message persistence ───────────────────────────────────────────────
+// Own sent messages are encrypted with the session storageKey and saved to
+// localStorage so they survive refresh and re-login.
+
+async function persistSentMessage(msgId, plaintext) {
+  if (!state.storageKey || !state.username) return;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    state.storageKey,
+    new TextEncoder().encode(plaintext),
+  );
+  const lsKey = `kingdom:sent:${state.username}`;
+  const store = JSON.parse(localStorage.getItem(lsKey) || '{}');
+  store[msgId] = { iv: b64Encode(iv), ct: b64Encode(new Uint8Array(ct)) };
+  localStorage.setItem(lsKey, JSON.stringify(store));
+}
+
+async function loadPersistedSentMessages() {
+  if (!state.storageKey || !state.username) return;
+  const lsKey = `kingdom:sent:${state.username}`;
+  const store = JSON.parse(localStorage.getItem(lsKey) || '{}');
+  for (const [msgId, entry] of Object.entries(store)) {
+    const id = parseInt(msgId, 10);
+    if (state.plaintextCache[id]) continue;
+    try {
+      const plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: b64Decode(entry.iv) },
+        state.storageKey,
+        b64Decode(entry.ct),
+      );
+      state.plaintextCache[id] = new TextDecoder().decode(plain);
+    } catch { /* skip corrupted entries */ }
+  }
+}
 
 function markPreKeyUsed(username, preKeyId) {
   const kf = loadKeyFile(username);
@@ -471,6 +536,7 @@ async function getBundle(userId) {
     throw new Error(`User ${userId} public key is not a valid X3DH bundle`);
   }
   validateBundle(bundle);
+  checkTofu(userId, bundle);
   state.bundleCache[userId] = bundle;
   return bundle;
 }
@@ -490,7 +556,8 @@ async function doSignup(username, password) {
 
   const kf = await buildKeyFile(username, identity, password);
   saveKeyFile(kf);
-  return { result, identity };
+  const storageKey = await deriveStorageKey(password, b64Decode(kf.kdf.salt));
+  return { result, identity, storageKey };
 }
 
 async function doLogin(username, password) {
@@ -498,15 +565,16 @@ async function doLogin(username, password) {
   const result = await api('POST', '/login', { username, password });
   const kf = loadKeyFile(username);
   if (!kf) throw new Error('No local key file found. Did you sign up on this device?');
-  const identity = await unlockKeyFile(kf, password);
-  return { result, identity };
+  const { identity, storageKey } = await unlockKeyFile(kf, password);
+  return { result, identity, storageKey };
 }
 
-function startSession(result, identity, username) {
-  state.token    = result.token || result.sessionToken;
-  state.userId   = result.id;
-  state.username = username;
-  state.identity = identity;
+function startSession(result, identity, username, storageKey) {
+  state.token      = result.token || result.sessionToken;
+  state.userId     = result.id;
+  state.username   = username;
+  state.identity   = identity;
+  state.storageKey = storageKey;
   state.bundleCache[result.id] = buildPublicBundle(identity);
 }
 
@@ -518,7 +586,7 @@ async function doLogout() {
 function clearSession() {
   if (state.pollInterval) clearInterval(state.pollInterval);
   Object.assign(state, {
-    token: null, userId: null, username: null, identity: null,
+    token: null, userId: null, username: null, identity: null, storageKey: null,
     conversations: [], activeConvId: null, messages: [],
     bundleCache: {}, plaintextCache: {}, pollInterval: null,
   });
@@ -567,6 +635,7 @@ async function sendMessage(convId, text, recipientId) {
   });
 
   state.plaintextCache[msg.id] = text;
+  persistSentMessage(msg.id, text).catch(() => {});
 
   if (usedOneTimePreKeyId !== null) {
     api('POST', `/users/${recipientId}/one-time-prekeys/${usedOneTimePreKeyId}/consume`, {})
@@ -707,6 +776,7 @@ function showApp() {
   document.getElementById('chat-empty').classList.remove('hidden');
   document.getElementById('chat-active').classList.add('hidden');
   showView('app');
+  loadPersistedSentMessages().catch(() => {});
   loadConversations().catch(err => console.error('Failed to load conversations:', err));
 }
 
@@ -749,8 +819,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!username || !password) return;
     setLoading('login-btn', true);
     try {
-      const { result, identity } = await doLogin(username, password);
-      startSession(result, identity, username);
+      const { result, identity, storageKey } = await doLogin(username, password);
+      startSession(result, identity, username, storageKey);
       showApp();
     } catch (err) {
       showAuthError(err.message);
@@ -768,8 +838,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!username || !password) return;
     setLoading('signup-btn', true);
     try {
-      const { result, identity } = await doSignup(username, password);
-      startSession(result, identity, username);
+      const { result, identity, storageKey } = await doSignup(username, password);
+      startSession(result, identity, username, storageKey);
       showApp();
     } catch (err) {
       showAuthError(err.message);
