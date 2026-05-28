@@ -451,7 +451,7 @@ void Controller::messageController_() {
       spdlog::warn("Blockchain sidecar error for message {}: {}", msgId, e.what());
     }
 
-    kd::Message msg{msgId, senderId, convId, payload, "", now, txHash};
+    kd::Message msg{msgId, senderId, convId, payload, now, txHash};
     nlohmann::json result = msg;
     res.status = 201;
     res.set_content(result.dump(), "application/json");
