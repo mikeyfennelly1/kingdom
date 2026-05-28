@@ -193,7 +193,7 @@ void Controller::authController_() {
 
   // Login endpoint
   svr_.Post("/login", [this](const httplib::Request& req, httplib::Response& res) {
-    spdlog::info("Login request received: {}", req.body);
+    spdlog::info("Login request received from {}", req.remote_addr);
 
     if (isRateLimited_(req.remote_addr)) {
       res.status = 429;
