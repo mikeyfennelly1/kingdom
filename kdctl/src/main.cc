@@ -205,7 +205,13 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto payload =
             kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk,
                                               convId, session.userId, recipientId);
-        std::cout << client.sendMessage(convId, session.userId, payload).dump(4) << std::endl;
+        auto sentMessageJson = client.sendMessage(convId, session.userId, payload);
+        std::cout << sentMessageJson.dump(4) << std::endl;
+        auto sentMessage = sentMessageJson.get<kd::Message>();
+        session.messageStore.savePlaintext(sentMessage.id, sentMessage.conversationId,
+                                           sentMessage.senderId, sentMessage.timestamp,
+                                           messageText);
+        session.messageCache.push_back(sentMessage);
         auto usedPreKeyId = kd::LocalKeyStore::oneTimePreKeyIdFromPayload(payload);
         if (usedPreKeyId.has_value()) {
           client.consumeOneTimePreKey(recipientId, *usedPreKeyId);
