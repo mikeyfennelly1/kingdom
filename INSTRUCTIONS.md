@@ -46,3 +46,7 @@ NOTE: The above script should be appropriate to run on both the actions runner a
 ## Dev Documentation
 
 - [ ] Create an openapi.yaml file of the REST interface for the kds server application.
+
+## Cleanup
+
+- [ ] Delete this INSTRUCTIONS.md file when you are done.
