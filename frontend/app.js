@@ -852,11 +852,30 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('logout-btn').addEventListener('click', () => doLogout());
 
   // New conversation
-  document.getElementById('new-conv-btn').addEventListener('click', () => {
+  document.getElementById('new-conv-btn').addEventListener('click', async () => {
     clearModalError();
-    document.getElementById('conv-name-input').value       = '';
-    document.getElementById('participant-ids-input').value = '';
+    document.getElementById('conv-name-input').value = '';
     document.getElementById('modal-overlay').classList.remove('hidden');
+
+    const list = document.getElementById('user-checklist');
+    list.innerHTML = '<div class="user-picker-empty">Loading users…</div>';
+    try {
+      const users = await api('GET', '/users');
+      const others = users.filter(u => u.id !== state.userId);
+      if (others.length === 0) {
+        list.innerHTML = '<div class="user-picker-empty">No other users yet</div>';
+      } else {
+        list.innerHTML = others.map(u => `
+          <label class="user-picker-item">
+            <input type="checkbox" value="${u.id}" />
+            <span class="picker-name">${escHtml(u.username)}</span>
+            <span class="picker-id">#${u.id}</span>
+          </label>
+        `).join('');
+      }
+    } catch {
+      list.innerHTML = '<div class="user-picker-empty">Failed to load users</div>';
+    }
   });
 
   // Modal cancel / overlay click to close
@@ -875,10 +894,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const name = document.getElementById('conv-name-input').value.trim();
     if (!name) { showModalError('Conversation name is required'); return; }
 
-    const raw            = document.getElementById('participant-ids-input').value;
-    const participantIds = raw.split(',')
-      .map(s => parseInt(s.trim(), 10))
-      .filter(n => !isNaN(n));
+    const participantIds = Array.from(
+      document.querySelectorAll('#user-checklist input[type=checkbox]:checked')
+    ).map(cb => parseInt(cb.value, 10));
 
     try {
       await createConversation(name, participantIds);
