@@ -56,8 +56,12 @@ class Client {
                                     const std::vector<uint64_t>& participantIds);
   nlohmann::json sendMessage(uint64_t conversationId, uint64_t senderId,
                              const std::string& payload);
+  nlohmann::json sendMessage(uint64_t conversationId, uint64_t senderId, uint64_t recipientId,
+                             const std::string& payload);
   nlohmann::json getMessages(uint64_t conversationId);
   nlohmann::json deleteMessage(uint64_t conversationId, uint64_t messageId);
+  nlohmann::json revokeMessageAccess(uint64_t conversationId, uint64_t messageId,
+                                     uint64_t targetUserId);
 
  private:
   std::string baseUrl_;

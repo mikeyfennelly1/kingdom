@@ -50,6 +50,22 @@ void Database::initSchema_() {
             blockchain_digest TEXT NOT NULL DEFAULT ''
         )
     )");
+  txn.exec(R"(
+        CREATE TABLE IF NOT EXISTS message_access (
+            message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL REFERENCES users(id),
+            granted_by BIGINT NOT NULL REFERENCES users(id),
+            revoked_at BIGINT,
+            PRIMARY KEY (message_id, user_id)
+        )
+    )");
+  txn.exec(R"(
+        INSERT INTO message_access (message_id, user_id, granted_by)
+        SELECT m.id, cp.user_id, m.sender_id
+        FROM messages m
+        JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
+        ON CONFLICT (message_id, user_id) DO NOTHING
+    )");
   txn.commit();
   spdlog::info("Database schema initialized");
 }
@@ -203,7 +219,8 @@ std::vector<kd::Conversation> Database::getConversationsByUserId(uint64_t userId
 }
 
 uint64_t Database::createMessage(uint64_t conversationId, uint64_t senderId,
-                                 const std::string& payload, uint64_t timestamp) {
+                                 const std::string& payload, uint64_t timestamp,
+                                 std::optional<uint64_t> recipientId) {
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(senderId), payload,
                       static_cast<int64_t>(timestamp)};
@@ -211,8 +228,35 @@ uint64_t Database::createMessage(uint64_t conversationId, uint64_t senderId,
       "INSERT INTO messages (conversation_id, sender_id, payload, timestamp) "
       "VALUES ($1, $2, $3, $4) RETURNING id",
       params);
+  uint64_t msgId = result[0][0].as<uint64_t>();
+
+  if (recipientId.has_value()) {
+    pqxx::params senderAccessParams{static_cast<int64_t>(msgId), static_cast<int64_t>(senderId)};
+    txn.exec(
+        "INSERT INTO message_access (message_id, user_id, granted_by) "
+        "VALUES ($1, $2, $2) ON CONFLICT (message_id, user_id) DO NOTHING",
+        senderAccessParams);
+    if (*recipientId != senderId) {
+      pqxx::params recipientAccessParams{static_cast<int64_t>(msgId),
+                                         static_cast<int64_t>(*recipientId),
+                                         static_cast<int64_t>(senderId)};
+      txn.exec(
+          "INSERT INTO message_access (message_id, user_id, granted_by) "
+          "VALUES ($1, $2, $3) ON CONFLICT (message_id, user_id) DO NOTHING",
+          recipientAccessParams);
+    }
+  } else {
+    pqxx::params accessParams{static_cast<int64_t>(msgId), static_cast<int64_t>(conversationId),
+                              static_cast<int64_t>(senderId)};
+    txn.exec(
+        "INSERT INTO message_access (message_id, user_id, granted_by) "
+        "SELECT $1, user_id, $3 FROM conversation_participants WHERE conversation_id = $2 "
+        "ON CONFLICT (message_id, user_id) DO NOTHING",
+        accessParams);
+  }
+
   txn.commit();
-  return result[0][0].as<uint64_t>();
+  return msgId;
 }
 
 std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversationId) {
@@ -239,12 +283,58 @@ std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversa
   return messages;
 }
 
+std::vector<kd::Message> Database::getMessagesByConversationIdForUser(uint64_t conversationId,
+                                                                      uint64_t userId) {
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(userId)};
+  auto result = txn.exec(
+      "SELECT m.id, m.sender_id, m.conversation_id, m.payload, m.timestamp, m.blockchain_digest "
+      "FROM messages m "
+      "JOIN message_access ma ON ma.message_id = m.id "
+      "WHERE m.conversation_id = $1 AND ma.user_id = $2 AND ma.revoked_at IS NULL "
+      "ORDER BY m.timestamp ASC",
+      params);
+  txn.commit();
+
+  std::vector<kd::Message> messages;
+  for (const auto& row : result) {
+    kd::Message msg;
+    msg.id = row[0].as<uint64_t>();
+    msg.senderId = row[1].as<uint64_t>();
+    msg.conversationId = row[2].as<uint64_t>();
+    msg.payload = row[3].as<std::string>();
+    msg.signature = "";
+    msg.timestamp = row[4].as<uint64_t>();
+    msg.blockchainDigest = row[5].as<std::string>();
+    messages.push_back(std::move(msg));
+  }
+  return messages;
+}
+
 bool Database::deleteMessage(uint64_t conversationId, uint64_t messageId, uint64_t senderId) {
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(messageId), static_cast<int64_t>(conversationId),
                       static_cast<int64_t>(senderId)};
+  auto result =
+      txn.exec("DELETE FROM messages WHERE id = $1 AND conversation_id = $2 AND sender_id = $3",
+               params);
+  txn.commit();
+  return result.affected_rows() == 1;
+}
+
+bool Database::revokeMessageAccess(uint64_t conversationId, uint64_t messageId, uint64_t senderId,
+                                   uint64_t targetUserId, uint64_t revokedAt) {
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(messageId), static_cast<int64_t>(conversationId),
+                      static_cast<int64_t>(senderId), static_cast<int64_t>(targetUserId),
+                      static_cast<int64_t>(revokedAt)};
   auto result = txn.exec(
-      "DELETE FROM messages WHERE id = $1 AND conversation_id = $2 AND sender_id = $3",
+      "UPDATE message_access ma "
+      "SET revoked_at = $5 "
+      "FROM messages m "
+      "WHERE ma.message_id = m.id AND m.id = $1 AND m.conversation_id = $2 "
+      "AND m.sender_id = $3 AND ma.user_id = $4 AND ma.user_id <> $3 "
+      "AND ma.revoked_at IS NULL",
       params);
   txn.commit();
   return result.affected_rows() == 1;
