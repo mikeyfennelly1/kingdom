@@ -213,7 +213,7 @@ nlohmann::json Client::login(const std::string& username, const std::string& pas
 nlohmann::json Client::logout() {
   auto cli = makeClient(baseUrl_, caCertPath_);
   auto headers = authHeaders(authToken_);
-  if (auto res = cli.Post("/logout", headers)) {
+  if (auto res = cli.Post("/logout", headers, "{}", "application/json")) {
     if (res->status == 200) {
       clearAuthToken();
       return nlohmann::json::parse(res->body);
