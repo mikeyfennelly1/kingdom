@@ -338,8 +338,9 @@ void Controller::conversationController_() {
     std::set<uint64_t> seen(participantIds.begin(), participantIds.end());
     if (seen.size() != participantIds.size()) {
       res.status = 400;
-      res.set_content(nlohmann::json{{"error", "participantIds must not contain duplicates"}}.dump(),
-                      "application/json");
+      res.set_content(
+          nlohmann::json{{"error", "participantIds must not contain duplicates"}}.dump(),
+          "application/json");
       return;
     }
 
@@ -386,6 +387,10 @@ void Controller::messageController_() {
 
     uint64_t senderId = body["senderId"];
     std::string payload = body["payload"];
+    std::optional<uint64_t> recipientId;
+    if (body.contains("recipientId") && !body["recipientId"].is_null()) {
+      recipientId = body["recipientId"].get<uint64_t>();
+    }
 
     if (payload.empty() || payload.size() > 65536) {
       res.status = 400;
@@ -411,12 +416,19 @@ void Controller::messageController_() {
       res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
       return;
     }
+    if (recipientId.has_value() && !db_.isParticipant(convId, *recipientId)) {
+      res.status = 400;
+      res.set_content(
+          nlohmann::json{{"error", "recipient must be a conversation participant"}}.dump(),
+          "application/json");
+      return;
+    }
 
     auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::system_clock::now().time_since_epoch())
                                          .count());
 
-    uint64_t msgId = db_.createMessage(convId, senderId, payload, now);
+    uint64_t msgId = db_.createMessage(convId, senderId, payload, now, recipientId);
     spdlog::info("Created message {} in conversation {}", msgId, convId);
 
     // Record hash on-chain via the blockchain sidecar
@@ -445,36 +457,71 @@ void Controller::messageController_() {
     res.set_content(result.dump(), "application/json");
   });
 
-  svr_.Delete(R"(/conversations/(\d+)/messages/(\d+))",
-              [this](const httplib::Request& req, httplib::Response& res) -> void {
-                auto authenticatedUserId = authenticatedUserId_(req);
-                if (!authenticatedUserId.has_value()) {
-                  res.status = 401;
-                  res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
-                                  "application/json");
-                  return;
-                }
+  svr_.Delete(
+      R"(/conversations/(\d+)/messages/(\d+))",
+      [this](const httplib::Request& req, httplib::Response& res) -> void {
+        auto authenticatedUserId = authenticatedUserId_(req);
+        if (!authenticatedUserId.has_value()) {
+          res.status = 401;
+          res.set_content(nlohmann::json{{"error", "login required"}}.dump(), "application/json");
+          return;
+        }
 
-                uint64_t convId = std::stoull(std::string(req.matches[1]));
-                uint64_t messageId = std::stoull(std::string(req.matches[2]));
-                if (!db_.isParticipant(convId, *authenticatedUserId)) {
-                  res.status = 403;
-                  res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(),
-                                  "application/json");
-                  return;
-                }
+        uint64_t convId = std::stoull(std::string(req.matches[1]));
+        uint64_t messageId = std::stoull(std::string(req.matches[2]));
+        if (!db_.isParticipant(convId, *authenticatedUserId)) {
+          res.status = 403;
+          res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
+          return;
+        }
 
-                if (!db_.deleteMessage(convId, messageId, *authenticatedUserId)) {
-                  res.status = 404;
-                  res.set_content(nlohmann::json{{"error", "message not found"}}.dump(),
-                                  "application/json");
-                  return;
-                }
+        if (!db_.deleteMessage(convId, messageId, *authenticatedUserId)) {
+          res.status = 404;
+          res.set_content(nlohmann::json{{"error", "message not found"}}.dump(),
+                          "application/json");
+          return;
+        }
 
-                res.set_content(nlohmann::json{{"status", "deleted"},
-                                               {"messageId", messageId}}.dump(),
-                                "application/json");
-              });
+        res.set_content(nlohmann::json{{"status", "deleted"}, {"messageId", messageId}}.dump(),
+                        "application/json");
+      });
+
+  svr_.Delete(
+      R"(/conversations/(\d+)/messages/(\d+)/access/(\d+))",
+      [this](const httplib::Request& req, httplib::Response& res) -> void {
+        auto authenticatedUserId = authenticatedUserId_(req);
+        if (!authenticatedUserId.has_value()) {
+          res.status = 401;
+          res.set_content(nlohmann::json{{"error", "login required"}}.dump(), "application/json");
+          return;
+        }
+
+        uint64_t convId = std::stoull(std::string(req.matches[1]));
+        uint64_t messageId = std::stoull(std::string(req.matches[2]));
+        uint64_t targetUserId = std::stoull(std::string(req.matches[3]));
+        if (!db_.isParticipant(convId, *authenticatedUserId) ||
+            !db_.isParticipant(convId, targetUserId)) {
+          res.status = 403;
+          res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
+          return;
+        }
+
+        auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                             std::chrono::system_clock::now().time_since_epoch())
+                                             .count());
+        if (!db_.revokeMessageAccess(convId, messageId, *authenticatedUserId, targetUserId, now)) {
+          res.status = 404;
+          res.set_content(nlohmann::json{{"error", "message access not found"}}.dump(),
+                          "application/json");
+          return;
+        }
+
+        res.set_content(nlohmann::json{{"status", "revoked"},
+                                       {"messageId", messageId},
+                                       {"userId", targetUserId}}
+                            .dump(),
+                        "application/json");
+      });
 
   svr_.Get(R"(/conversations/(\d+)/messages)",
            [this](const httplib::Request& req, httplib::Response& res) -> void {
@@ -491,7 +538,7 @@ void Controller::messageController_() {
                res.set_content(nlohmann::json{{"error", "forbidden"}}.dump(), "application/json");
                return;
              }
-             auto msgs = db_.getMessagesByConversationId(convId);
+             auto msgs = db_.getMessagesByConversationIdForUser(convId, *authenticatedUserId);
              nlohmann::json result = msgs;
              res.set_content(result.dump(), "application/json");
            });

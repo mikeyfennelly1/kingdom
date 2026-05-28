@@ -298,10 +298,42 @@ nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
+nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId, uint64_t recipientId,
+                                   const std::string& payload) {
+  auto cli = makeClient(baseUrl_, caCertPath_);
+  cli.set_read_timeout(120);
+  std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
+  nlohmann::json body = {{"senderId", senderId},
+                         {"recipientId", recipientId},
+                         {"payload", payload}};
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Post(path, headers, body.dump(), "application/json")) {
+    if (res->status == 200 || res->status == 201)
+      return nlohmann::json::parse(res->body);
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
+}
+
 nlohmann::json Client::deleteMessage(uint64_t conversationId, uint64_t messageId) {
   auto cli = makeClient(baseUrl_, caCertPath_);
+  std::string path =
+      "/conversations/" + std::to_string(conversationId) + "/messages/" + std::to_string(messageId);
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Delete(path, headers)) {
+    if (res->status == 200) {
+      return nlohmann::json::parse(res->body);
+    }
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
+}
+
+nlohmann::json Client::revokeMessageAccess(uint64_t conversationId, uint64_t messageId,
+                                           uint64_t targetUserId) {
+  auto cli = makeClient(baseUrl_, caCertPath_);
   std::string path = "/conversations/" + std::to_string(conversationId) + "/messages/" +
-                     std::to_string(messageId);
+                     std::to_string(messageId) + "/access/" + std::to_string(targetUserId);
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Delete(path, headers)) {
     if (res->status == 200) {

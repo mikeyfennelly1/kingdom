@@ -69,8 +69,8 @@ void printMessages(const nlohmann::json& msgs, kd::Client& client, kd::LocalIden
         displayText = kd::LocalKeyStore::decryptMessage(message.payload, identity, senderPk,
                                                         message.conversationId, message.senderId,
                                                         recipientId);
-        store.savePlaintext(message.id, message.conversationId, message.senderId,
-                            message.timestamp, displayText);
+        store.savePlaintext(message.id, message.conversationId, message.senderId, message.timestamp,
+                            displayText);
       } catch (const std::exception&) {
         displayText = "[decryption failed]";
       }
@@ -120,6 +120,7 @@ void printShellHelp() {
             << "  messages\n"
             << "  messages-from\n"
             << "  delete-message\n"
+            << "  revoke-message-access\n"
             << "  help\n"
             << "  exit\n";
 }
@@ -206,7 +207,7 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto payload =
             kd::LocalKeyStore::encryptMessage(messageText, *session.identityKey, recipientPk,
                                               convId, session.userId, recipientId);
-        auto sentMessageJson = client.sendMessage(convId, session.userId, payload);
+        auto sentMessageJson = client.sendMessage(convId, session.userId, recipientId, payload);
         std::cout << sentMessageJson.dump(4) << std::endl;
         auto sentMessage = sentMessageJson.get<kd::Message>();
         session.messageStore.savePlaintext(sentMessage.id, sentMessage.conversationId,
@@ -241,12 +242,22 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         auto messageId = promptId("message id: ");
         auto response = client.deleteMessage(convId, messageId);
         session.messageStore.deletePlaintext(messageId);
-        session.messageCache.erase(
-            std::remove_if(session.messageCache.begin(), session.messageCache.end(),
-                           [messageId](const kd::Message& message) {
-                             return message.id == messageId;
-                           }),
-            session.messageCache.end());
+        session.messageCache.erase(std::remove_if(session.messageCache.begin(),
+                                                  session.messageCache.end(),
+                                                  [messageId](const kd::Message& message) {
+                                                    return message.id == messageId;
+                                                  }),
+                                   session.messageCache.end());
+        std::cout << response.dump(4) << std::endl;
+      } else if (command == "revoke-message-access") {
+        if (!session.loggedIn) {
+          std::cout << "Log in first." << std::endl;
+          continue;
+        }
+        auto convId = promptId("conversation id: ");
+        auto messageId = promptId("message id: ");
+        auto targetUserId = promptId("user id to revoke: ");
+        auto response = client.revokeMessageAccess(convId, messageId, targetUserId);
         std::cout << response.dump(4) << std::endl;
       } else if (command == "messages-from") {
         auto senderId = promptId("sender user id: ");

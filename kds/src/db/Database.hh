@@ -37,13 +37,21 @@ class Database {
 
   // Insert a message. timestamp is Unix ms (passed in from server). Returns message id.
   uint64_t createMessage(uint64_t conversationId, uint64_t senderId, const std::string& payload,
-                         uint64_t timestamp);
+                         uint64_t timestamp, std::optional<uint64_t> recipientId = std::nullopt);
 
   // Get all messages in a conversation ordered by timestamp ASC.
   std::vector<kd::Message> getMessagesByConversationId(uint64_t conversationId);
 
+  // Get messages in a conversation that userId still has access to.
+  std::vector<kd::Message> getMessagesByConversationIdForUser(uint64_t conversationId,
+                                                              uint64_t userId);
+
   // Delete a message only when it belongs to the conversation and sender.
   bool deleteMessage(uint64_t conversationId, uint64_t messageId, uint64_t senderId);
+
+  // Revoke targetUserId's future access to a message. Only the sender can revoke.
+  bool revokeMessageAccess(uint64_t conversationId, uint64_t messageId, uint64_t senderId,
+                           uint64_t targetUserId, uint64_t revokedAt);
 
   // Update the blockchain_digest field of a message after on-chain recording.
   void updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest);
