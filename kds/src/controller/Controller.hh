@@ -22,7 +22,7 @@ class Controller {
  public:
   Controller(std::string host, int port, std::string dbConnectionString, std::string sidecarUrl,
              std::string certPath, std::string keyPath, std::string jwtSecret,
-             uint64_t jwtTtlSeconds);
+             uint64_t jwtTtlSeconds, std::string frontendPath);
 
   void start();
 
@@ -30,6 +30,7 @@ class Controller {
   std::string host_;
   int port_;
   std::string sidecarUrl_;
+  std::string frontendPath_;
   httplib::SSLServer svr_;
   std::unique_ptr<SecurityFilterChain> securityFilterChain_;
   Database db_;

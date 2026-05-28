@@ -47,6 +47,10 @@ auto configure() -> kd::Controller {
     throw std::runtime_error("KD_JWT_TTL_SECONDS must be greater than zero");
   }
 
-  return {"0.0.0.0", port, dbUrl, sidecarUrl, certPath, keyPath, jwtSecret, jwtTtlSeconds};
+  const char* frontendPathEnv = std::getenv("KD_FRONTEND_PATH");
+  std::string frontendPath = (frontendPathEnv != nullptr) ? frontendPathEnv : "";
+
+  return {"0.0.0.0", port, dbUrl, sidecarUrl, certPath, keyPath, jwtSecret, jwtTtlSeconds,
+          frontendPath};
 }
 }  // namespace kd

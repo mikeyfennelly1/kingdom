@@ -36,10 +36,11 @@ bool verifyPassword(const std::string& encodedHash, const std::string& password)
 
 Controller::Controller(std::string host, int port, std::string dbConnectionString,
                        std::string sidecarUrl, std::string certPath, std::string keyPath,
-                       std::string jwtSecret, uint64_t jwtTtlSeconds)
+                       std::string jwtSecret, uint64_t jwtTtlSeconds, std::string frontendPath)
     : host_(std::move(host))
     , port_(port)
     , sidecarUrl_(std::move(sidecarUrl))
+    , frontendPath_(std::move(frontendPath))
     , svr_(certPath.c_str(), keyPath.c_str())
     , db_(dbConnectionString)
     , jwtSecret_(std::move(jwtSecret))
@@ -71,6 +72,14 @@ void Controller::setupRoutes() {
     res.set_header("X-Content-Type-Options", "nosniff");
     res.set_header("X-Frame-Options", "DENY");
   });
+
+  if (!frontendPath_.empty()) {
+    if (svr_.set_mount_point("/", frontendPath_)) {
+      spdlog::info("Serving frontend from: {}", frontendPath_);
+    } else {
+      spdlog::warn("Frontend path not found, static serving disabled: {}", frontendPath_);
+    }
+  }
 
   notFoundHandler_();
   healthController_();
