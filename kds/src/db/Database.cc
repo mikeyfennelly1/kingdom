@@ -239,6 +239,17 @@ std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversa
   return messages;
 }
 
+bool Database::deleteMessage(uint64_t conversationId, uint64_t messageId, uint64_t senderId) {
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(messageId), static_cast<int64_t>(conversationId),
+                      static_cast<int64_t>(senderId)};
+  auto result = txn.exec(
+      "DELETE FROM messages WHERE id = $1 AND conversation_id = $2 AND sender_id = $3",
+      params);
+  txn.commit();
+  return result.affected_rows() == 1;
+}
+
 void Database::updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest) {
   pqxx::work txn(conn_);
   pqxx::params params{digest, static_cast<int64_t>(msgId)};

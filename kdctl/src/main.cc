@@ -119,6 +119,7 @@ void printShellHelp() {
             << "  send\n"
             << "  messages\n"
             << "  messages-from\n"
+            << "  delete-message\n"
             << "  help\n"
             << "  exit\n";
 }
@@ -231,6 +232,22 @@ void runShell(kd::Client& client, const std::string& serverUrl) {
         } else {
           printMessages(msgs);
         }
+      } else if (command == "delete-message") {
+        if (!session.loggedIn) {
+          std::cout << "Log in first." << std::endl;
+          continue;
+        }
+        auto convId = promptId("conversation id: ");
+        auto messageId = promptId("message id: ");
+        auto response = client.deleteMessage(convId, messageId);
+        session.messageStore.deletePlaintext(messageId);
+        session.messageCache.erase(
+            std::remove_if(session.messageCache.begin(), session.messageCache.end(),
+                           [messageId](const kd::Message& message) {
+                             return message.id == messageId;
+                           }),
+            session.messageCache.end());
+        std::cout << response.dump(4) << std::endl;
       } else if (command == "messages-from") {
         auto senderId = promptId("sender user id: ");
         std::vector<kd::Message> results;

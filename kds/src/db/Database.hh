@@ -42,6 +42,9 @@ class Database {
   // Get all messages in a conversation ordered by timestamp ASC.
   std::vector<kd::Message> getMessagesByConversationId(uint64_t conversationId);
 
+  // Delete a message only when it belongs to the conversation and sender.
+  bool deleteMessage(uint64_t conversationId, uint64_t messageId, uint64_t senderId);
+
   // Update the blockchain_digest field of a message after on-chain recording.
   void updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest);
 

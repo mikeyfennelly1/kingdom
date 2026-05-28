@@ -57,6 +57,7 @@ class Client {
   nlohmann::json sendMessage(uint64_t conversationId, uint64_t senderId,
                              const std::string& payload);
   nlohmann::json getMessages(uint64_t conversationId);
+  nlohmann::json deleteMessage(uint64_t conversationId, uint64_t messageId);
 
  private:
   std::string baseUrl_;
