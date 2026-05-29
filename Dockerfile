@@ -29,9 +29,10 @@ COPY config/build.shell.nix ./config/
 # Realize the environment so all dependencies (libraries) are in the Nix store
 RUN nix-shell ./config/build.shell.nix --run "true"
 
-# Copy binaries from the builder stage
+# Copy binaries and shared library from the builder stage
 COPY --from=builder /app/build/kds/kds /app/kds
 COPY --from=builder /app/build/kdctl/kdctl /app/kdctl
+COPY --from=builder /app/build/libkd/libkd.so.1 /app/libkd.so.1
 
 # Expose the default server port
 EXPOSE 8080
@@ -41,4 +42,4 @@ ENV KD_LOG_LEVEL=info
 ENV KD_PORT=8080
 
 # Run the server using nix-shell to ensure the environment (libraries) is set up
-ENTRYPOINT ["nix-shell", "./config/build.shell.nix", "--run", "/app/kds"]
+ENTRYPOINT ["nix-shell", "./config/build.shell.nix", "--run", "LD_LIBRARY_PATH=/app:$LD_LIBRARY_PATH /app/kds"]
