@@ -165,7 +165,7 @@ function start_services() {
     echo "removing file if exists: ${OUTPUT_LOG}"
     rm "${OUTPUT_LOG}" || true
     echo "starting docker services, stdout to: ${OUTPUT_LOG}"
-    docker compose up >> "${OUTPUT_LOG}" 2>&1
+    docker compose up -d >> "${OUTPUT_LOG}" 2>&1
     return 0
 }
 
@@ -173,7 +173,17 @@ function wait_for_health() {
     echo "Waiting for application stack to start up, by polling server health..."
     echo "Polling server at ${KD_BASE_URL}/health (timeout: ${KD_WAIT_TIMEOUT}s) ---"
     ELAPSED=0
-    until curl -sk "${KD_BASE_URL}/health" 2>/dev/null | grep -q '"ok"'; do
+    while true; do
+      set +e
+      RESPONSE=$(curl -sk --connect-timeout 3 "${KD_BASE_URL}/health" 2>&1)
+      CURL_EXIT=$?
+      set -e
+      if [ ${CURL_EXIT} -ne 0 ]; then
+        echo "[${ELAPSED}s] curl failed (exit ${CURL_EXIT}): ${RESPONSE}"
+      else
+        echo "[${ELAPSED}s] response: ${RESPONSE}"
+      fi
+      echo "${RESPONSE}" | grep -q '"ok"' && break
       if [ "${ELAPSED}" -ge "${KD_WAIT_TIMEOUT}" ]; then
         echo "ERROR: Server did not become healthy within ${KD_WAIT_TIMEOUT}s"
         docker compose logs
@@ -181,7 +191,6 @@ function wait_for_health() {
       fi
       sleep 3
       ELAPSED=$((ELAPSED + 3))
-      echo "wait time elapsed: ${ELAPSED}/${KD_WAIT_TIMEOUT} seconds."
     done
     echo "--- Server is healthy ---"
     return 0
