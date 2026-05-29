@@ -61,7 +61,7 @@ function init_test_vars() {
     : "${KD_HOST:=localhost}"
     : "${KD_PORT:=8080}"
     : "${KD_PROTOCOL:=https}"
-    : "${KD_WAIT_TIMEOUT:=120}"       # seconds to wait for server health
+    : "${KD_WAIT_TIMEOUT:=10}"       # seconds to wait for server health
     
     : "${POSTGRES_USER:=kd_test}"
     : "${POSTGRES_PASSWORD:=kd_test_pass}"
@@ -91,8 +91,6 @@ function orient_at_script() {
     return 0
 }
 
-# --- TLS certificate -------------------------------------------------------
-# Generate a self-signed cert for testing if none is present.
 function generate_tls_test_cert() {
     if [ ! -f certs/server.key ]; then
       mkdir -p certs
@@ -126,12 +124,15 @@ cleanup() {
 }
 
 function start_services() {
-    docker compose up -d --build
+    OUTPUT_LOG="services.log"
+    echo "starting docker services, forwarding stdout to: ${OUTPUT_LOG}"
+    docker compose up -d --build >> "${OUTPUT_LOG}"
     return 0
 }
 
 function wait_for_health() {
-    echo " Waiting for server at ${KD_BASE_URL}/health (timeout: ${KD_WAIT_TIMEOUT}s) ---"
+    echo "Waiting for application stack to start up, by polling server health..."
+    echo "Polling server at ${KD_BASE_URL}/health (timeout: ${KD_WAIT_TIMEOUT}s) ---"
     ELAPSED=0
     until curl -sk "${KD_BASE_URL}/health" 2>/dev/null | grep -q '"ok"'; do
       if [ "${ELAPSED}" -ge "${KD_WAIT_TIMEOUT}" ]; then
@@ -141,12 +142,12 @@ function wait_for_health() {
       fi
       sleep 3
       ELAPSED=$((ELAPSED + 3))
+      echo "wait time elapsed: ${ELAPSED}/${KD_WAIT_TIMEOUT} seconds."
     done
     echo "--- Server is healthy ---"
     return 0
 }
 
-# --- Install test dependencies (cached on CI via node_modules layer) -------
 function install_test_dependencies() {
     cd tests
     npm install --prefer-offline --silent
