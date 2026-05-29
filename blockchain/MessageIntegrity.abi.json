@@ -19,6 +19,12 @@
         "type": "uint256"
       },
       {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "msgId",
+        "type": "uint256"
+      },
+      {
         "indexed": false,
         "internalType": "bytes32",
         "name": "hash",
@@ -36,6 +42,11 @@
   },
   {
     "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
       {
         "internalType": "uint256",
         "name": "",
@@ -74,6 +85,11 @@
         "type": "uint256"
       },
       {
+        "internalType": "uint256",
+        "name": "msgId",
+        "type": "uint256"
+      },
+      {
         "internalType": "bytes32",
         "name": "hash",
         "type": "bytes32"
@@ -86,6 +102,11 @@
   },
   {
     "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
       {
         "internalType": "uint256",
         "name": "",
