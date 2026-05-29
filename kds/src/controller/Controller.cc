@@ -449,7 +449,7 @@ void Controller::messageController_() {
       httplib::Client sidecar(sidecarUrl_);
       sidecar.set_connection_timeout(30);
       sidecar.set_read_timeout(60);
-      nlohmann::json sidecarBody = {{"conversationId", convId}, {"ciphertext", payload}};
+      nlohmann::json sidecarBody = {{"conversationId", convId}, {"msgId", msgId}, {"ciphertext", payload}};
       auto sidecarRes = sidecar.Post("/record", sidecarBody.dump(), "application/json");
       if (sidecarRes && sidecarRes->status == 200) {
         auto sidecarJson = nlohmann::json::parse(sidecarRes->body);

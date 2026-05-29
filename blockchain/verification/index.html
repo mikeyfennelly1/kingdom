@@ -162,14 +162,14 @@
     import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.min.js";
 
     // -- Configuration --
-    const CONTRACT_ADDRESS = "0xCBc9381314d6f5797E840C9DD68063C2082B9d63";
+    const CONTRACT_ADDRESS = "0xBa51AE9df049f60D6c679Caf1f77c5e61f026B00";
     const RPC_URLS = [
       "https://ethereum-sepolia-rpc.publicnode.com",
       "https://rpc.sepolia.org",
     ];
 
     const EVENT_ABI = [
-      "event HashRecorded(uint256 indexed conversationId, bytes32 hash, uint256 timestamp)"
+      "event HashRecorded(uint256 indexed conversationId, uint256 indexed msgId, bytes32 hash, uint256 timestamp)"
     ];
 
     window.verify = async function () {
@@ -203,7 +203,6 @@
           }
         }
 
-        // Compute hash of the provided ciphertext
         const computedHash = ethers.keccak256(ethers.toUtf8Bytes(ciphertext));
 
         if (!receipt) {
@@ -211,10 +210,11 @@
           return;
         }
 
-        // Decode the HashRecorded event from the logs
         const iface = new ethers.Interface(EVENT_ABI);
         let onChainHash = null;
         let onChainTimestamp = null;
+        let conversationId = null;
+        let msgId = null;
 
         for (const log of receipt.logs) {
           if (log.address.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) continue;
@@ -223,6 +223,8 @@
             if (parsed && parsed.name === "HashRecorded") {
               onChainHash = parsed.args.hash;
               onChainTimestamp = parsed.args.timestamp;
+              conversationId = parsed.args.conversationId.toString();
+              msgId = parsed.args.msgId.toString();
               break;
             }
           } catch {
@@ -231,14 +233,14 @@
         }
 
         if (!onChainHash) {
-          showError("No HashRecorded event found in this transaction. Ensure the transaction hash belongs to this contract.");
+          showError("No HashRecorded event found in this transaction.");
           return;
         }
 
         const ts = new Date(Number(onChainTimestamp) * 1000).toUTCString();
         const match = computedHash.toLowerCase() === onChainHash.toLowerCase();
 
-        showResult(match, computedHash, onChainHash, ts, receipt.blockNumber);
+        showResult(match, computedHash, onChainHash, ts, receipt.blockNumber, conversationId, msgId);
 
       } catch (err) {
         showError("Error: " + err.message);
@@ -248,7 +250,7 @@
       }
     };
 
-    function showResult(pass, computedHash, onChainHash, timestamp, blockNumber) {
+    function showResult(pass, computedHash, onChainHash, timestamp, blockNumber, conversationId, msgId) {
       const resultEl = document.getElementById("result");
       const badge = document.getElementById("resultBadge");
       const detail = document.getElementById("resultDetail");
@@ -256,6 +258,8 @@
       resultEl.className = pass ? "pass" : "fail";
       badge.textContent = pass ? "PASS — Message is unmodified" : "FAIL — Message has been tampered with";
       detail.innerHTML = `
+        <div>Conversation ID: <span>${conversationId}</span></div>
+        <div>Message ID: <span>${msgId}</span></div>
         <div>Recorded at: <span>${timestamp}</span></div>
         <div>Block: <span>${blockNumber}</span></div>
         <div>On-chain hash: <span>${onChainHash}</span></div>
