@@ -4,6 +4,8 @@ set -euo pipefail
 PROJ_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 
 main() {
+    cd "${PROJ_ROOT}"
+    source .env
     teardown
 }
 
