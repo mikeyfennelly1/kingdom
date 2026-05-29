@@ -407,6 +407,10 @@
         }
       }
     },
+    "qt6.qtbase": {
+      "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb?narHash=sha256-30sZNZoA1cqF5JNO9fVX%2BwgiQYjB7HJqqJ4ztCDeBZE%3D#qt6.qtbase",
+      "source": "nixpkg"
+    },
     "tmux@latest": {
       "last_modified": "2025-11-26T14:39:26Z",
       "resolved": "github:NixOS/nixpkgs/5c46f3bd98147c8d82366df95bbef2cab3a967ea#tmux",

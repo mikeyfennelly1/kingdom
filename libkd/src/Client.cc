@@ -163,6 +163,17 @@ nlohmann::json Client::getConversations(uint64_t userId) {
   }
 }
 
+nlohmann::json Client::getUsers() {
+  auto cli = makeClient(baseUrl_, caCertPath_);
+  auto headers = authHeaders(authToken_);
+  if (auto res = cli.Get("/users", headers)) {
+    if (res->status == 200)
+      return nlohmann::json::parse(res->body);
+    throw std::runtime_error("Server returned status " + std::to_string(res->status));
+  }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
+}
+
 nlohmann::json Client::signup(const std::string& username, const std::string& password) {
   auto keyMaterial = LocalKeyStore::createForSignup(username, password);
   auto cleanupLocalKey = [&keyMaterial]() {
