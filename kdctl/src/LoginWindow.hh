@@ -1,0 +1,45 @@
+#pragma once
+
+#include <QDialog>
+#include <QString>
+#include <kd/LocalKeyStore.hpp>
+#include <optional>
+#include <string>
+
+class QLabel;
+class QLineEdit;
+class QPushButton;
+
+class LoginWindow : public QDialog {
+  Q_OBJECT
+
+ public:
+  explicit LoginWindow(QWidget* parent = nullptr);
+
+  struct LoginResult {
+    uint64_t userId;
+    std::string username;
+    std::string token;
+    kd::LocalIdentityKey identityKey;
+    std::string serverUrl;
+  };
+
+  [[nodiscard]] std::optional<LoginResult> result() const { return result_; }
+
+ private slots:
+  void onLogin();
+  void onSignup();
+
+ private:
+  void performAuth(bool isSignup);
+  void showError(const QString& msg);
+
+  QLineEdit* serverUrlEdit_;
+  QLineEdit* usernameEdit_;
+  QLineEdit* passwordEdit_;
+  QPushButton* loginButton_;
+  QPushButton* signupButton_;
+  QLabel* errorLabel_;
+
+  std::optional<LoginResult> result_;
+};

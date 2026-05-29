@@ -25,6 +25,8 @@ pkgs.mkShell {
     pkgs_libs.openssl
     pkgs_libs.libsodium
     pkgs_libs.libpqxx
+    pkgs_libs.qt6.qtbase
+    pkgs_libs.qt6.wrapQtAppsHook
   ];
 
   shellHook = ''
