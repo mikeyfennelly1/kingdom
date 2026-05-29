@@ -74,7 +74,7 @@ task build
 Binaries are output to:
 
 * `build/kds/kds` — Kingdom Data Server
-* `build/kdctl/kdctl` — Kingdom Control CLI
+* `build/kdctl/kdctl` — Kingdom Control (Qt6 desktop GUI)
 * `build/libkd/libkd.dylib` — Shared library (macOS) / `libkd.so` (Linux)
 
 == Running the Server
@@ -102,49 +102,21 @@ curl --cacert certs/server.crt https://localhost:8080/health
 
 Expected: `{"status":"ok"}`
 
-== Using the CLI (kdctl)
+== Using the Client (kdctl)
 
-All `kdctl` commands require `--protocol https` and `--ca-cert certs/server.crt` since the server uses TLS with a self-signed certificate. Set these as environment variables to avoid repeating them:
+`kdctl` is a Qt6 desktop GUI. Set `KD_CA_CERT` before launching so the client can verify the server's self-signed certificate:
 
 [source,bash]
 ----
-export KD_PROTOCOL=https
 export KD_CA_CERT=certs/server.crt
-----
-
-=== Interactive shell
-
-[source,bash]
-----
 ./build/kdctl/kdctl
 ----
 
-Available shell commands:
+A login window will open. Enter the server URL (`https://localhost:8080` for local dev), your username, and password, then click *Log In* or *Sign Up*.
 
-----
-signup              Create a new account
-login               Log in
-logout              Log out
-health              Check server health
-info                Server info
-conversations       List your conversations
-create-conversation Create a new conversation
-send                Send a message
-messages            List messages in a conversation
-help                Show this list
-exit                Quit
-----
+Once logged in the main window shows your conversations on the left. Click a conversation to view messages, or use *New Conversation* to start one. Messages are end-to-end encrypted — the server only ever stores ciphertext.
 
-=== Subcommands
-
-[source,bash]
-----
-./build/kdctl/kdctl health
-./build/kdctl/kdctl info
-----
-
-Authenticated messaging commands are available in the interactive shell, where the CLI can keep
-session state and unlock the local private key needed for end-to-end encryption.
+Private keys are generated on first signup and stored encrypted at `~/.kingdom/keys/<username>.json`. They never leave your machine.
 
 == Blockchain Sidecar
 
@@ -196,11 +168,10 @@ Paste a transaction hash from a sent message and the message payload to verify o
 [cols="1,1,2", options="header"]
 |===
 | Variable | Default | Description
-| `KD_HOST` | `localhost` | Server host
-| `KD_PORT` | `8080` | Server port
-| `KD_PROTOCOL` | `http` | Protocol (`http` or `https`)
-| `KD_CA_CERT` | — | Path to CA certificate for TLS verification
+| `KD_CA_CERT` | — | Path to CA certificate for TLS verification (required for self-signed certs)
 |===
+
+The server URL is entered directly in the login window.
 
 == Task Reference
 
