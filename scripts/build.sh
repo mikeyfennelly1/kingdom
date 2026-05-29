@@ -6,7 +6,7 @@ main() {
     echo " check connection to nix packages..."
     check_nixos_packages_connection
     if [[ $? -ne 0 ]]; then
-        echo "Error: failed t connect to " >&2
+        echo "Error: failed to connect to GitHub — NixOS nixpkgs tarballs are unreachable" >&2
         exit 1
     fi
     echo " Building Kingdom with Pinned Nix Dependencies in nix shell"
@@ -22,15 +22,15 @@ main() {
 # ensures that nix package registry is reacheable 
 # before script execution.
 function check_nixos_packages_connection() {
-    CONFIG_NIX_ORG="https://search.nixos.org/packages"
-    printf "checking access to ${CONFIG_NIX_ORG} \n"
-    
-    if ! curl -I --connect-timeout 10 --max-time 30 "${CONFIG_NIX_ORG}" > /dev/null 2>&1; then
-        printf "unable to access ${CONFIG_NIX_ORG} \n"
-        exit 1
+    local url="https://github.com"
+    printf "checking connectivity from build shell -> %s (required for NixOS nixpkgs tarballs)\n" "${url}"
+
+    if ! curl -sf --connect-timeout 10 --max-time 15 "${url}" > /dev/null 2>&1; then
+        printf "unable to access %s\n" "${url}"
+        return 1
     fi
 
-    printf "connection to ${CONFIG_NIX_ORG} successful \n"
+    printf "connection to %s successful\n" "${url}"
     return 0
 }
 
