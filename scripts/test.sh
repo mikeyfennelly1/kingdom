@@ -89,7 +89,7 @@ function init_test_vars() {
     : "${KD_HOST:=localhost}"
     : "${KD_PORT:=8080}"
     : "${KD_PROTOCOL:=https}"
-    : "${KD_WAIT_TIMEOUT:=10}"       # seconds to wait for server health
+    : "${KD_WAIT_TIMEOUT:=120}"      # seconds to wait for server health
     
     : "${POSTGRES_USER:=kd_test}"
     : "${POSTGRES_PASSWORD:=kd_test_pass}"
@@ -97,13 +97,14 @@ function init_test_vars() {
     : "${POSTGRES_PORT:=5433}"        # host-side port; avoids clashing with a dev DB on 5432
     
     : "${KD_JWT_SECRET:=test-jwt-secret-must-be-at-least-32-characters!!}"
+    : "${KD_JWT_TTL_SECONDS:=3600}"
     : "${KD_LOG_LEVEL:=warn}"
     return 0
 }
 
 function export_necessary_vars() {
     export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT
-    export KD_PORT KD_JWT_SECRET KD_LOG_LEVEL
+    export KD_PORT KD_JWT_SECRET KD_JWT_TTL_SECONDS KD_LOG_LEVEL
     
     # The app container reaches Postgres over the docker compose internal network
     export KD_DB_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
@@ -120,16 +121,17 @@ function orient_at_script() {
 }
 
 function generate_tls_test_cert() {
-    if [ ! -f certs/server.key ]; then
-      mkdir -p certs
+    local cert_dir="${SCRIPT_DIR}/../certs"
+    if [ ! -f "${cert_dir}/server.key" ]; then
+      mkdir -p "${cert_dir}"
       openssl req -x509 -newkey rsa:2048 \
-        -keyout certs/server.key \
-        -out certs/server.crt \
+        -keyout "${cert_dir}/server.key" \
+        -out "${cert_dir}/server.crt" \
         -days 365 -nodes \
         -subj "/CN=localhost" 2>/dev/null
       echo "Generated self-signed TLS certificate for testing."
     fi
-    
+
     export KD_TLS_CERT=certs/server.crt
     export KD_TLS_KEY=certs/server.key
     return 0
@@ -175,7 +177,7 @@ function wait_for_health() {
     ELAPSED=0
     while true; do
       set +e
-      RESPONSE=$(curl -sk --connect-timeout 3 "${KD_BASE_URL}/health" 2>&1)
+      RESPONSE=$(curl -s --cacert "${SCRIPT_DIR}/../certs/server.crt" --connect-timeout 3 "${KD_BASE_URL}/health" 2>&1)
       CURL_EXIT=$?
       set -e
       if [ ${CURL_EXIT} -ne 0 ]; then
