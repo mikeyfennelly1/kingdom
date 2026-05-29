@@ -7,3 +7,4 @@ certs/*.key
 blockchain/.env
 blockchain/sidecar/.env
 *.log
+node_modules/
