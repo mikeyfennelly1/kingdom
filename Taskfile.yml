@@ -13,19 +13,6 @@ tasks:
     cmds:
       - ./build/kds/kds
 
-  run-client:
-    desc: Builds and executes the kdctl Qt GUI client
-    deps: [build]
-    dotenv: ['.env']
-    cmds:
-      - DYLD_LIBRARY_PATH=/nix/store/20dqfwlhk76z6ajqm7gqxmbgjzyfb4nv-qtbase-6.11.0/lib ./build/kdctl/kdctl
-
-  run-blockchain:
-    desc: Starts the blockchain sidecar (records message hashes on Ethereum Sepolia)
-    dir: blockchain/sidecar
-    cmds:
-      - node index.js
-
   clean:
     desc: Removes build artifacts
     cmds:
