@@ -62,5 +62,10 @@ ENV KD_JWT_TTL_SECONDS=${KD_JWT_TTL_SECONDS}
 ENV KD_LOG_LEVEL=${KD_LOG_LEVEL}
 ENV KD_PORT=${KD_PORT}
 
-# Run the server using nix-shell to ensure the environment (libraries) is set up
-ENTRYPOINT ["nix-shell", "./config/build.shell.nix", "--run", "LD_LIBRARY_PATH=/app:$LD_LIBRARY_PATH /app/kds"]
+# Bake the Nix LD_LIBRARY_PATH into a launcher so the entrypoint never
+# needs to invoke nix-shell (and re-unpack tarballs) at container start.
+RUN nix-shell ./config/build.shell.nix --run \
+    'printf "#!/bin/sh\nexport LD_LIBRARY_PATH=/app:%s\nexec /app/kds \"$@\"\n" "$LD_LIBRARY_PATH" > /app/launch.sh' && \
+    chmod +x /app/launch.sh
+
+ENTRYPOINT ["/app/launch.sh"]
