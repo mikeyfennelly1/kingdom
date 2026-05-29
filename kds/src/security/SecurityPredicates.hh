@@ -109,7 +109,6 @@ class ValidateAuthenticated : public SecurityPredicate {
     if (std::regex_match(req.path, kPublicKeyPath)) {
       return std::nullopt;
     }
-
     auto token = bearerToken(req);
     if (!token.has_value()) {
       return SecurityError{"authentication required", 401};

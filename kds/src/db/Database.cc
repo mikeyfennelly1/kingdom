@@ -72,6 +72,7 @@ void Database::initSchema_() {
 
 uint64_t Database::createUser(const std::string& username, const std::string& passwordHash,
                               const std::string& publicKey) {
+  std::lock_guard<std::mutex> lock(mutex_);
   try {
     pqxx::work txn(conn_);
     pqxx::params params{username, passwordHash, publicKey};
@@ -86,6 +87,7 @@ uint64_t Database::createUser(const std::string& username, const std::string& pa
 }
 
 std::optional<UserRow> Database::getUserByUsername(const std::string& username) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{username};
   auto result = txn.exec(
@@ -101,7 +103,22 @@ std::optional<UserRow> Database::getUserByUsername(const std::string& username) 
                  result[0][2].as<std::string>(), result[0][3].as<std::string>()};
 }
 
+std::vector<UserRow> Database::getAllUsers() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  pqxx::work txn(conn_);
+  auto result = txn.exec("SELECT id, username FROM users ORDER BY id ASC");
+  txn.commit();
+
+  std::vector<UserRow> users;
+  users.reserve(result.size());
+  for (const auto& row : result) {
+    users.push_back(UserRow{row[0].as<uint64_t>(), row[1].as<std::string>(), "", ""});
+  }
+  return users;
+}
+
 std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(userId)};
   auto result = txn.exec("SELECT COALESCE(public_key, '') FROM users WHERE id = $1", params);
@@ -114,6 +131,7 @@ std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
 }
 
 bool Database::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(userId)};
   auto result =
@@ -152,6 +170,7 @@ bool Database::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
 
 uint64_t Database::createConversation(const std::string& name,
                                       const std::vector<uint64_t>& participantIds) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
 
   auto now = static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -175,6 +194,7 @@ uint64_t Database::createConversation(const std::string& name,
 }
 
 std::vector<kd::Conversation> Database::getConversationsByUserId(uint64_t userId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(userId)};
   auto result = txn.exec(
@@ -221,6 +241,7 @@ std::vector<kd::Conversation> Database::getConversationsByUserId(uint64_t userId
 uint64_t Database::createMessage(uint64_t conversationId, uint64_t senderId,
                                  const std::string& payload, uint64_t timestamp,
                                  std::optional<uint64_t> recipientId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(senderId), payload,
                       static_cast<int64_t>(timestamp)};
@@ -260,6 +281,7 @@ uint64_t Database::createMessage(uint64_t conversationId, uint64_t senderId,
 }
 
 std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversationId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(conversationId)};
   auto result = txn.exec(
@@ -275,7 +297,6 @@ std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversa
     msg.senderId = row[1].as<uint64_t>();
     msg.conversationId = row[2].as<uint64_t>();
     msg.payload = row[3].as<std::string>();
-    msg.signature = "";
     msg.timestamp = row[4].as<uint64_t>();
     msg.blockchainDigest = row[5].as<std::string>();
     messages.push_back(std::move(msg));
@@ -285,6 +306,7 @@ std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversa
 
 std::vector<kd::Message> Database::getMessagesByConversationIdForUser(uint64_t conversationId,
                                                                       uint64_t userId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(userId)};
   auto result = txn.exec(
@@ -303,7 +325,6 @@ std::vector<kd::Message> Database::getMessagesByConversationIdForUser(uint64_t c
     msg.senderId = row[1].as<uint64_t>();
     msg.conversationId = row[2].as<uint64_t>();
     msg.payload = row[3].as<std::string>();
-    msg.signature = "";
     msg.timestamp = row[4].as<uint64_t>();
     msg.blockchainDigest = row[5].as<std::string>();
     messages.push_back(std::move(msg));
@@ -312,6 +333,7 @@ std::vector<kd::Message> Database::getMessagesByConversationIdForUser(uint64_t c
 }
 
 bool Database::deleteMessage(uint64_t conversationId, uint64_t messageId, uint64_t senderId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(messageId), static_cast<int64_t>(conversationId),
                       static_cast<int64_t>(senderId)};
@@ -324,6 +346,7 @@ bool Database::deleteMessage(uint64_t conversationId, uint64_t messageId, uint64
 
 bool Database::revokeMessageAccess(uint64_t conversationId, uint64_t messageId, uint64_t senderId,
                                    uint64_t targetUserId, uint64_t revokedAt) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(messageId), static_cast<int64_t>(conversationId),
                       static_cast<int64_t>(senderId), static_cast<int64_t>(targetUserId),
@@ -341,6 +364,7 @@ bool Database::revokeMessageAccess(uint64_t conversationId, uint64_t messageId, 
 }
 
 void Database::updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{digest, static_cast<int64_t>(msgId)};
   txn.exec("UPDATE messages SET blockchain_digest = $1 WHERE id = $2", params);
@@ -348,6 +372,7 @@ void Database::updateMessageBlockchainDigest(uint64_t msgId, const std::string& 
 }
 
 bool Database::isParticipant(uint64_t conversationId, uint64_t userId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(userId)};
   auto result = txn.exec(

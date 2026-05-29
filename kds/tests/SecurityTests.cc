@@ -183,9 +183,9 @@ TEST(LocalKeyStoreTest, X3dhMessageRejectsMissingUsedOneTimePreKey) {
 
 TEST(MessageStoreTest, FindBySenderReturnsOnlyMatchingMessages) {
   MessageStore store;
-  store.add(Message{1, 10, 100, "msg1", "", 1000, ""});
-  store.add(Message{2, 20, 100, "msg2", "", 2000, ""});
-  store.add(Message{3, 10, 100, "msg3", "", 3000, ""});
+  store.add(Message{1, 10, 100, "msg1", 1000, ""});
+  store.add(Message{2, 20, 100, "msg2", 2000, ""});
+  store.add(Message{3, 10, 100, "msg3", 3000, ""});
 
   auto results = store.findBySender(10);
   ASSERT_EQ(results.size(), 2U);
@@ -195,7 +195,7 @@ TEST(MessageStoreTest, FindBySenderReturnsOnlyMatchingMessages) {
 
 TEST(MessageStoreTest, FindBySenderReturnsEmptyForUnknownSender) {
   MessageStore store;
-  store.add(Message{1, 10, 100, "msg1", "", 1000, ""});
+  store.add(Message{1, 10, 100, "msg1", 1000, ""});
 
   auto results = store.findBySender(99);
   EXPECT_TRUE(results.empty());

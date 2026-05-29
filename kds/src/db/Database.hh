@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
+#include <mutex>
 #include <optional>
 #include <pqxx/pqxx>
 #include <string>
@@ -22,6 +23,9 @@ class Database {
 
   // Fetch a user by username. Returns std::nullopt if not found.
   std::optional<UserRow> getUserByUsername(const std::string& username);
+
+  // Fetch all users (id + username only, no password hash).
+  std::vector<UserRow> getAllUsers();
 
   // Fetch a user's published public key. Returns std::nullopt if the user does not exist.
   std::optional<std::string> getUserPublicKey(uint64_t userId);
@@ -62,6 +66,7 @@ class Database {
  private:
   void initSchema_();
 
+  std::mutex mutex_;
   pqxx::connection conn_;
 };
 
