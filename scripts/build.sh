@@ -13,14 +13,8 @@ echo "========================================================="
 echo " Building Kingdom with Pinned Nix Dependencies "
 echo "========================================================="
 
-# If already inside a devbox shell, cmake and ninja are already on PATH — skip
-# the nix-shell wrapper (which requires NIX_PATH / nix channels to be configured).
-if [ -n "${DEVBOX_SHELL_ENABLED}" ]; then
-  echo "-> devbox shell detected, running cmake directly"
-  eval "${BUILD_CMD}"
-else
-  nix-shell ./config/build.shell.nix --run "${BUILD_CMD}"
-fi
+# Execute the build inside the nix-shell using the local build.shell.nix
+nix-shell ./config/build.shell.nix --run "${BUILD_CMD}"
 
 if [ $? -eq 0 ]; then
     echo "========================================================="
