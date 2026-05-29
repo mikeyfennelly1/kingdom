@@ -19,10 +19,11 @@ main() {
 
     orient_at_script
 
-    echo "--- Checking connectivity required for Docker build ---"
+    echo "--- Checking connectivity required for build ---"
     check_build_connectivity
     if [[ $? -ne 0 ]]; then
         echo "Error: GitHub is unreachable — Docker build will fail fetching NixOS nixpkgs tarballs" >&2
+        echo "NOTE: CHECK IF YOU HAVE A VPN OR FIREWALL CONFIGURED." >&2
         exit 1
     fi
 
