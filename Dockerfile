@@ -29,16 +29,40 @@ COPY config/build.shell.nix ./config/
 # Realize the environment so all dependencies (libraries) are in the Nix store
 RUN nix-shell ./config/build.shell.nix --run "true"
 
-# Copy binaries from the builder stage
+# Copy binaries and shared library from the builder stage
 COPY --from=builder /app/build/kds/kds /app/kds
 COPY --from=builder /app/build/kdctl/kdctl /app/kdctl
+COPY --from=builder /app/build/libkd/libkd.so.1 /app/libkd.so.1
 
 # Expose the default server port
 EXPOSE 8080
 
-# Environment variables
-ENV KD_LOG_LEVEL=info
-ENV KD_PORT=8080
+# Build-time parameters — no defaults, must be supplied via --build-arg
+# Secrets (POSTGRES_PASSWORD, KD_TLS_KEY, KD_DB_URL) are excluded: they
+# must never be baked into the image and are injected at runtime via -e.
+ARG POSTGRES_USER
+ARG POSTGRES_DB
+ARG POSTGRES_HOST
+ARG POSTGRES_PORT
+ARG KD_TLS_CERT
+ARG KD_JWT_TTL_SECONDS
+ARG KD_LOG_LEVEL
+ARG KD_PORT
 
-# Run the server using nix-shell to ensure the environment (libraries) is set up
-ENTRYPOINT ["nix-shell", "./config/build.shell.nix", "--run", "/app/kds"]
+# Promote to runtime environment
+ENV POSTGRES_USER=${POSTGRES_USER}
+ENV POSTGRES_DB=${POSTGRES_DB}
+ENV POSTGRES_HOST=${POSTGRES_HOST}
+ENV POSTGRES_PORT=${POSTGRES_PORT}
+ENV KD_TLS_CERT=${KD_TLS_CERT}
+ENV KD_JWT_TTL_SECONDS=${KD_JWT_TTL_SECONDS}
+ENV KD_LOG_LEVEL=${KD_LOG_LEVEL}
+ENV KD_PORT=${KD_PORT}
+
+# Bake the Nix LD_LIBRARY_PATH into a launcher so the entrypoint never
+# needs to invoke nix-shell (and re-unpack tarballs) at container start.
+RUN nix-shell ./config/build.shell.nix --run \
+    'printf "#!/bin/sh\nexport LD_LIBRARY_PATH=/app:%s\nexec /app/kds \"$@\"\n" "$LD_LIBRARY_PATH" > /app/launch.sh' && \
+    chmod +x /app/launch.sh
+
+ENTRYPOINT ["/app/launch.sh"]

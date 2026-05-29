@@ -2,8 +2,6 @@
 :toc: left
 :toclevels: 2
 
-CS4455 Cybersecurity — ISE 2nd Year, 2026
-
 == Prerequisites
 
 Install the following before cloning:
@@ -13,31 +11,22 @@ Install the following before cloning:
 
 == Setup
 
-=== 1. Clone the repository
+1. Clones this repo.
+2. Downloads nix.
+3. Installs all dependencies.
+4. Bootstraps environments for build and dev.
+5. Build and install for application server (`kds`) and command line tool (`kdctl`)
+6. Generates TLS certificates to run on the server.
 
-[source,bash]
+[source, bash]
 ----
-git clone git@github.com:mikeyfennelly1/kingdom.git
-cd kingdom
+wget -qO- https://raw.githubusercontent.com/mikeyfennelly1/kingdom/main/scripts/init.sh | bash
 ----
-
-=== 2. Enter the devbox shell
-
-All commands from this point forward must be run inside the devbox shell.
-
-[source,bash]
-----
-devbox shell
-----
-
-=== 3. Configure environment variables
 
 [source,bash]
 ----
 cp .env.example .env
 ----
-
-The defaults in `.env` work out of the box for local development. No changes needed unless you're running on a different host or port.
 
 === 4. Generate TLS certificate
 

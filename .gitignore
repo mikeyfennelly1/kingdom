@@ -2,6 +2,9 @@
 /compile_commands.json
 /.env
 /.gitignored
+certs/test/ # ignore generated test certificates
 certs/*.key
 blockchain/.env
 blockchain/sidecar/.env
+*.log
+node_modules/
