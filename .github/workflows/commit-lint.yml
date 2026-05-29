@@ -1,0 +1,44 @@
+name: commit-lint
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          pattern='^(feat|fix|chore|docs|test)(\([a-z0-9_/-]+\))?: .+'
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+
+          bad_commits=()
+          while IFS= read -r line; do
+            sha="${line%% *}"
+            msg="${line#* }"
+            if ! echo "$msg" | grep -qP "$pattern"; then
+              bad_commits+=("$sha: $msg")
+            fi
+          done < <(git log --format="%H %s" "${base}..${head}")
+
+          if [[ ${#bad_commits[@]} -gt 0 ]]; then
+            echo "ERROR: The following commits have non-conforming messages:"
+            echo ""
+            for entry in "${bad_commits[@]}"; do
+              echo "  $entry"
+            done
+            echo ""
+            echo "Required format: <type>[(<scope>)]: <description>"
+            echo "Allowed types:   feat | fix | chore | docs | test"
+            exit 1
+          fi
+
+          echo "All commit messages are valid."
