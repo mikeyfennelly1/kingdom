@@ -46,13 +46,19 @@ function build_project() {
     # Define the build command
     # Default to Release build for optimized performance unless specified otherwise
     BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
-    BUILD_CMD="cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} && cmake --build build"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    BUILD_DIRECTORY="${SCRIPT_DIR}/../build"
+    echo "outputting build artifacts to ${BUILD_DIRECTORY}"
+    BUILD_CMD="cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} && cmake --build ${BUILD_DIRECTORY}"
     
     # Execute the build inside the nix-shell using the local build.shell.nix
     nix-shell ./config/build.shell.nix --run "${BUILD_CMD}"
 
     if [ $? -eq 0 ]; then
-        echo "-> artifacts outputted to 'build/' directory..."
+        echo "-> artifacts outputted to '${BUILD_DIRECTORY}' directory..."
+        export BUILD_DIRECTORY
+        echo "contents of ${BUILD_DIRECTORY}"
+        ls "${BUILD_DIRECTORY}"
         return 0
     else
         echo " -> build failure. returning..."
