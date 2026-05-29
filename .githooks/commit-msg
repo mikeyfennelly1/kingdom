@@ -1,29 +1,4 @@
 #!/usr/bin/env bash
-# Enforces conventional commit prefixes: feat|fix|chore|docs|test
 set -euo pipefail
 
-commit_msg_file="$1"
-
-# Strip comment lines, take subject line only
-msg=$(grep -v '^#' "$commit_msg_file" | head -1)
-
-pattern='^(feat|fix|chore|docs|test)(\([a-z0-9_/-]+\))?: .+'
-
-if ! echo "$msg" | grep -qP "$pattern"; then
-    echo ""
-    echo "ERROR: Commit message does not follow the required format."
-    echo ""
-    echo "  Expected: <type>[(<scope>)]: <description>"
-    echo "  Allowed types: feat, fix, chore, docs, test"
-    echo ""
-    echo "  Examples:"
-    echo "    feat: add user registration endpoint"
-    echo "    fix(auth): correct JWT expiry calculation"
-    echo "    chore: update cmake dependencies"
-    echo ""
-    echo "  Your message: \"${msg}\""
-    echo ""
-    exit 1
-fi
-
-exit 0
+npx --yes commitlint --edit "$1"
