@@ -11,6 +11,7 @@
     "libpqxx",
     "libsodium",
     "pkg-config",
+    "qt6.qtbase",
     "tmux@latest",
     "gum@latest"
   ],
@@ -20,7 +21,8 @@
       "echo 'C++ compiler:' $(g++ --version | head -n 1)",
       "echo 'CMake:' $(cmake --version | head -n 1)",
       "echo 'Ninja:' $(ninja --version)",
-      "echo 'Task:' $(task --version)"
+      "echo 'Task:' $(task --version)",
+      "if command -v qmake6 >/dev/null 2>&1; then export Qt6_PREFIX=$(qmake6 -query QT_INSTALL_PREFIX); echo 'Qt6 prefix:' $Qt6_PREFIX; fi"
     ]
   },
   "env": {

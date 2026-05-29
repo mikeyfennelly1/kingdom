@@ -75,6 +75,7 @@ void Controller::setupRoutes() {
   notFoundHandler_();
   healthController_();
   authController_();
+  userController_();
   publicKeyController_();
   basicApiInfo_();
 
@@ -268,6 +269,17 @@ void Controller::healthController_() {
   svr_.Get("/health", [](const httplib::Request&, httplib::Response& res) -> void {
     nlohmann::json status = {{"status", "ok"}};
     res.set_content(status.dump(), "application/json");
+  });
+}
+
+void Controller::userController_() {
+  svr_.Get("/users", [this](const httplib::Request&, httplib::Response& res) -> void {
+    auto users = db_.getAllUsers();
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& u : users) {
+      arr.push_back({{"id", u.id}, {"username", u.username}});
+    }
+    res.set_content(arr.dump(), "application/json");
   });
 }
 
@@ -545,7 +557,7 @@ void Controller::messageController_() {
 }
 
 void Controller::basicApiInfo_() {
-  svr_.Get("/", [](const httplib::Request&, httplib::Response& res) -> void {
+  svr_.Get("/api", [](const httplib::Request&, httplib::Response& res) -> void {
     nlohmann::json info = {{"name", "Kingdom Server"}, {"version", "1.0"}};
     res.set_content(info.dump(), "application/json");
   });

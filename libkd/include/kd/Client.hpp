@@ -41,6 +41,7 @@ class Client {
    * @return nlohmann::json List of conversations
    */
   nlohmann::json getConversations(uint64_t userId);
+  nlohmann::json getUsers();
 
   nlohmann::json signup(const std::string& username, const std::string& password);
   nlohmann::json login(const std::string& username, const std::string& password);
