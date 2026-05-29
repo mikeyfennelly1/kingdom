@@ -19,6 +19,13 @@ main() {
 
     orient_at_script
 
+    echo "--- Checking connectivity required for Docker build ---"
+    check_build_connectivity
+    if [[ $? -ne 0 ]]; then
+        echo "Error: GitHub is unreachable — Docker build will fail fetching NixOS nixpkgs tarballs" >&2
+        exit 1
+    fi
+
     echo "--- Tearing down test environment ---"
     cleanup
     trap cleanup EXIT # ensures that when script finishes, test objects are cleaned up
@@ -98,6 +105,17 @@ function generate_tls_test_cert() {
     
     export KD_TLS_CERT=certs/server.crt
     export KD_TLS_KEY=certs/server.key
+    return 0
+}
+
+function check_build_connectivity() {
+    local url="https://github.com"
+    echo " Verifying connectivity from host -> ${url} (required for NixOS nixpkgs tarballs)..."
+    if ! curl -sf --connect-timeout 10 --max-time 10 "${url}" > /dev/null 2>&1; then
+        echo "ERROR: Cannot reach ${url}"
+        return 1
+    fi
+    echo " GitHub reachable."
     return 0
 }
 
