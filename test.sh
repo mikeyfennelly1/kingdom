@@ -4,6 +4,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 main() {
+    # parse flags
+    REBUILD=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --rebuild|-r)
+                REBUILD=true
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1" >&2
+                echo "Usage: $0 [--rebuild|-r]" >&2
+                exit 1
+                ;;
+        esac
+    done
+
     # basic script setup
     init_test_vars
     if [[ $? -ne 0 ]]; then
@@ -38,7 +54,19 @@ main() {
     fi
 
     # application runtime setup
-    echo ""
+    if [[ "${REBUILD}" == "true" ]]; then
+        echo ""
+        echo "--- Building docker artifacts ---"
+        build_services
+        if [[ $? -ne 0 ]]; then
+            echo "Error: failed to build dependent services for environment." >&2
+            exit 1
+        fi
+    else
+        echo ""
+        echo "--- Skipping build (pass --rebuild to force a fresh build) ---"
+    fi
+
     echo "--- Starting test environment dependencies (docker compose) ---"
     start_services
     if [[ $? -ne 0 ]]; then
@@ -123,10 +151,21 @@ cleanup() {
   return 0
 }
 
+function build_services() {
+    OUTPUT_LOG="buildtime.test.log"
+    echo "removing file if exists: ${OUTPUT_LOG}"
+    rm "${OUTPUT_LOG}" || true
+    echo "building docker services, forwarding to: ${OUTPUT_LOG}"
+    docker compose build >> "${OUTPUT_LOG}" 2>&1
+    return 0
+}
+
 function start_services() {
-    OUTPUT_LOG="services.log"
-    echo "starting docker services, forwarding stdout to: ${OUTPUT_LOG}"
-    docker compose up -d --build >> "${OUTPUT_LOG}"
+    OUTPUT_LOG="runtime.test.log"
+    echo "removing file if exists: ${OUTPUT_LOG}"
+    rm "${OUTPUT_LOG}" || true
+    echo "starting docker services, stdout to: ${OUTPUT_LOG}"
+    docker compose up >> "${OUTPUT_LOG}" 2>&1
     return 0
 }
 
