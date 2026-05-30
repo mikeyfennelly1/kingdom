@@ -242,9 +242,9 @@ void Controller::handleSignup_(const httplib::Request& req, httplib::Response& r
         content_types::Json);
     return;
   }
-  if (publicKey.empty()) {
+  if (publicKey.empty() || publicKey.size() > domain::kMaxPublicKeyLen) {
     res.status = httplib::BadRequest_400;
-    res.set_content(nlohmann::json{{json_fields::Error, "publicKey must not be empty"}}.dump(),
+    res.set_content(nlohmann::json{{json_fields::Error, "publicKey must be 1–8192 characters"}}.dump(),
                     content_types::Json);
     return;
   }
