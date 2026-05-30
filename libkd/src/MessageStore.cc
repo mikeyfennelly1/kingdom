@@ -43,6 +43,7 @@ std::string base64Encode(const std::array<unsigned char, N>& data) {
   return base64Encode(data.data(), data.size());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<unsigned char> base64Decode(const std::string& encoded, const std::string& fieldName) {
   std::vector<unsigned char> decoded(encoded.size(), 0);
   size_t decodedSize = 0;
@@ -125,10 +126,10 @@ std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveCacheEncryptio
 std::string sanitizedUsername(const std::string& username) {
   std::string value;
   value.reserve(username.size());
-  for (char ch : username) {
-    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
-        ch == '-' || ch == '_') {
-      value.push_back(ch);
+  for (char chr : username) {
+    if ((chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z') || (chr >= '0' && chr <= '9') ||
+        chr == '-' || chr == '_') {
+      value.push_back(chr);
     } else {
       value.push_back('_');
     }
@@ -208,10 +209,10 @@ void writeJsonFile(const std::filesystem::path& path, const nlohmann::json& body
 }
 
 std::string cacheAssociatedData(const std::string& username) {
-  std::string ad{kCacheAssociatedDataPrefix};
-  ad.push_back('\0');
-  ad += username;
-  return ad;
+  std::string aad{kCacheAssociatedDataPrefix};
+  aad.push_back('\0');
+  aad += username;
+  return aad;
 }
 
 struct StoreKdfParams {
@@ -250,6 +251,7 @@ MessageStore::MessageStore(const std::string& username) : storePath_(defaultStor
 MessageStore::MessageStore(std::filesystem::path storePath) : storePath_(std::move(storePath)) {
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 MessageStore::MessageStore(std::filesystem::path storePath, std::string username,
                            std::array<unsigned char, kEncryptionKeySize> encryptionKey,
                            std::array<unsigned char, kSaltSize> salt, unsigned long long opsLimit,
@@ -268,6 +270,7 @@ MessageStore MessageStore::encryptedForUser(const std::string& username,
   return encryptedAtPath(defaultStorePath(username), username, password);
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 MessageStore MessageStore::encryptedAtPath(std::filesystem::path storePath,
                                            const std::string& username,
                                            const std::string& password) {
@@ -315,11 +318,11 @@ void MessageStore::cachePublicKey(uint64_t userId, const std::string& publicKey)
 }
 
 std::optional<std::string> MessageStore::getCachedPublicKey(uint64_t userId) const {
-  auto it = publicKeyCache_.find(userId);
-  if (it == publicKeyCache_.end()) {
+  auto iter = publicKeyCache_.find(userId);
+  if (iter == publicKeyCache_.end()) {
     return std::nullopt;
   }
-  return it->second;
+  return iter->second;
 }
 
 nlohmann::json MessageStore::readStore_() const {
@@ -361,15 +364,15 @@ nlohmann::json MessageStore::readStore_() const {
     throw std::runtime_error("Local message store ciphertext is too short: " + storePath_.string());
   }
 
-  const auto ad = cacheAssociatedData(username_);
+  const auto aad = cacheAssociatedData(username_);
   std::vector<unsigned char> plaintext(ciphertext.size() -
                                        crypto_aead_xchacha20poly1305_ietf_ABYTES);
   unsigned long long plaintextSize = 0;
   const auto decryptResult =
       crypto_aead_xchacha20poly1305_ietf_decrypt(plaintext.data(), &plaintextSize, nullptr,
                                                  ciphertext.data(), ciphertext.size(),
-                                                 reinterpret_cast<const unsigned char*>(ad.data()),
-                                                 ad.size(), nonce.data(), encryptionKey_.data());
+                                                 reinterpret_cast<const unsigned char*>(aad.data()),
+                                                 aad.size(), nonce.data(), encryptionKey_.data());
   if (decryptResult != 0) {
     throw std::runtime_error("Failed to decrypt local message store: " + storePath_.string());
   }
@@ -402,11 +405,11 @@ void MessageStore::writeStore_(const nlohmann::json& store) const {
   std::vector<unsigned char> ciphertext(plaintextText.size() +
                                         crypto_aead_xchacha20poly1305_ietf_ABYTES);
   unsigned long long ciphertextSize = 0;
-  const auto ad = cacheAssociatedData(username_);
+  const auto aad = cacheAssociatedData(username_);
   if (crypto_aead_xchacha20poly1305_ietf_encrypt(
           ciphertext.data(), &ciphertextSize,
           reinterpret_cast<const unsigned char*>(plaintextText.data()), plaintextText.size(),
-          reinterpret_cast<const unsigned char*>(ad.data()), ad.size(), nullptr, nonce.data(),
+          reinterpret_cast<const unsigned char*>(aad.data()), aad.size(), nullptr, nonce.data(),
           encryptionKey_.data()) != 0) {
     throw std::runtime_error("Failed to encrypt local message store: " + storePath_.string());
   }

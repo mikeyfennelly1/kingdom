@@ -35,11 +35,11 @@ inline std::string base64UrlEncode(const unsigned char* data, size_t size) {
   }
   encoded.resize(static_cast<size_t>(encodedSize));
 
-  for (char& ch : encoded) {
-    if (ch == '+') {
-      ch = '-';
-    } else if (ch == '/') {
-      ch = '_';
+  for (char& chr : encoded) {
+    if (chr == '+') {
+      chr = '-';
+    } else if (chr == '/') {
+      chr = '_';
     }
   }
   while (!encoded.empty() && encoded.back() == '=') {
@@ -54,11 +54,11 @@ inline std::string base64UrlEncode(const std::string& data) {
 
 inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
   std::string padded = encoded;
-  for (char& ch : padded) {
-    if (ch == '-') {
-      ch = '+';
-    } else if (ch == '_') {
-      ch = '/';
+  for (char& chr : padded) {
+    if (chr == '-') {
+      chr = '+';
+    } else if (chr == '_') {
+      chr = '/';
     }
   }
   while (padded.size() % 4 != 0) {
@@ -104,6 +104,7 @@ inline std::optional<std::string> bearerToken(const httplib::Request& req) {
   return header.substr(prefix.size());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token,
                                                         const std::string& secret) {
   const auto firstDot = token.find('.');

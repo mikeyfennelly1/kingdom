@@ -5,8 +5,8 @@
 
 namespace kd {
 
-User::User(uint64_t id, std::string username, std::string passwordHash, std::string publicKey)
-    : id_(id)
+User::User(uint64_t userId, std::string username, std::string passwordHash, std::string publicKey)
+    : id_(userId)
     , username_(std::move(username))
     , passwordHash_(std::move(passwordHash))
     , publicKey_(std::move(publicKey)) {
