@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <kd/User.hpp>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string_view>

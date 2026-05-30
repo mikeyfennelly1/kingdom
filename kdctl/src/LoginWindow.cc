@@ -146,9 +146,13 @@ void LoginWindow::showError(const QString& msg) {
   errorLabel_->show();
 }
 
-void LoginWindow::onLogin() { performAuth(false); }
+void LoginWindow::onLogin() {
+  performAuth(false);
+}
 
-void LoginWindow::onSignup() { performAuth(true); }
+void LoginWindow::onSignup() {
+  performAuth(true);
+}
 
 void LoginWindow::performAuth(bool isSignup) {
   errorLabel_->hide();

@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'ansible/**'
-      - '.github/**'
+    paths:
+      - 'kds/**'
+      - 'kdctl/**'
+      - 'libkd/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
 
 jobs:
   e2e:
