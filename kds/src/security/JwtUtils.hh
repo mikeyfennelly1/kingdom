@@ -80,6 +80,9 @@ inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
   if (padded.size() > 1 && padded[padded.size() - 2] == '=') {
     ++padding;
   }
+  if (static_cast<size_t>(decodedSize) < padding) {
+    return std::nullopt;
+  }
   decoded.resize(static_cast<size_t>(decodedSize) - padding);
   return std::string(reinterpret_cast<const char*>(decoded.data()), decoded.size());
 }
