@@ -86,6 +86,7 @@ bool isValidSignupPassword(const std::string& password) {
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Controller::Controller(std::string host, int port, const std::string& dbConnectionString,
                        std::string sidecarUrl, const std::string& certPath,
                        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
