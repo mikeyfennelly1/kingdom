@@ -3,11 +3,13 @@
 
 #include <cstdlib>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <regex>
 #include <string>
 #include <unordered_set>
-#include <nlohmann/json.hpp>
+#include <vector>
 
+#include "../common/Constants.hh"
 #include "JwtUtils.hh"
 #include "SecurityPredicate.hh"
 
@@ -84,8 +86,8 @@ class ValidateUntampered : public SecurityPredicate {
       return std::nullopt;
     }
 
-    const auto contentType = req.get_header_value("Content-Type");
-    if (contentType.empty() || contentType.find("application/json") == std::string::npos) {
+    const auto contentType = req.get_header_value(http_headers::ContentType);
+    if (contentType.empty() || contentType.find(content_types::Json) == std::string::npos) {
       return SecurityError{"Content-Type must be application/json", 400};
     }
 
@@ -99,13 +101,14 @@ class ValidateAuthenticated : public SecurityPredicate {
     spdlog::debug("Executing SecurityPredicate: ValidateAuthenticated");
 
     // Public routes that do not require authentication
-    static const std::vector<std::string> kPublicPaths = {"/login", "/signup", "/health", "/"};
+    static const std::vector<std::string> kPublicPaths = {routes::Login, routes::Signup,
+                                                          routes::Health, routes::Root};
     for (const auto& path : kPublicPaths) {
       if (req.path == path) {
         return std::nullopt;
       }
     }
-    static const std::regex kPublicKeyPath("^/users/[0-9]+/public-key$");
+    static const std::regex kPublicKeyPath(routes::PublicUserKeyPathRegex);
     if (std::regex_match(req.path, kPublicKeyPath)) {
       return std::nullopt;
     }
