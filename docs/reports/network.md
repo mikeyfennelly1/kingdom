@@ -157,10 +157,9 @@ The page communicates directly with the Sepolia RPC endpoint from the browser â€
 | POST | `/login` | None | Authenticate, receive JWT |
 | POST | `/logout` | Bearer JWT | Revoke session token |
 | GET | `/users/{id}/public-key` | None | Fetch user's X3DH public key bundle |
-| POST | `/users/{id}/one-time-prekeys/{id}/consume` | Bearer JWT | Mark one-time prekey as used |
 | POST | `/conversations` | Bearer JWT | Create conversation |
 | GET | `/users/{id}/conversations` | Bearer JWT | List user's conversations |
-| POST | `/conversations/{id}/messages` | Bearer JWT | Send encrypted message |
+| POST | `/conversations/{id}/messages` | Bearer JWT | Send encrypted message; consumes referenced one-time prekey transactionally |
 | GET | `/conversations/{id}/messages` | Bearer JWT | Retrieve conversation messages |
 
 ---

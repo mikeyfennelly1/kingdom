@@ -1,8 +1,7 @@
 #include "Controller.hh"
 
-#include <sodium.h>
-
 #include <chrono>
+#include <cctype>
 #include <cstdint>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
@@ -14,25 +13,43 @@
 #include "../security/JwtUtils.hh"
 #include "../security/SecurityPredicates.hh"
 
+#include <sodium.h>
+
+#include <kd/User.hpp>
+
 namespace kd {
 
 namespace {
 
-std::string hashPassword(const std::string& password) {
-  char encodedHash[crypto_pwhash_STRBYTES];
-  if (crypto_pwhash_str_alg(encodedHash, password.c_str(), password.size(),
-                            crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
-                            crypto_pwhash_ALG_ARGON2ID13) != 0) {
-    throw std::runtime_error("Failed to hash password");
+std::optional<uint64_t> oneTimePreKeyIdFromPayload(const std::string& payload) {
+  auto payloadJson = nlohmann::json::parse(payload, nullptr, false);
+  if (payloadJson.is_discarded() || !payloadJson.is_object() ||
+      !payloadJson.contains("oneTimePreKeyId") || payloadJson["oneTimePreKeyId"].is_null()) {
+    return std::nullopt;
   }
-  return encodedHash;
+  if (!payloadJson["oneTimePreKeyId"].is_number_unsigned()) {
+    return std::nullopt;
+  }
+  return payloadJson["oneTimePreKeyId"].get<uint64_t>();
 }
 
-bool verifyPassword(const std::string& encodedHash, const std::string& password) {
-  return crypto_pwhash_str_verify(encodedHash.c_str(), password.c_str(), password.size()) == 0;
+bool isValidSignupPassword(const std::string& password) {
+  if (password.size() < 12 || password.size() > 72) {
+    return false;
+  }
+
+  bool hasUppercase = false;
+  bool hasNumber = false;
+  for (unsigned char ch : password) {
+    hasUppercase = hasUppercase || std::isupper(ch) != 0;
+    hasNumber = hasNumber || std::isdigit(ch) != 0;
+  }
+
+  return hasUppercase && hasNumber;
 }
 
 }  // namespace
+
 
 Controller::Controller(std::string host, int port, std::string dbConnectionString,
                        std::string sidecarUrl, std::string certPath, std::string keyPath,
@@ -160,10 +177,15 @@ void Controller::authController_() {
                       "application/json");
       return;
     }
-    if (password.empty() || password.size() > 72) {
+    if (!isValidSignupPassword(password)) {
       res.status = 400;
-      res.set_content(nlohmann::json{{"error", "password must be 1–72 characters"}}.dump(),
-                      "application/json");
+      res.set_content(
+          nlohmann::json{
+              {"error",
+               "password must be 12–72 characters and include at least one uppercase letter and "
+               "one number"}}
+              .dump(),
+          "application/json");
       return;
     }
     if (publicKey.empty()) {
@@ -174,7 +196,7 @@ void Controller::authController_() {
     }
 
     try {
-      auto passwordHash = hashPassword(password);
+      auto passwordHash = User::hashPassword(password);
       uint64_t id = db_.createUser(username, passwordHash, publicKey);
       auto sessionToken = createSession_(id, username);
       spdlog::info("Created user '{}' with id {}", username, id);
@@ -227,16 +249,16 @@ void Controller::authController_() {
     }
 
     auto user = db_.getUserByUsername(username);
-    if (!user.has_value() || !verifyPassword(user->passwordHash, password)) {
+    if (!user.has_value() || !user->verifyPassword(password)) {
       res.status = 401;
       res.set_content(nlohmann::json{{"error", "invalid username or password"}}.dump(),
                       "application/json");
       return;
     }
 
-    auto sessionToken = createSession_(user->id, user->username);
-    res.set_content(nlohmann::json{{"id", user->id},
-                                   {"username", user->username},
+    auto sessionToken = createSession_(user->id(), user->username());
+    res.set_content(nlohmann::json{{"id", user->id()},
+                                   {"username", user->username()},
                                    {"token", sessionToken},
                                    {"sessionToken", sessionToken}}
                         .dump(),
@@ -277,7 +299,7 @@ void Controller::userController_() {
     auto users = db_.getAllUsers();
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& u : users) {
-      arr.push_back({{"id", u.id}, {"username", u.username}});
+      arr.push_back({{"id", u.id()}, {"username", u.username()}});
     }
     res.set_content(arr.dump(), "application/json");
   });
@@ -297,26 +319,6 @@ void Controller::publicKeyController_() {
              res.set_content(nlohmann::json{{"userId", userId}, {"publicKey", *publicKey}}.dump(),
                              "application/json");
            });
-
-  svr_.Post(R"(/users/(\d+)/one-time-prekeys/(\d+)/consume)",
-            [this](const httplib::Request& req, httplib::Response& res) -> void {
-              auto authenticatedUserId = authenticatedUserId_(req);
-              if (!authenticatedUserId.has_value()) {
-                res.status = 401;
-                res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
-                                "application/json");
-                return;
-              }
-              uint64_t userId = std::stoull(std::string(req.matches[1]));
-              uint64_t preKeyId = std::stoull(std::string(req.matches[2]));
-              if (!db_.consumeOneTimePreKey(userId, preKeyId)) {
-                res.status = 404;
-                res.set_content(nlohmann::json{{"error", "one-time prekey not found"}}.dump(),
-                                "application/json");
-                return;
-              }
-              res.set_content(nlohmann::json{{"status", "consumed"}}.dump(), "application/json");
-            });
 }
 
 void Controller::conversationController_() {
@@ -440,7 +442,15 @@ void Controller::messageController_() {
                                          std::chrono::system_clock::now().time_since_epoch())
                                          .count());
 
-    uint64_t msgId = db_.createMessage(convId, senderId, payload, now, recipientId);
+    auto oneTimePreKeyId = oneTimePreKeyIdFromPayload(payload);
+    uint64_t msgId = 0;
+    try {
+      msgId = db_.createMessage(convId, senderId, payload, now, recipientId, oneTimePreKeyId);
+    } catch (const std::runtime_error& e) {
+      res.status = 409;
+      res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+      return;
+    }
     spdlog::info("Created message {} in conversation {}", msgId, convId);
 
     // Record hash on-chain via the blockchain sidecar
@@ -449,7 +459,7 @@ void Controller::messageController_() {
       httplib::Client sidecar(sidecarUrl_);
       sidecar.set_connection_timeout(30);
       sidecar.set_read_timeout(60);
-      nlohmann::json sidecarBody = {{"conversationId", convId}, {"ciphertext", payload}};
+      nlohmann::json sidecarBody = {{"conversationId", convId}, {"msgId", msgId}, {"ciphertext", payload}};
       auto sidecarRes = sidecar.Post("/record", sidecarBody.dump(), "application/json");
       if (sidecarRes && sidecarRes->status == 200) {
         auto sidecarJson = nlohmann::json::parse(sidecarRes->body);

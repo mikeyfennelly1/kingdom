@@ -116,7 +116,7 @@ MainWindow::MainWindow(Session session, QWidget* parent)
                                              const char* e = std::getenv("KD_CA_CERT");
                                              return e != nullptr ? std::string(e) : std::string{};
                                            }())),
-      messageStore_(session_.username) {
+      messageStore_(std::move(session_.messageStore)) {
   client_->setAuthToken(session_.token);
   loadUserCache();
 
@@ -555,11 +555,6 @@ void MainWindow::onSend() {
 
     messageStore_.savePlaintext(sentMsg.id, sentMsg.conversationId, sentMsg.senderId,
                                 sentMsg.timestamp, text);
-
-    auto usedPreKeyId = kd::LocalKeyStore::oneTimePreKeyIdFromPayload(payload);
-    if (usedPreKeyId.has_value()) {
-      client_->consumeOneTimePreKey(recipientId, *usedPreKeyId);
-    }
 
     appendMessageToView(session_.username, text, sentMsg.timestamp);
     auto* bar = messageView_->verticalScrollBar();

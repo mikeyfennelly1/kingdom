@@ -7,20 +7,22 @@ pragma solidity ^0.8.20;
 contract MessageIntegrity {
     address public owner;
 
-    /// @notice Emitted when a conversation hash is recorded
+    /// @notice Emitted when a message hash is recorded
     /// @param conversationId The ID of the conversation
-    /// @param hash           keccak256 hash of the conversation payload
+    /// @param msgId          The ID of the message
+    /// @param hash           keccak256 hash of the message payload
     /// @param timestamp      Block timestamp at time of recording
     event HashRecorded(
         uint256 indexed conversationId,
+        uint256 indexed msgId,
         bytes32 hash,
         uint256 timestamp
     );
 
     error Unauthorized();
 
-    mapping(uint256 => bytes32) public hashes;
-    mapping(uint256 => uint256) public timestamps;
+    mapping(uint256 => mapping(uint256 => bytes32)) public hashes;
+    mapping(uint256 => mapping(uint256 => uint256)) public timestamps;
 
     constructor() {
         owner = msg.sender;
@@ -31,12 +33,13 @@ contract MessageIntegrity {
         _;
     }
 
-    /// @notice Record a conversation payload hash on-chain
-    /// @param conversationId The ID of the conversation being recorded
+    /// @notice Record a per-message payload hash on-chain
+    /// @param conversationId The ID of the conversation
+    /// @param msgId          The ID of the message within that conversation
     /// @param hash           keccak256 hash of the ciphertext payload
-    function recordHash(uint256 conversationId, bytes32 hash) external onlyOwner {
-        hashes[conversationId] = hash;
-        timestamps[conversationId] = block.timestamp;
-        emit HashRecorded(conversationId, hash, block.timestamp);
+    function recordHash(uint256 conversationId, uint256 msgId, bytes32 hash) external onlyOwner {
+        hashes[conversationId][msgId] = hash;
+        timestamps[conversationId][msgId] = block.timestamp;
+        emit HashRecorded(conversationId, msgId, hash, block.timestamp);
     }
 }

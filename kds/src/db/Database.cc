@@ -1,5 +1,7 @@
 #include "Database.hh"
 
+#include <kd/User.hpp>
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -87,7 +89,7 @@ uint64_t Database::createUser(const std::string& username, const std::string& pa
   }
 }
 
-std::optional<UserRow> Database::getUserByUsername(const std::string& username) {
+std::optional<User> Database::getUserByUsername(const std::string& username) {
   std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{username};
@@ -100,20 +102,20 @@ std::optional<UserRow> Database::getUserByUsername(const std::string& username) 
     return std::nullopt;
   }
 
-  return UserRow{result[0][0].as<uint64_t>(), result[0][1].as<std::string>(),
-                 result[0][2].as<std::string>(), result[0][3].as<std::string>()};
+  return User{result[0][0].as<uint64_t>(), result[0][1].as<std::string>(),
+              result[0][2].as<std::string>(), result[0][3].as<std::string>()};
 }
 
-std::vector<UserRow> Database::getAllUsers() {
+std::vector<User> Database::getAllUsers() {
   std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   auto result = txn.exec("SELECT id, username FROM users ORDER BY id ASC");
   txn.commit();
 
-  std::vector<UserRow> users;
+  std::vector<User> users;
   users.reserve(result.size());
   for (const auto& row : result) {
-    users.push_back(UserRow{row[0].as<uint64_t>(), row[1].as<std::string>(), "", ""});
+    users.emplace_back(row[0].as<uint64_t>(), row[1].as<std::string>());
   }
   return users;
 }
@@ -131,21 +133,19 @@ std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
   return result[0][0].as<std::string>();
 }
 
-bool Database::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  pqxx::work txn(conn_);
+namespace {
+
+bool consumeOneTimePreKeyInTransaction(pqxx::work& txn, uint64_t userId, uint64_t preKeyId) {
   pqxx::params params{static_cast<int64_t>(userId)};
   auto result =
       txn.exec("SELECT COALESCE(public_key, '') FROM users WHERE id = $1 FOR UPDATE", params);
   if (result.empty()) {
-    txn.commit();
     return false;
   }
 
   auto bundle = nlohmann::json::parse(result[0][0].as<std::string>(), nullptr, false);
   if (bundle.is_discarded() || !bundle.is_object() || !bundle.contains("oneTimePreKeys") ||
       !bundle["oneTimePreKeys"].is_array()) {
-    txn.commit();
     return false;
   }
 
@@ -159,15 +159,15 @@ bool Database::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
                        oneTimePreKeys.end());
 
   if (oneTimePreKeys.size() == originalSize) {
-    txn.commit();
     return false;
   }
 
   pqxx::params updateParams{bundle.dump(), static_cast<int64_t>(userId)};
   txn.exec("UPDATE users SET public_key = $1 WHERE id = $2", updateParams);
-  txn.commit();
   return true;
 }
+
+}  // namespace
 
 uint64_t Database::createConversation(const std::string& name,
                                       const std::vector<uint64_t>& participantIds) {
@@ -241,9 +241,16 @@ std::vector<kd::Conversation> Database::getConversationsByUserId(uint64_t userId
 
 uint64_t Database::createMessage(uint64_t conversationId, uint64_t senderId,
                                  const std::string& payload, uint64_t timestamp,
-                                 std::optional<uint64_t> recipientId) {
+                                 std::optional<uint64_t> recipientId,
+                                 std::optional<uint64_t> oneTimePreKeyId) {
   std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
+
+  if (recipientId.has_value() && oneTimePreKeyId.has_value() && *recipientId != senderId &&
+      !consumeOneTimePreKeyInTransaction(txn, *recipientId, *oneTimePreKeyId)) {
+    throw std::runtime_error("one-time prekey not found");
+  }
+
   pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(senderId), payload,
                       static_cast<int64_t>(timestamp)};
   auto result = txn.exec(

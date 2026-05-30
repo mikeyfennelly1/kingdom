@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
     login->setAttribute(Qt::WA_DeleteOnClose);
 
     QObject::connect(login, &QDialog::accepted, [login, &showLogin]() {
-      auto res = login->result();
+      auto res = login->takeResult();
       if (!res.has_value()) {
         showLogin();
         return;
@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
       session.username = res->username;
       session.token = res->token;
       session.identityKey = std::move(res->identityKey);
+      session.messageStore = std::move(res->messageStore);
       session.serverUrl = res->serverUrl;
 
       auto* mainWin = new MainWindow(std::move(session));

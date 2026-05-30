@@ -1,11 +1,14 @@
 #include "LoginWindow.hh"
 
+#include <sodium.h>
+
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <cctype>
 #include <cstdlib>
 #include <exception>
 #include <kd/Client.hpp>
@@ -54,6 +57,21 @@ static const char* kSecondaryButtonStyle =
     "QPushButton:hover { background-color: #eff6ff; }"
     "QPushButton:pressed { background-color: #dbeafe; }"
     "QPushButton:disabled { color: #93c5fd; border-color: #93c5fd; }";
+
+static bool isValidSignupPassword(const std::string& password) {
+  if (password.size() < 12 || password.size() > 72) {
+    return false;
+  }
+
+  bool hasUppercase = false;
+  bool hasNumber = false;
+  for (unsigned char ch : password) {
+    hasUppercase = hasUppercase || std::isupper(ch) != 0;
+    hasNumber = hasNumber || std::isdigit(ch) != 0;
+  }
+
+  return hasUppercase && hasNumber;
+}
 
 LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
   setWindowTitle("Kingdom");
@@ -159,7 +177,7 @@ void LoginWindow::performAuth(bool isSignup) {
 
   const std::string serverUrl{serverUrlEdit_->text().trimmed().toUtf8().constData()};
   const std::string username{usernameEdit_->text().trimmed().toUtf8().constData()};
-  const std::string password{passwordEdit_->text().toUtf8().constData()};
+  std::string password{passwordEdit_->text().toUtf8().constData()};
 
   if (serverUrl.empty()) {
     showError("Server URL is required.");
@@ -171,6 +189,12 @@ void LoginWindow::performAuth(bool isSignup) {
   }
   if (password.empty()) {
     showError("Password is required.");
+    return;
+  }
+  if (isSignup && !isValidSignupPassword(password)) {
+    showError(
+        "Password must be 12-72 characters and include at least one uppercase letter and one "
+        "number.");
     return;
   }
 
@@ -202,18 +226,24 @@ void LoginWindow::performAuth(bool isSignup) {
     client.setAuthToken(token);
 
     kd::LocalIdentityKey identityKey = kd::LocalKeyStore::loadForLogin(username, password);
+    kd::MessageStore messageStore = kd::MessageStore::encryptedForUser(username, password);
+    sodium_memzero(password.data(), password.size());
 
     LoginResult res;
     res.userId = userJson["id"].get<uint64_t>();
     res.username = userJson["username"].get<std::string>();
     res.token = token;
     res.identityKey = std::move(identityKey);
+    res.messageStore = std::move(messageStore);
     res.serverUrl = serverUrl;
 
     result_ = std::move(res);
     accept();
 
   } catch (const std::exception& e) {
+    if (!password.empty()) {
+      sodium_memzero(password.data(), password.size());
+    }
     showError(QString::fromUtf8(e.what()));
     loginButton_->setEnabled(true);
     signupButton_->setEnabled(true);

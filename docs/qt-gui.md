@@ -86,8 +86,8 @@ Holds a `Session` struct passed from `LoginWindow`, plus:
 1. Fetches recipient's public key via `GET /users/:id/public-key`.
 2. Calls `kd::LocalKeyStore::encryptMessage()` with conversation and participant IDs as AAD.
 3. Posts the ciphertext to `POST /conversations/:id/messages` with `recipientId` in the body.
-4. Saves the plaintext to `MessageStore` so it renders immediately without re-decrypting.
-5. If a one-time pre-key was consumed, calls `POST /users/:id/one-time-prekeys/:pkId/consume`.
+4. The server consumes any referenced one-time pre-key transactionally with message creation.
+5. Saves the plaintext to `MessageStore` so it renders immediately without re-decrypting.
 
 **Polling:**
 - `QTimer` fires every 5 seconds and calls `loadMessages()` on the active conversation.
