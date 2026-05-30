@@ -8,6 +8,12 @@
 #include "Controller.hh"
 
 namespace kd {
+
+namespace {
+constexpr std::size_t kMinJwtSecretLen = 32;
+constexpr uint64_t kDefaultJwtTtlSeconds = 3600;
+}  // namespace
+
 auto configure() -> kd::Controller {
   // Log Level Configuration
   const char* logLevelEnv = std::getenv("KD_LOG_LEVEL");
@@ -37,12 +43,12 @@ auto configure() -> kd::Controller {
   }
 
   const char* jwtSecret = std::getenv("KD_JWT_SECRET");
-  if (jwtSecret == nullptr || std::string(jwtSecret).size() < 32) {
+  if (jwtSecret == nullptr || std::string(jwtSecret).size() < kMinJwtSecretLen) {
     throw std::runtime_error("KD_JWT_SECRET must be set to at least 32 characters");
   }
 
   const char* jwtTtlEnv = std::getenv("KD_JWT_TTL_SECONDS");
-  uint64_t jwtTtlSeconds = (jwtTtlEnv != nullptr) ? std::stoull(jwtTtlEnv) : 3600;
+  uint64_t jwtTtlSeconds = (jwtTtlEnv != nullptr) ? std::stoull(jwtTtlEnv) : kDefaultJwtTtlSeconds;
   if (jwtTtlSeconds == 0) {
     throw std::runtime_error("KD_JWT_TTL_SECONDS must be greater than zero");
   }

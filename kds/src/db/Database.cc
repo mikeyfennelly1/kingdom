@@ -133,6 +133,9 @@ std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
 
 namespace {
 
+constexpr std::size_t kBlockchainDigestColIdx = 5;
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool consumeOneTimePreKeyInTransaction(pqxx::work& txn, uint64_t userId, uint64_t preKeyId) {
   pqxx::params params{static_cast<int64_t>(userId)};
   auto result =
@@ -178,7 +181,7 @@ uint64_t Database::createConversation(const std::string& name,
   auto result =
       txn.exec("INSERT INTO conversations (name, created_at) VALUES ($1, $2) RETURNING id",
                convParams);
-  uint64_t convId = result[0][0].as<uint64_t>();
+  auto convId = result[0][0].as<uint64_t>();
 
   for (auto uid : participantIds) {
     pqxx::params pParams{static_cast<int64_t>(convId), static_cast<int64_t>(uid)};
@@ -253,7 +256,7 @@ uint64_t Database::createMessage(uint64_t conversationId, uint64_t senderId,
       "INSERT INTO messages (conversation_id, sender_id, payload, timestamp) "
       "VALUES ($1, $2, $3, $4) RETURNING id",
       params);
-  uint64_t msgId = result[0][0].as<uint64_t>();
+  auto msgId = result[0][0].as<uint64_t>();
 
   if (recipientId.has_value()) {
     pqxx::params senderAccessParams{static_cast<int64_t>(msgId), static_cast<int64_t>(senderId)};
@@ -302,7 +305,7 @@ std::vector<kd::Message> Database::getMessagesByConversationId(uint64_t conversa
     msg.conversationId = row[2].as<uint64_t>();
     msg.payload = row[3].as<std::string>();
     msg.timestamp = row[4].as<uint64_t>();
-    msg.blockchainDigest = row[5].as<std::string>();
+    msg.blockchainDigest = row[kBlockchainDigestColIdx].as<std::string>();
     messages.push_back(std::move(msg));
   }
   return messages;
@@ -330,7 +333,7 @@ std::vector<kd::Message> Database::getMessagesByConversationIdForUser(uint64_t c
     msg.conversationId = row[2].as<uint64_t>();
     msg.payload = row[3].as<std::string>();
     msg.timestamp = row[4].as<uint64_t>();
-    msg.blockchainDigest = row[5].as<std::string>();
+    msg.blockchainDigest = row[kBlockchainDigestColIdx].as<std::string>();
     messages.push_back(std::move(msg));
   }
   return messages;

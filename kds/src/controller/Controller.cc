@@ -28,7 +28,7 @@ constexpr const char* ConversationId = "conversationId";
 constexpr const char* Error = "error";
 constexpr const char* Exp = "exp";
 constexpr const char* Iat = "iat";
-constexpr const char* Id = "id";
+constexpr const char* EntityId = "id";
 constexpr const char* Message = "message";
 constexpr const char* MessageId = "messageId";
 constexpr const char* MsgId = "msgId";
@@ -76,9 +76,9 @@ bool isValidSignupPassword(const std::string& password) {
 
   bool hasUppercase = false;
   bool hasNumber = false;
-  for (unsigned char ch : password) {
-    hasUppercase = hasUppercase || std::isupper(ch) != 0;
-    hasNumber = hasNumber || std::isdigit(ch) != 0;
+  for (unsigned char chr : password) {
+    hasUppercase = hasUppercase || std::isupper(chr) != 0;
+    hasNumber = hasNumber || std::isdigit(chr) != 0;
   }
 
   return hasUppercase && hasNumber;
@@ -86,9 +86,10 @@ bool isValidSignupPassword(const std::string& password) {
 
 }  // namespace
 
-Controller::Controller(std::string host, int port, std::string dbConnectionString,
-                       std::string sidecarUrl, std::string certPath, std::string keyPath,
-                       std::string jwtSecret, uint64_t jwtTtlSeconds)
+Controller::Controller(std::string host, int port, const std::string& dbConnectionString,
+                       std::string sidecarUrl, const std::string& certPath,
+                       // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                       const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds)
     : host_(std::move(host))
     , port_(port)
     , sidecarUrl_(std::move(sidecarUrl))
@@ -168,13 +169,13 @@ std::optional<uint64_t> Controller::authenticatedUserId_(const httplib::Request&
   }
 }
 
-bool Controller::isRateLimited_(const std::string& ip) {
+bool Controller::isRateLimited_(const std::string& ipAddr) {
   constexpr int kMaxAttempts = 10;
   constexpr auto kWindow = std::chrono::seconds(timeouts::kRateLimitWindowSec);
 
   std::scoped_lock lock(rateLimitMutex_);
   auto now = std::chrono::steady_clock::now();
-  auto& entry = rateLimitMap_[ip];
+  auto& entry = rateLimitMap_[ipAddr];
 
   if (now - entry.windowStart >= kWindow) {
     entry.count = 0;
@@ -194,8 +195,8 @@ void Controller::registerAuthRoutes_() {
     handleLogin_(req, res);
   });
 
-  svr_.Post(routes::Logout, [this](const httplib::Request& req, httplib::Response& res) {
-    handleLogout_(req, res);
+  svr_.Post(routes::Logout, [](const httplib::Request& req, httplib::Response& res) {
+    Controller::handleLogout_(req, res);
   });
 }
 
@@ -249,11 +250,11 @@ void Controller::handleSignup_(const httplib::Request& req, httplib::Response& r
 
   try {
     auto passwordHash = User::hashPassword(password);
-    uint64_t id = db_.createUser(username, passwordHash, publicKey);
-    auto sessionToken = createSession_(id, username);
-    spdlog::info("Created user '{}' with id {}", username, id);
+    auto newUserId = db_.createUser(username, passwordHash, publicKey);
+    auto sessionToken = createSession_(newUserId, username);
+    spdlog::info("Created user '{}' with id {}", username, newUserId);
     res.status = httplib::Created_201;
-    res.set_content(nlohmann::json{{json_fields::Id, id},
+    res.set_content(nlohmann::json{{json_fields::EntityId, newUserId},
                                    {json_fields::Username, username},
                                    {json_fields::PublicKey, publicKey},
                                    {json_fields::Token, sessionToken},
@@ -310,7 +311,7 @@ void Controller::handleLogin_(const httplib::Request& req, httplib::Response& re
   }
 
   auto sessionToken = createSession_(user->id(), user->username());
-  res.set_content(nlohmann::json{{json_fields::Id, user->id()},
+  res.set_content(nlohmann::json{{json_fields::EntityId, user->id()},
                                  {json_fields::Username, user->username()},
                                  {json_fields::Token, sessionToken},
                                  {json_fields::SessionToken, sessionToken}}
@@ -350,8 +351,8 @@ void Controller::userController_() {
   svr_.Get(routes::Users, [this](const httplib::Request&, httplib::Response& res) -> void {
     auto users = db_.getAllUsers();
     nlohmann::json arr = nlohmann::json::array();
-    for (const auto& u : users) {
-      arr.push_back({{json_fields::Id, u.id()}, {json_fields::Username, u.username()}});
+    for (const auto& user : users) {
+      arr.push_back({{json_fields::EntityId, user.id()}, {json_fields::Username, user.username()}});
     }
     res.set_content(arr.dump(), content_types::Json);
   });
@@ -424,11 +425,12 @@ void Controller::handleCreateConversation_(const httplib::Request& req, httplib:
     return;
   }
 
-  uint64_t id = db_.createConversation(name, participantIds);
-  spdlog::info("Created conversation '{}' with id {}", name, id);
+  auto newConvId = db_.createConversation(name, participantIds);
+  spdlog::info("Created conversation '{}' with id {}", name, newConvId);
   res.status = httplib::Created_201;
-  res.set_content(nlohmann::json{{json_fields::Id, id}, {json_fields::Name, name}}.dump(),
-                  content_types::Json);
+  res.set_content(
+      nlohmann::json{{json_fields::EntityId, newConvId}, {json_fields::Name, name}}.dump(),
+      content_types::Json);
 }
 
 void Controller::handleListUserConversations_(const httplib::Request& req, httplib::Response& res) {
@@ -552,7 +554,7 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
                                   {json_fields::MsgId, msgId},
                                   {json_fields::Ciphertext, payload}};
     auto sidecarRes = sidecar.Post(routes::SidecarRecord, sidecarBody.dump(), content_types::Json);
-    if (sidecarRes && sidecarRes->status == 200) {
+    if (sidecarRes && sidecarRes->status == httplib::OK_200) {
       auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
       txHash = sidecarJson[json_fields::TxHash].get<std::string>();
       db_.updateMessageBlockchainDigest(msgId, txHash);

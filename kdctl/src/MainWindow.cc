@@ -686,7 +686,7 @@ std::optional<uint64_t> MainWindow::findConversationWithUser(uint64_t userId) co
   return std::nullopt;
 }
 
-QString MainWindow::fingerprintForPublicKey(const std::string& publicKey) const {
+QString MainWindow::fingerprintForPublicKey(const std::string& publicKey) {
   std::string fingerprintInput = publicKey;
   auto bundle = nlohmann::json::parse(publicKey, nullptr, false);
   if (bundle.is_object() && bundle.contains("identityKey") && bundle.contains("signingKey")) {
@@ -706,6 +706,7 @@ QString MainWindow::fingerprintForPublicKey(const std::string& publicKey) const 
   return groups.join(' ');
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool MainWindow::confirmRecipientIdentity(uint64_t userId, const std::string& username,
                                           const std::string& publicKey) {
   const QString fingerprint = fingerprintForPublicKey(publicKey);
