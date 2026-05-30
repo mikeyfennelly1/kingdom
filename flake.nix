@@ -15,6 +15,11 @@
         pkgs = nixpkgs.legacyPackages.${system};
       in {
         devShells.default =
+          # ----- Qt6 -----
+          # qt6.qtbase pinned at nixos-25.11 — if this fails after `nix flake update`, revert flake.lock, do not remove the assertion.
+          assert pkgs.qt6.qtbase.version == "6.10.1";
+          # qt6.qttools pinned at nixos-25.11 — if this fails after `nix flake update`, revert flake.lock, do not remove the assertion.
+          assert pkgs.qt6.qttools.version == "6.10.1";
           # ----- build tools (nativeBuildInputs) -----
           # gcc15 pinned at nixos-25.11 — if this fails after `nix flake update`, revert flake.lock, do not remove the assertion.
           assert pkgs.gcc15.version == "15.2.0";
@@ -73,9 +78,13 @@
               pkgs.cmake
               pkgs.ninja
               pkgs.pkg-config
+              pkgs.qt6.qttools            # moc, uic, rcc — needed by CMake automoc at configure time
+              pkgs.qt6Packages.wrapQtAppsHook  # sets QT_PLUGIN_PATH and related env vars
             ];
 
             buildInputs = [
+              # Qt6
+              pkgs.qt6.qtbase
               # direct
               pkgs.openssl
               pkgs.libsodium
@@ -102,6 +111,9 @@
             shellHook = ''
               export CXX=g++
               export CC=gcc
+              # Expose Qt6 cmake config files so find_package(Qt6) works under
+              # CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY without loosening system-path guards.
+              export CMAKE_PREFIX_PATH="${pkgs.qt6.qtbase}/lib/cmake''${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
             '';
           };
       });
