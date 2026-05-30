@@ -33,7 +33,7 @@ bool User::verifyPassword(const std::string& password) const {
 }
 
 std::string User::hashPassword(const std::string& password) {
-    char encodedHash[crypto_pwhash_STRBYTES];
+    char encodedHash[crypto_pwhash_STRBYTES];  // NOLINT(modernize-avoid-c-arrays)
     if (crypto_pwhash_str_alg(encodedHash, password.c_str(), password.size(),
                               crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
                               crypto_pwhash_ALG_ARGON2ID13) != 0) {

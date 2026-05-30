@@ -83,8 +83,8 @@ std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveKey(
     throw std::runtime_error("Failed to create HKDF context");
   }
 
-  char digestName[] = "SHA256";
-  OSSL_PARAM params[] = {
+  char digestName[] = "SHA256";                          // NOLINT(modernize-avoid-c-arrays)
+  OSSL_PARAM params[] = {                                // NOLINT(modernize-avoid-c-arrays)
       OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
       OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, const_cast<unsigned char*>(secret),
                                         secretSize),
