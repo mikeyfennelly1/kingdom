@@ -43,6 +43,7 @@ std::string base64Encode(const std::array<unsigned char, N>& data) {
   return base64Encode(data.data(), data.size());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<unsigned char> base64Decode(const std::string& encoded, const std::string& fieldName) {
   std::vector<unsigned char> decoded(encoded.size(), 0);
   size_t decodedSize = 0;
@@ -67,9 +68,11 @@ std::array<unsigned char, N> base64DecodeArray(const std::string& encoded,
   return value;
 }
 
-std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveKey(
-    const unsigned char* secret, size_t secretSize, std::string_view info,
-    const unsigned char* salt, size_t saltSize) {
+std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveKey(const unsigned char* secret,
+                                                                      size_t secretSize,
+                                                                      std::string_view info,
+                                                                      const unsigned char* salt,
+                                                                      size_t saltSize) {
   std::array<unsigned char, MessageStore::kEncryptionKeySize> derivedKey{};
 
   EVP_KDF* kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
@@ -83,13 +86,14 @@ std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveKey(
     throw std::runtime_error("Failed to create HKDF context");
   }
 
-  char digestName[] = "SHA256";
+  char digestName[] = "SHA256";  // NOLINT(modernize-avoid-c-arrays)
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   OSSL_PARAM params[] = {
       OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
       OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, const_cast<unsigned char*>(secret),
                                         secretSize),
-      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
-                                        const_cast<unsigned char*>(salt), saltSize),
+      OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT, const_cast<unsigned char*>(salt),
+                                        saltSize),
       OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, const_cast<char*>(info.data()),
                                         info.size()),
       OSSL_PARAM_construct_end()};
@@ -113,8 +117,8 @@ std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveCacheEncryptio
     throw std::runtime_error("Failed to derive message-cache encryption secret");
   }
 
-  auto key = deriveKey(argon2Secret.data(), argon2Secret.size(), kCacheEncryptionInfo,
-                       salt.data(), salt.size());
+  auto key = deriveKey(argon2Secret.data(), argon2Secret.size(), kCacheEncryptionInfo, salt.data(),
+                       salt.size());
   sodium_memzero(argon2Secret.data(), argon2Secret.size());
   return key;
 }
@@ -122,10 +126,10 @@ std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveCacheEncryptio
 std::string sanitizedUsername(const std::string& username) {
   std::string value;
   value.reserve(username.size());
-  for (char ch : username) {
-    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
-        ch == '-' || ch == '_') {
-      value.push_back(ch);
+  for (char chr : username) {
+    if ((chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z') || (chr >= '0' && chr <= '9') ||
+        chr == '-' || chr == '_') {
+      value.push_back(chr);
     } else {
       value.push_back('_');
     }
@@ -198,16 +202,17 @@ void writeJsonFile(const std::filesystem::path& path, const nlohmann::json& body
 
   std::filesystem::rename(tmpPath, path);
   std::error_code ignored;
-  std::filesystem::permissions(path, std::filesystem::perms::owner_read |
-                                         std::filesystem::perms::owner_write,
+  std::filesystem::permissions(path,
+                               std::filesystem::perms::owner_read |
+                                   std::filesystem::perms::owner_write,
                                std::filesystem::perm_options::replace, ignored);
 }
 
 std::string cacheAssociatedData(const std::string& username) {
-  std::string ad{kCacheAssociatedDataPrefix};
-  ad.push_back('\0');
-  ad += username;
-  return ad;
+  std::string aad{kCacheAssociatedDataPrefix};
+  aad.push_back('\0');
+  aad += username;
+  return aad;
 }
 
 struct StoreKdfParams {
@@ -231,8 +236,8 @@ StoreKdfParams kdfParamsForStore(const std::filesystem::path& path) {
   }
 
   const auto& kdf = parsed["kdf"];
-  params.salt = base64DecodeArray<MessageStore::kSaltSize>(kdf["salt"].get<std::string>(),
-                                                           "kdf.salt");
+  params.salt =
+      base64DecodeArray<MessageStore::kSaltSize>(kdf["salt"].get<std::string>(), "kdf.salt");
   params.opsLimit = kdf.value("opsLimit", kCacheKdfOpsLimit);
   params.memLimit = kdf.value("memLimit", kCacheKdfMemLimit);
   return params;
@@ -240,21 +245,25 @@ StoreKdfParams kdfParamsForStore(const std::filesystem::path& path) {
 
 }  // namespace
 
-MessageStore::MessageStore(const std::string& username) : storePath_(defaultStorePath(username)) {}
+MessageStore::MessageStore(const std::string& username) : storePath_(defaultStorePath(username)) {
+}
 
-MessageStore::MessageStore(std::filesystem::path storePath) : storePath_(std::move(storePath)) {}
+MessageStore::MessageStore(std::filesystem::path storePath) : storePath_(std::move(storePath)) {
+}
 
 MessageStore::MessageStore(std::filesystem::path storePath, std::string username,
                            std::array<unsigned char, kEncryptionKeySize> encryptionKey,
-                           std::array<unsigned char, kSaltSize> salt,
-                           unsigned long long opsLimit, size_t memLimit)
-    : storePath_(std::move(storePath)),
-      username_(std::move(username)),
-      encryptionKey_(encryptionKey),
-      salt_(salt),
-      opsLimit_(opsLimit),
-      memLimit_(memLimit),
-      encryptedAtRest_(true) {}
+                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                           std::array<unsigned char, kSaltSize> salt, unsigned long long opsLimit,
+                           size_t memLimit)
+    : storePath_(std::move(storePath))
+    , username_(std::move(username))
+    , encryptionKey_(encryptionKey)
+    , salt_(salt)
+    , opsLimit_(opsLimit)
+    , memLimit_(memLimit)
+    , encryptedAtRest_(true) {
+}
 
 MessageStore MessageStore::encryptedForUser(const std::string& username,
                                             const std::string& password) {
@@ -262,6 +271,7 @@ MessageStore MessageStore::encryptedForUser(const std::string& username,
 }
 
 MessageStore MessageStore::encryptedAtPath(std::filesystem::path storePath,
+                                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                            const std::string& username,
                                            const std::string& password) {
   ensureSodiumInitialized();
@@ -294,8 +304,8 @@ const std::vector<Message>& MessageStore::getAll() const {
 
 std::vector<Message> MessageStore::findBySender(uint64_t senderId) const {
   std::vector<Message> result;
-  std::copy_if(messages_.begin(), messages_.end(), std::back_inserter(result),
-               [senderId](const Message& message) { return message.senderId == senderId; });
+  std::ranges::copy_if(messages_, std::back_inserter(result),
+                       [senderId](const Message& message) { return message.senderId == senderId; });
   return result;
 }
 
@@ -308,11 +318,11 @@ void MessageStore::cachePublicKey(uint64_t userId, const std::string& publicKey)
 }
 
 std::optional<std::string> MessageStore::getCachedPublicKey(uint64_t userId) const {
-  auto it = publicKeyCache_.find(userId);
-  if (it == publicKeyCache_.end()) {
+  auto iter = publicKeyCache_.find(userId);
+  if (iter == publicKeyCache_.end()) {
     return std::nullopt;
   }
-  return it->second;
+  return iter->second;
 }
 
 nlohmann::json MessageStore::readStore_() const {
@@ -333,9 +343,8 @@ nlohmann::json MessageStore::readStore_() const {
   }
 
   if (envelope.value("version", 0) != 2 ||
-      envelope.value("algorithm", "") != kCacheEncryptionAlgorithm ||
-      !envelope.contains("kdf") || !envelope.contains("nonce") ||
-      !envelope.contains("ciphertext")) {
+      envelope.value("algorithm", "") != kCacheEncryptionAlgorithm || !envelope.contains("kdf") ||
+      !envelope.contains("nonce") || !envelope.contains("ciphertext")) {
     throw std::runtime_error("Unsupported local message store format: " + storePath_.string());
   }
 
@@ -355,22 +364,23 @@ nlohmann::json MessageStore::readStore_() const {
     throw std::runtime_error("Local message store ciphertext is too short: " + storePath_.string());
   }
 
-  const auto ad = cacheAssociatedData(username_);
+  const auto aad = cacheAssociatedData(username_);
   std::vector<unsigned char> plaintext(ciphertext.size() -
                                        crypto_aead_xchacha20poly1305_ietf_ABYTES);
   unsigned long long plaintextSize = 0;
-  const auto decryptResult = crypto_aead_xchacha20poly1305_ietf_decrypt(
-      plaintext.data(), &plaintextSize, nullptr, ciphertext.data(), ciphertext.size(),
-      reinterpret_cast<const unsigned char*>(ad.data()), ad.size(), nonce.data(),
-      encryptionKey_.data());
+  const auto decryptResult =
+      crypto_aead_xchacha20poly1305_ietf_decrypt(plaintext.data(), &plaintextSize, nullptr,
+                                                 ciphertext.data(), ciphertext.size(),
+                                                 reinterpret_cast<const unsigned char*>(aad.data()),
+                                                 aad.size(), nonce.data(), encryptionKey_.data());
   if (decryptResult != 0) {
     throw std::runtime_error("Failed to decrypt local message store: " + storePath_.string());
   }
   plaintext.resize(plaintextSize);
 
-  auto parsed = nlohmann::json::parse(
-      std::string(reinterpret_cast<const char*>(plaintext.data()), plaintext.size()), nullptr,
-      false);
+  auto parsed = nlohmann::json::parse(std::string(reinterpret_cast<const char*>(plaintext.data()),
+                                                  plaintext.size()),
+                                      nullptr, false);
   sodium_memzero(plaintext.data(), plaintext.size());
   if (parsed.is_discarded() || !parsed.is_object()) {
     throw std::runtime_error("Decrypted local message store is not valid JSON: " +
@@ -395,27 +405,26 @@ void MessageStore::writeStore_(const nlohmann::json& store) const {
   std::vector<unsigned char> ciphertext(plaintextText.size() +
                                         crypto_aead_xchacha20poly1305_ietf_ABYTES);
   unsigned long long ciphertextSize = 0;
-  const auto ad = cacheAssociatedData(username_);
+  const auto aad = cacheAssociatedData(username_);
   if (crypto_aead_xchacha20poly1305_ietf_encrypt(
           ciphertext.data(), &ciphertextSize,
           reinterpret_cast<const unsigned char*>(plaintextText.data()), plaintextText.size(),
-          reinterpret_cast<const unsigned char*>(ad.data()), ad.size(), nullptr, nonce.data(),
+          reinterpret_cast<const unsigned char*>(aad.data()), aad.size(), nullptr, nonce.data(),
           encryptionKey_.data()) != 0) {
     throw std::runtime_error("Failed to encrypt local message store: " + storePath_.string());
   }
   ciphertext.resize(ciphertextSize);
 
-  nlohmann::json envelope = {
-      {"version", 2},
-      {"algorithm", kCacheEncryptionAlgorithm},
-      {"kdf",
-       {{"algorithm", kCacheKdfAlgorithm},
-        {"hkdf", {{"digest", "SHA-256"}, {"info", kCacheEncryptionInfo}}},
-        {"salt", base64Encode(salt_)},
-        {"opsLimit", opsLimit_},
-        {"memLimit", memLimit_}}},
-      {"nonce", base64Encode(nonce)},
-      {"ciphertext", base64Encode(ciphertext.data(), ciphertext.size())}};
+  nlohmann::json envelope = {{"version", 2},
+                             {"algorithm", kCacheEncryptionAlgorithm},
+                             {"kdf",
+                              {{"algorithm", kCacheKdfAlgorithm},
+                               {"hkdf", {{"digest", "SHA-256"}, {"info", kCacheEncryptionInfo}}},
+                               {"salt", base64Encode(salt_)},
+                               {"opsLimit", opsLimit_},
+                               {"memLimit", memLimit_}}},
+                             {"nonce", base64Encode(nonce)},
+                             {"ciphertext", base64Encode(ciphertext.data(), ciphertext.size())}};
 
   writeJsonFile(storePath_, envelope);
 }
@@ -438,10 +447,10 @@ void MessageStore::savePlaintext(uint64_t messageId, uint64_t conversationId, ui
                                  uint64_t timestamp, const std::string& plaintext) const {
   auto store = readStore_();
   store["messages"][std::to_string(messageId)] = {{"messageId", messageId},
-                                                   {"conversationId", conversationId},
-                                                   {"senderId", senderId},
-                                                   {"timestamp", timestamp},
-                                                   {"plaintext", plaintext}};
+                                                  {"conversationId", conversationId},
+                                                  {"senderId", senderId},
+                                                  {"timestamp", timestamp},
+                                                  {"plaintext", plaintext}};
   writeStore_(store);
 }
 

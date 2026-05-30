@@ -4,10 +4,11 @@
 #include "LoginWindow.hh"
 #include "MainWindow.hh"
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
-  app.setApplicationName("Kingdom");
-  app.setApplicationVersion("1.0");
+  QApplication::setApplicationName("Kingdom");
+  QApplication::setApplicationVersion("1.0");
 
   // showLogin is recursive — it re-displays the login dialog after logout.
   std::function<void()> showLogin;

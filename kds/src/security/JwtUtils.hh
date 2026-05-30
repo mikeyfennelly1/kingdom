@@ -35,11 +35,11 @@ inline std::string base64UrlEncode(const unsigned char* data, size_t size) {
   }
   encoded.resize(static_cast<size_t>(encodedSize));
 
-  for (char& ch : encoded) {
-    if (ch == '+') {
-      ch = '-';
-    } else if (ch == '/') {
-      ch = '_';
+  for (char& chr : encoded) {
+    if (chr == '+') {
+      chr = '-';
+    } else if (chr == '/') {
+      chr = '_';
     }
   }
   while (!encoded.empty() && encoded.back() == '=') {
@@ -54,18 +54,18 @@ inline std::string base64UrlEncode(const std::string& data) {
 
 inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
   std::string padded = encoded;
-  for (char& ch : padded) {
-    if (ch == '-') {
-      ch = '+';
-    } else if (ch == '_') {
-      ch = '/';
+  for (char& chr : padded) {
+    if (chr == '-') {
+      chr = '+';
+    } else if (chr == '_') {
+      chr = '/';
     }
   }
   while (padded.size() % 4 != 0) {
     padded.push_back('=');
   }
 
-  std::vector<unsigned char> decoded((padded.size() / 4) * 3 + 3);
+  std::vector<unsigned char> decoded(((padded.size() / 4) * 3) + 3);
   const int decodedSize =
       EVP_DecodeBlock(decoded.data(), reinterpret_cast<const unsigned char*>(padded.data()),
                       static_cast<int>(padded.size()));
@@ -85,7 +85,7 @@ inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
 }
 
 inline std::string signJwtInput(const std::string& signingInput, const std::string& secret) {
-  unsigned char digest[EVP_MAX_MD_SIZE]{};
+  unsigned char digest[EVP_MAX_MD_SIZE]{};  // NOLINT(modernize-avoid-c-arrays)
   unsigned int digestSize = 0;
   if (HMAC(EVP_sha256(), secret.data(), static_cast<int>(secret.size()),
            reinterpret_cast<const unsigned char*>(signingInput.data()), signingInput.size(), digest,
@@ -98,12 +98,13 @@ inline std::string signJwtInput(const std::string& signingInput, const std::stri
 inline std::optional<std::string> bearerToken(const httplib::Request& req) {
   const auto header = req.get_header_value(http_headers::Authorization);
   constexpr std::string_view prefix = jwt::BearerPrefix;
-  if (header.size() <= prefix.size() || header.compare(0, prefix.size(), prefix) != 0) {
+  if (header.size() <= prefix.size() || !header.starts_with(prefix)) {
     return std::nullopt;
   }
   return header.substr(prefix.size());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token,
                                                         const std::string& secret) {
   const auto firstDot = token.find('.');

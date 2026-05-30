@@ -20,9 +20,10 @@ const std::string defaultListenHost = "0.0.0.0";
 
 class Controller {
  public:
-  Controller(std::string host, int port, std::string dbConnectionString, std::string sidecarUrl,
-             std::string certPath, std::string keyPath, std::string jwtSecret,
-             uint64_t jwtTtlSeconds);
+  Controller(std::string host, int port, const std::string& dbConnectionString,
+             std::string sidecarUrl, const std::string& certPath,
+             // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+             const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds);
 
   void start();
 
@@ -41,7 +42,7 @@ class Controller {
   void registerAuthRoutes_();
   void handleSignup_(const httplib::Request& req, httplib::Response& res);
   void handleLogin_(const httplib::Request& req, httplib::Response& res);
-  void handleLogout_(const httplib::Request& req, httplib::Response& res);
+  static void handleLogout_(const httplib::Request& req, httplib::Response& res);
   void userController_();
   void publicKeyController_();
   void registerConversationRoutes_();
@@ -56,7 +57,7 @@ class Controller {
   void registerNotFoundHandler_();
   std::string createSession_(uint64_t userId, const std::string& username) const;
   std::optional<uint64_t> authenticatedUserId_(const httplib::Request& req);
-  bool isRateLimited_(const std::string& ip);
+  bool isRateLimited_(const std::string& ipAddr);
 
   struct RateLimitEntry {
     int count;
