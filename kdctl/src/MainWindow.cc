@@ -1,6 +1,10 @@
 #include "MainWindow.hh"
 
+#include <spdlog/spdlog.h>
+
+#include <QAbstractItemView>
 #include <QComboBox>
+#include <QCryptographicHash>
 #include <QDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -12,7 +16,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSplitter>
-#include <QTextEdit>
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <algorithm>
@@ -21,7 +25,6 @@
 #include <exception>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
-#include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
 
@@ -104,19 +107,36 @@ static const char* kInputStyle =
     "}"
     "QLineEdit:focus { border-color: #2563eb; }";
 
+static const char* kMessageListStyle =
+    "QListWidget {"
+    "  border: none;"
+    "  padding: 8px 12px;"
+    "  background: #f8fafc;"
+    "  font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;"
+    "  font-size: 13px;"
+    "  outline: none;"
+    "}"
+    "QListWidget::item {"
+    "  background: #f1f5f9;"
+    "  color: #1e293b;"
+    "  border-radius: 6px;"
+    "  margin: 4px 0;"
+    "  padding: 8px 10px;"
+    "}"
+    "QListWidget::item:selected {"
+    "  background: #dbeafe;"
+    "  color: #1d4ed8;"
+    "}";
+
 // ---------------------------------------------------------------------------
 // Constructor
 // ---------------------------------------------------------------------------
 
 MainWindow::MainWindow(Session session, QWidget* parent)
-    : QMainWindow(parent),
-      session_(std::move(session)),
-      client_(std::make_unique<kd::Client>(session_.serverUrl,
-                                           [] {
-                                             const char* e = std::getenv("KD_CA_CERT");
-                                             return e != nullptr ? std::string(e) : std::string{};
-                                           }())),
-      messageStore_(std::move(session_.messageStore)) {
+    : QMainWindow(parent)
+    , session_(std::move(session))
+    , client_(std::make_unique<kd::Client>(session_.serverUrl, session_.caCertPath))
+    , messageStore_(std::move(session_.messageStore)) {
   client_->setAuthToken(session_.token);
   loadUserCache();
 
@@ -128,10 +148,9 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   appTitle->setStyleSheet(
       "color: white; font-size: 18px; font-weight: bold; padding: 16px 16px 4px 16px;");
 
-  usernameLabel_ = new QLabel(
-      QString("@%1").arg(QString::fromUtf8(session_.username.c_str())), this);
-  usernameLabel_->setStyleSheet(
-      "color: #94a3b8; font-size: 12px; padding: 0 16px 12px 16px;");
+  usernameLabel_ =
+      new QLabel(QString("@%1").arg(QString::fromUtf8(session_.username.c_str())), this);
+  usernameLabel_->setStyleSheet("color: #94a3b8; font-size: 12px; padding: 0 16px 12px 16px;");
 
   auto* convHeader = new QLabel("Conversations", this);
   convHeader->setStyleSheet(
@@ -170,16 +189,9 @@ MainWindow::MainWindow(Session session, QWidget* parent)
       "font-size: 15px; font-weight: bold; color: #1e293b; "
       "padding: 14px 18px; border-bottom: 1px solid #f1f5f9;");
 
-  messageView_ = new QTextEdit(this);
-  messageView_->setReadOnly(true);
-  messageView_->setStyleSheet(
-      "QTextEdit {"
-      "  border: none;"
-      "  padding: 8px 12px;"
-      "  background: #f8fafc;"
-      "  font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;"
-      "  font-size: 13px;"
-      "}");
+  messageList_ = new QListWidget(this);
+  messageList_->setSelectionMode(QAbstractItemView::SingleSelection);
+  messageList_->setStyleSheet(kMessageListStyle);
 
   messageInput_ = new QLineEdit(this);
   messageInput_->setPlaceholderText("Type a message...");
@@ -191,17 +203,23 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   sendButton_->setStyleSheet(kSendButtonStyle);
   sendButton_->setCursor(Qt::PointingHandCursor);
 
+  forwardButton_ = new QPushButton("Forward", this);
+  forwardButton_->setEnabled(false);
+  forwardButton_->setStyleSheet(kSendButtonStyle);
+  forwardButton_->setCursor(Qt::PointingHandCursor);
+
   auto* inputRow = new QHBoxLayout();
   inputRow->setContentsMargins(12, 8, 12, 12);
   inputRow->setSpacing(8);
   inputRow->addWidget(messageInput_);
+  inputRow->addWidget(forwardButton_);
   inputRow->addWidget(sendButton_);
 
   auto* rightLayout = new QVBoxLayout();
   rightLayout->setContentsMargins(0, 0, 0, 0);
   rightLayout->setSpacing(0);
   rightLayout->addWidget(conversationLabel_);
-  rightLayout->addWidget(messageView_);
+  rightLayout->addWidget(messageList_);
   rightLayout->addLayout(inputRow);
 
   auto* rightWidget = new QWidget(this);
@@ -218,12 +236,14 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   setCentralWidget(splitter);
 
   // ---- Connections ----
-  connect(conversationList_, &QListWidget::itemClicked, this,
-          &MainWindow::onConversationSelected);
+  connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::onConversationSelected);
   connect(newConvButton_, &QPushButton::clicked, this, &MainWindow::onNewConversation);
   connect(sendButton_, &QPushButton::clicked, this, &MainWindow::onSend);
+  connect(forwardButton_, &QPushButton::clicked, this, &MainWindow::onForward);
   connect(logoutButton_, &QPushButton::clicked, this, &MainWindow::onLogout);
   connect(messageInput_, &QLineEdit::returnPressed, this, &MainWindow::onSend);
+  connect(messageList_, &QListWidget::currentItemChanged, this,
+          &MainWindow::onMessageSelectionChanged);
 
   // ---- Polling ----
   pollTimer_ = new QTimer(this);
@@ -275,8 +295,7 @@ void MainWindow::loadConversations() {
       auto conv = item.get<kd::Conversation>();
       conversations_.push_back(conv);
 
-      auto* listItem =
-          new QListWidgetItem(QString::fromUtf8(conv.name.c_str()), conversationList_);
+      auto* listItem = new QListWidgetItem(QString::fromUtf8(conv.name.c_str()), conversationList_);
       listItem->setData(Qt::UserRole, static_cast<qulonglong>(conv.id));
     }
   } catch (const std::exception& e) {
@@ -327,41 +346,32 @@ QString MainWindow::formatTimestamp(uint64_t milliseconds) {
   return QString(buf);
 }
 
-void MainWindow::appendMessageToView(const std::string& sender, const std::string& text,
-                                     uint64_t timestamp) {
-  const QString ts = formatTimestamp(timestamp);
-  const bool isMe =
-      (sender == session_.username || sender == std::to_string(session_.userId));
-  const QString escaped = QString::fromUtf8(text.c_str()).toHtmlEscaped();
-
-  if (isMe) {
-    messageView_->append(
-        QString("<p align='right' style='margin:6px 0; color:#1e293b;'>"
-                "<small style='color:#94a3b8;'>%1</small><br>"
-                "<span style='background-color:#dbeafe; color:#1d4ed8; "
-                "padding:6px 10px;'>%2</span>"
-                "</p>")
-            .arg(ts, escaped));
+void MainWindow::appendMessageToView(const kd::Message& message, const std::string& sender,
+                                     const std::string& text, bool forwardable) {
+  const QString ts = formatTimestamp(message.timestamp);
+  const bool isMe = (sender == session_.username || sender == std::to_string(session_.userId));
+  const QString label = isMe ? QString("You") : QString::fromUtf8(sender.c_str());
+  auto* item =
+      new QListWidgetItem(QString("%1  %2\n%3").arg(label, ts, QString::fromUtf8(text.c_str())),
+                          messageList_);
+  item->setData(Qt::UserRole, static_cast<qulonglong>(message.id));
+  if (forwardable) {
+    item->setToolTip("Select this message to forward it");
   } else {
-    messageView_->append(
-        QString("<p align='left' style='margin:6px 0;'>"
-                "<small style='color:#64748b;'><b>%1</b> &nbsp;%2</small><br>"
-                "<span style='background-color:#f1f5f9; color:#1e293b; "
-                "padding:6px 10px;'>%3</span>"
-                "</p>")
-            .arg(QString::fromUtf8(sender.c_str()), ts, escaped));
+    item->setToolTip("This message cannot be forwarded because it could not be decrypted");
   }
+  visibleMessages_.push_back({message, text, forwardable});
 }
 
-std::string MainWindow::decryptOrPlaceholder(const kd::Message& msg, uint64_t recipientId) {
+std::optional<std::string> MainWindow::decryptPlaintext(const kd::Message& msg,
+                                                        uint64_t recipientId) {
   if (auto cached = messageStore_.getPlaintext(msg.id); cached.has_value()) {
     return *cached;
   }
 
   try {
     auto cachedPk = messageStore_.getCachedPublicKey(msg.senderId);
-    std::string senderPk =
-        cachedPk.has_value() ? *cachedPk : client_->getPublicKey(msg.senderId);
+    std::string senderPk = cachedPk.has_value() ? *cachedPk : client_->getPublicKey(msg.senderId);
     messageStore_.cachePublicKey(msg.senderId, senderPk);
 
     std::string plaintext =
@@ -371,12 +381,14 @@ std::string MainWindow::decryptOrPlaceholder(const kd::Message& msg, uint64_t re
     return plaintext;
   } catch (const std::exception& e) {
     spdlog::warn("Decryption failed for message {}: {}", msg.id, e.what());
-    return "[decryption failed]";
+    return std::nullopt;
   }
 }
 
 void MainWindow::loadMessages(uint64_t conversationId) {
-  messageView_->clear();
+  visibleMessages_.clear();
+  messageList_->clear();
+  forwardButton_->setEnabled(false);
 
   try {
     auto msgs = client_->getMessages(conversationId);
@@ -400,28 +412,40 @@ void MainWindow::loadMessages(uint64_t conversationId) {
       }
 
       std::string text;
+      bool forwardable = true;
       if (msg.senderId == session_.userId) {
         // Outgoing: I encrypted this with recipientId = the other person.
         if (auto cached = messageStore_.getPlaintext(msg.id); cached.has_value()) {
           text = *cached;
+        } else if (auto plaintext = decryptPlaintext(msg, outgoingRecipient);
+                   plaintext.has_value()) {
+          text = *plaintext;
         } else {
-          text = decryptOrPlaceholder(msg, outgoingRecipient);
+          text = "[decryption failed]";
+          forwardable = false;
         }
       } else {
         // Incoming: sender encrypted with recipientId = me (session_.userId).
-        text = decryptOrPlaceholder(msg, session_.userId);
+        if (auto plaintext = decryptPlaintext(msg, session_.userId); plaintext.has_value()) {
+          text = *plaintext;
+        } else {
+          text = "[decryption failed]";
+          forwardable = false;
+        }
       }
 
-      appendMessageToView(senderLabel, text, msg.timestamp);
+      appendMessageToView(msg, senderLabel, text, forwardable);
     }
 
-    auto* bar = messageView_->verticalScrollBar();
+    auto* bar = messageList_->verticalScrollBar();
     bar->setValue(bar->maximum());
 
   } catch (const std::exception& e) {
     spdlog::warn("Failed to load messages for conversation {}: {}", conversationId, e.what());
-    messageView_->setPlainText(
-        QString("Failed to load messages: %1").arg(QString::fromUtf8(e.what())));
+    auto* item =
+        new QListWidgetItem(QString("Failed to load messages: %1").arg(QString::fromUtf8(e.what())),
+                            messageList_);
+    item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
   }
 }
 
@@ -465,8 +489,7 @@ void MainWindow::onNewConversation() {
 
   auto* userCombo = new QComboBox(&dialog);
   for (const auto& u : others) {
-    userCombo->addItem(QString::fromUtf8(u.username.c_str()),
-                       static_cast<qulonglong>(u.id));
+    userCombo->addItem(QString::fromUtf8(u.username.c_str()), static_cast<qulonglong>(u.id));
   }
 
   auto* nameEdit = new QLineEdit(&dialog);
@@ -503,8 +526,7 @@ void MainWindow::onNewConversation() {
   }
 
   const std::string convName{nameEdit->text().trimmed().toUtf8().constData()};
-  const uint64_t recipientId =
-      userCombo->itemData(userCombo->currentIndex()).toULongLong();
+  const uint64_t recipientId = userCombo->itemData(userCombo->currentIndex()).toULongLong();
 
   if (convName.empty()) {
     QMessageBox::warning(this, "Invalid Input", "Conversation name cannot be empty.");
@@ -519,6 +541,190 @@ void MainWindow::onNewConversation() {
     QMessageBox::critical(
         this, "Error",
         QString("Failed to create conversation: %1").arg(QString::fromUtf8(e.what())));
+  }
+}
+
+std::optional<MainWindow::ForwardTarget> MainWindow::chooseForwardTarget() {
+  nlohmann::json usersJson;
+  try {
+    usersJson = client_->getUsers();
+  } catch (const std::exception& e) {
+    QMessageBox::critical(this, "Forward Failed",
+                          QString("Could not load users: %1").arg(QString::fromUtf8(e.what())));
+    return std::nullopt;
+  }
+
+  struct UserEntry {
+    uint64_t id;
+    std::string username;
+  };
+  std::vector<UserEntry> others;
+  for (const auto& u : usersJson) {
+    const uint64_t uid = u["id"].get<uint64_t>();
+    if (uid != session_.userId) {
+      others.push_back({uid, u["username"].get<std::string>()});
+    }
+  }
+
+  if (others.empty()) {
+    QMessageBox::information(this, "Forward Message", "No other users are registered yet.");
+    return std::nullopt;
+  }
+
+  QDialog dialog(this);
+  dialog.setWindowTitle("Forward Message");
+  dialog.setMinimumWidth(360);
+
+  auto* userCombo = new QComboBox(&dialog);
+  for (const auto& user : others) {
+    userCombo->addItem(QString::fromUtf8(user.username.c_str()), static_cast<qulonglong>(user.id));
+  }
+
+  auto* okButton = new QPushButton("Forward", &dialog);
+  okButton->setDefault(true);
+  auto* cancelButton = new QPushButton("Cancel", &dialog);
+
+  auto* form = new QFormLayout();
+  form->addRow("Recipient:", userCombo);
+
+  auto* buttonRow = new QHBoxLayout();
+  buttonRow->addStretch();
+  buttonRow->addWidget(cancelButton);
+  buttonRow->addWidget(okButton);
+
+  auto* layout = new QVBoxLayout(&dialog);
+  layout->addLayout(form);
+  layout->addLayout(buttonRow);
+
+  connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+  connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+  if (dialog.exec() != QDialog::Accepted) {
+    return std::nullopt;
+  }
+
+  const uint64_t userId = userCombo->itemData(userCombo->currentIndex()).toULongLong();
+  const std::string username{userCombo->currentText().toUtf8().constData()};
+
+  std::string publicKey;
+  try {
+    publicKey = client_->getPublicKey(userId);
+  } catch (const std::exception& e) {
+    QMessageBox::critical(
+        this, "Forward Failed",
+        QString("Could not load recipient identity: %1").arg(QString::fromUtf8(e.what())));
+    return std::nullopt;
+  }
+
+  if (!confirmRecipientIdentity(userId, username, publicKey)) {
+    return std::nullopt;
+  }
+  messageStore_.cachePublicKey(userId, publicKey);
+
+  if (auto existingConversationId = findConversationWithUser(userId); existingConversationId) {
+    return ForwardTarget{userId, *existingConversationId, username, publicKey};
+  }
+
+  try {
+    const std::string conversationName = "Chat with " + username;
+    auto created = client_->createConversation(conversationName,
+                                               std::vector<uint64_t>{session_.userId, userId});
+    const uint64_t conversationId = created["id"].get<uint64_t>();
+    loadConversations();
+    return ForwardTarget{userId, conversationId, username, publicKey};
+  } catch (const std::exception& e) {
+    QMessageBox::critical(
+        this, "Forward Failed",
+        QString("Failed to create destination conversation: %1").arg(QString::fromUtf8(e.what())));
+    return std::nullopt;
+  }
+}
+
+std::optional<uint64_t> MainWindow::findConversationWithUser(uint64_t userId) const {
+  for (const auto& conv : conversations_) {
+    if (conv.hasParticipant(session_.userId) && conv.hasParticipant(userId)) {
+      return conv.id;
+    }
+  }
+  return std::nullopt;
+}
+
+QString MainWindow::fingerprintForPublicKey(const std::string& publicKey) const {
+  std::string fingerprintInput = publicKey;
+  auto bundle = nlohmann::json::parse(publicKey, nullptr, false);
+  if (bundle.is_object() && bundle.contains("identityKey") && bundle.contains("signingKey")) {
+    fingerprintInput =
+        nlohmann::json{{"identityKey", bundle["identityKey"]}, {"signingKey", bundle["signingKey"]}}
+            .dump();
+  }
+
+  const QByteArray digest = QCryptographicHash::hash(QByteArray::fromStdString(fingerprintInput),
+                                                     QCryptographicHash::Sha256);
+  const QString hex = QString::fromLatin1(digest.toHex());
+
+  QStringList groups;
+  for (int i = 0; i < hex.size(); i += 4) {
+    groups << hex.mid(i, 4);
+  }
+  return groups.join(' ');
+}
+
+bool MainWindow::confirmRecipientIdentity(uint64_t userId, const std::string& username,
+                                          const std::string& publicKey) {
+  const QString fingerprint = fingerprintForPublicKey(publicKey);
+  const QString message =
+      QString("Verify %1's identity before forwarding.\n\nUser ID: %2\nFingerprint:\n%3")
+          .arg(QString::fromUtf8(username.c_str()))
+          .arg(static_cast<qulonglong>(userId))
+          .arg(fingerprint);
+
+  const auto answer =
+      QMessageBox::question(this, "Verify Recipient", message,
+                            QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Cancel);
+  return answer == QMessageBox::Ok;
+}
+
+void MainWindow::onMessageSelectionChanged() {
+  forwardButton_->setEnabled(messageList_->currentItem() != nullptr &&
+                             activeConversationId_.has_value());
+}
+
+void MainWindow::onForward() {
+  auto* selectedItem = messageList_->currentItem();
+  if (selectedItem == nullptr) {
+    return;
+  }
+
+  const uint64_t messageId = selectedItem->data(Qt::UserRole).toULongLong();
+  auto it = std::find_if(visibleMessages_.begin(), visibleMessages_.end(),
+                         [messageId](const DisplayedMessage& displayed) {
+                           return displayed.message.id == messageId;
+                         });
+  if (it == visibleMessages_.end() || !it->forwardable) {
+    QMessageBox::warning(this, "Cannot Forward", "This message is not available in plaintext.");
+    return;
+  }
+
+  auto target = chooseForwardTarget();
+  if (!target.has_value()) {
+    return;
+  }
+
+  try {
+    const std::string payload =
+        kd::LocalKeyStore::encryptMessage(it->plaintext, session_.identityKey, target->publicKey,
+                                          target->conversationId, session_.userId, target->userId);
+    auto sentJson =
+        client_->sendMessage(target->conversationId, session_.userId, target->userId, payload);
+    auto sentMsg = sentJson.get<kd::Message>();
+    messageStore_.savePlaintext(sentMsg.id, sentMsg.conversationId, sentMsg.senderId,
+                                sentMsg.timestamp, it->plaintext);
+
+    QMessageBox::information(
+        this, "Message Forwarded",
+        QString("Forwarded to %1.").arg(QString::fromUtf8(target->username.c_str())));
+  } catch (const std::exception& e) {
+    QMessageBox::critical(this, "Forward Failed", QString::fromUtf8(e.what()));
   }
 }
 
@@ -547,8 +753,9 @@ void MainWindow::onSend() {
 
   try {
     const std::string recipientPk = client_->getPublicKey(recipientId);
-    const std::string payload = kd::LocalKeyStore::encryptMessage(
-        text, session_.identityKey, recipientPk, convId, session_.userId, recipientId);
+    const std::string payload =
+        kd::LocalKeyStore::encryptMessage(text, session_.identityKey, recipientPk, convId,
+                                          session_.userId, recipientId);
 
     auto sentJson = client_->sendMessage(convId, session_.userId, recipientId, payload);
     auto sentMsg = sentJson.get<kd::Message>();
@@ -556,8 +763,8 @@ void MainWindow::onSend() {
     messageStore_.savePlaintext(sentMsg.id, sentMsg.conversationId, sentMsg.senderId,
                                 sentMsg.timestamp, text);
 
-    appendMessageToView(session_.username, text, sentMsg.timestamp);
-    auto* bar = messageView_->verticalScrollBar();
+    appendMessageToView(sentMsg, session_.username, text, true);
+    auto* bar = messageList_->verticalScrollBar();
     bar->setValue(bar->maximum());
     messageInput_->clear();
 
