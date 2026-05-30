@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "UserRow.hh"
+#include <kd/User.hpp>
 
 namespace kd {
 
@@ -22,10 +22,10 @@ class Database {
                       const std::string& publicKey);
 
   // Fetch a user by username. Returns std::nullopt if not found.
-  std::optional<UserRow> getUserByUsername(const std::string& username);
+  std::optional<User> getUserByUsername(const std::string& username);
 
   // Fetch all users (id + username only, no password hash).
-  std::vector<UserRow> getAllUsers();
+  std::vector<User> getAllUsers();
 
   // Fetch a user's published public key. Returns std::nullopt if the user does not exist.
   std::optional<std::string> getUserPublicKey(uint64_t userId);
