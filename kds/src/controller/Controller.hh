@@ -38,13 +38,22 @@ class Controller {
 
   void setupRoutes();
   void healthController_();
-  void authController_();
+  void registerAuthRoutes_();
+  void handleSignup_(const httplib::Request& req, httplib::Response& res);
+  void handleLogin_(const httplib::Request& req, httplib::Response& res);
+  void handleLogout_(const httplib::Request& req, httplib::Response& res);
   void userController_();
   void publicKeyController_();
-  void conversationController_();
-  void messageController_();
+  void registerConversationRoutes_();
+  void handleCreateConversation_(const httplib::Request& req, httplib::Response& res);
+  void handleListUserConversations_(const httplib::Request& req, httplib::Response& res);
+  void registerMessageRoutes_();
+  void handleCreateMessage_(const httplib::Request& req, httplib::Response& res);
+  void handleDeleteMessage_(const httplib::Request& req, httplib::Response& res);
+  void handleRevokeMessageAccess_(const httplib::Request& req, httplib::Response& res);
+  void handleListConversationMessages_(const httplib::Request& req, httplib::Response& res);
   void basicApiInfo_();
-  void notFoundHandler_();
+  void registerNotFoundHandler_();
   std::string createSession_(uint64_t userId, const std::string& username) const;
   std::optional<uint64_t> authenticatedUserId_(const httplib::Request& req);
   bool isRateLimited_(const std::string& ip);
