@@ -1,7 +1,5 @@
 #include "Database.hh"
 
-#include <kd/User.hpp>
-
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -152,8 +150,7 @@ bool consumeOneTimePreKeyInTransaction(pqxx::work& txn, uint64_t userId, uint64_
   auto& oneTimePreKeys = bundle["oneTimePreKeys"];
   const auto originalSize = oneTimePreKeys.size();
   const auto toErase = std::ranges::remove_if(oneTimePreKeys, [preKeyId](const auto& key) {
-    return key.is_object() && key.contains("id") &&
-           key["id"].template get<uint64_t>() == preKeyId;
+    return key.is_object() && key.contains("id") && key["id"].template get<uint64_t>() == preKeyId;
   });
   oneTimePreKeys.erase(toErase.begin(), toErase.end());
 
