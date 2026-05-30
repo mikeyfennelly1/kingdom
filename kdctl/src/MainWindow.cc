@@ -107,6 +107,18 @@ static const char* kInputStyle =
     "}"
     "QLineEdit:focus { border-color: #2563eb; }";
 
+// ---------------------------------------------------------------------------
+// Layout / timing constants
+// ---------------------------------------------------------------------------
+
+static constexpr int kWindowMinWidth = 860;
+static constexpr int kWindowMinHeight = 600;
+static constexpr int kSidebarWidth = 240;
+static constexpr int kPollIntervalMs = 5000;
+static constexpr int kNewConvDialogMinWidth = 340;
+static constexpr int kForwardDialogMinWidth = 360;
+static constexpr std::size_t kTimestampBufLen = 32;
+
 static const char* kMessageListStyle =
     "QListWidget {"
     "  border: none;"
@@ -141,7 +153,7 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   loadUserCache();
 
   setWindowTitle("Kingdom");
-  setMinimumSize(860, 600);
+  setMinimumSize(kWindowMinWidth, kWindowMinHeight);
 
   // ---- Left sidebar ----
   auto* appTitle = new QLabel("Kingdom", this);
@@ -181,7 +193,7 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   auto* leftWidget = new QWidget(this);
   leftWidget->setLayout(leftLayout);
   leftWidget->setStyleSheet(kSidebarStyle);
-  leftWidget->setFixedWidth(240);
+  leftWidget->setFixedWidth(kSidebarWidth);
 
   // ---- Right panel ----
   conversationLabel_ = new QLabel("Select a conversation", this);
@@ -209,8 +221,8 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   forwardButton_->setCursor(Qt::PointingHandCursor);
 
   auto* inputRow = new QHBoxLayout();
-  inputRow->setContentsMargins(12, 8, 12, 12);
-  inputRow->setSpacing(8);
+  inputRow->setContentsMargins(12, 8, 12, 12);  // NOLINT(readability-magic-numbers)
+  inputRow->setSpacing(8);                      // NOLINT(readability-magic-numbers)
   inputRow->addWidget(messageInput_);
   inputRow->addWidget(forwardButton_);
   inputRow->addWidget(sendButton_);
@@ -247,7 +259,7 @@ MainWindow::MainWindow(Session session, QWidget* parent)
 
   // ---- Polling ----
   pollTimer_ = new QTimer(this);
-  pollTimer_->setInterval(5000);
+  pollTimer_->setInterval(kPollIntervalMs);
   connect(pollTimer_, &QTimer::timeout, this, &MainWindow::pollMessages);
   pollTimer_->start();
 
@@ -263,9 +275,9 @@ MainWindow::~MainWindow() = default;
 void MainWindow::loadUserCache() {
   try {
     auto usersJson = client_->getUsers();
-    for (const auto& u : usersJson) {
-      uint64_t uid = u["id"].get<uint64_t>();
-      std::string uname = u["username"].get<std::string>();
+    for (const auto& user : usersJson) {
+      uint64_t uid = user["id"].get<uint64_t>();
+      std::string uname = user["username"].get<std::string>();
       userCache_[uid] = uname;
     }
   } catch (const std::exception& e) {
@@ -274,9 +286,9 @@ void MainWindow::loadUserCache() {
 }
 
 std::string MainWindow::usernameFor(uint64_t userId) const {
-  auto it = userCache_.find(userId);
-  if (it != userCache_.end()) {
-    return it->second;
+  auto iter = userCache_.find(userId);
+  if (iter != userCache_.end()) {
+    return iter->second;
   }
   return "User " + std::to_string(userId);
 }
@@ -360,19 +372,18 @@ QString MainWindow::formatTimestamp(uint64_t milliseconds) {
   if (tmInfo == nullptr) {
     return QString::number(static_cast<qulonglong>(milliseconds));
   }
-  char buf[32];  // NOLINT(modernize-avoid-c-arrays)
+  char buf[kTimestampBufLen];  // NOLINT(modernize-avoid-c-arrays)
   std::strftime(buf, sizeof(buf), "%H:%M", tmInfo);
-  return QString(buf);
+  return {buf};
 }
 
 void MainWindow::appendMessageToView(const kd::Message& message, const std::string& sender,
                                      const std::string& text, bool forwardable) {
-  const QString ts = formatTimestamp(message.timestamp);
+  const QString timeStr = formatTimestamp(message.timestamp);
   const bool isMe = (sender == session_.username || sender == std::to_string(session_.userId));
   const QString label = isMe ? QString("You") : QString::fromUtf8(sender.c_str());
-  auto* item =
-      new QListWidgetItem(QString("%1  %2\n%3").arg(label, ts, QString::fromUtf8(text.c_str())),
-                          messageList_);
+  auto* item = new QListWidgetItem(
+      QString("%1  %2\n%3").arg(label, timeStr, QString::fromUtf8(text.c_str())), messageList_);
   item->setData(Qt::UserRole, static_cast<qulonglong>(message.id));
   if (forwardable) {
     item->setToolTip("Select this message to forward it");
@@ -385,7 +396,7 @@ void MainWindow::appendMessageToView(const kd::Message& message, const std::stri
 std::optional<std::string> MainWindow::decryptPlaintext(const kd::Message& msg,
                                                         uint64_t recipientId) {
   if (auto cached = messageStore_.getPlaintext(msg.id); cached.has_value()) {
-    return *cached;
+    return cached;
   }
 
   try {
@@ -412,8 +423,9 @@ void MainWindow::loadMessages(uint64_t conversationId) {
   try {
     auto msgs = client_->getMessages(conversationId);
 
-    std::ranges::sort(msgs, [](const nlohmann::json& a, const nlohmann::json& b) {
-      return a["timestamp"].get<uint64_t>() < b["timestamp"].get<uint64_t>();
+    // NOLINTNEXTLINE(modernize-use-ranges) - nlohmann::json iterator is not random_access_range
+    std::sort(msgs.begin(), msgs.end(), [](const nlohmann::json& lhs, const nlohmann::json& rhs) {
+      return lhs["timestamp"].get<uint64_t>() < rhs["timestamp"].get<uint64_t>();
     });
 
     // outgoingRecipient: used as AAD recipientId when I am the sender.
@@ -489,12 +501,12 @@ void MainWindow::onNewConversation() {
     std::string username;
   };
   std::vector<UserEntry> others;
-  for (const auto& u : usersJson) {
-    uint64_t uid = u["id"].get<uint64_t>();
+  for (const auto& user : usersJson) {
+    uint64_t uid = user["id"].get<uint64_t>();
     if (uid == session_.userId) {
       continue;
     }
-    others.push_back({uid, u["username"].get<std::string>()});
+    others.push_back({uid, user["username"].get<std::string>()});
   }
 
   if (others.empty()) {
@@ -504,11 +516,11 @@ void MainWindow::onNewConversation() {
 
   QDialog dialog(this);
   dialog.setWindowTitle("New Conversation");
-  dialog.setMinimumWidth(340);
+  dialog.setMinimumWidth(kNewConvDialogMinWidth);
 
   auto* userCombo = new QComboBox(&dialog);
-  for (const auto& u : others) {
-    userCombo->addItem(QString::fromUtf8(u.username.c_str()), static_cast<qulonglong>(u.id));
+  for (const auto& user : others) {
+    userCombo->addItem(QString::fromUtf8(user.username.c_str()), static_cast<qulonglong>(user.id));
   }
 
   auto* nameEdit = new QLineEdit(&dialog);
@@ -578,10 +590,10 @@ std::optional<MainWindow::ForwardTarget> MainWindow::chooseForwardTarget() {
     std::string username;
   };
   std::vector<UserEntry> others;
-  for (const auto& u : usersJson) {
-    const uint64_t uid = u["id"].get<uint64_t>();
+  for (const auto& user : usersJson) {
+    const uint64_t uid = user["id"].get<uint64_t>();
     if (uid != session_.userId) {
-      others.push_back({uid, u["username"].get<std::string>()});
+      others.push_back({uid, user["username"].get<std::string>()});
     }
   }
 
@@ -592,7 +604,7 @@ std::optional<MainWindow::ForwardTarget> MainWindow::chooseForwardTarget() {
 
   QDialog dialog(this);
   dialog.setWindowTitle("Forward Message");
-  dialog.setMinimumWidth(360);
+  dialog.setMinimumWidth(kForwardDialogMinWidth);
 
   auto* userCombo = new QComboBox(&dialog);
   for (const auto& user : others) {
@@ -641,7 +653,10 @@ std::optional<MainWindow::ForwardTarget> MainWindow::chooseForwardTarget() {
   messageStore_.cachePublicKey(userId, publicKey);
 
   if (auto existingConversationId = findConversationWithUser(userId); existingConversationId) {
-    return ForwardTarget{userId, *existingConversationId, username, publicKey};
+    return ForwardTarget{.userId = userId,
+                         .conversationId = *existingConversationId,
+                         .username = username,
+                         .publicKey = publicKey};
   }
 
   try {
@@ -650,7 +665,10 @@ std::optional<MainWindow::ForwardTarget> MainWindow::chooseForwardTarget() {
                                                std::vector<uint64_t>{session_.userId, userId});
     const uint64_t conversationId = created["id"].get<uint64_t>();
     loadConversations();
-    return ForwardTarget{userId, conversationId, username, publicKey};
+    return ForwardTarget{.userId = userId,
+                         .conversationId = conversationId,
+                         .username = username,
+                         .publicKey = publicKey};
   } catch (const std::exception& e) {
     QMessageBox::critical(
         this, "Forward Failed",
@@ -715,11 +733,11 @@ void MainWindow::onForward() {
   }
 
   const uint64_t messageId = selectedItem->data(Qt::UserRole).toULongLong();
-  auto it = std::find_if(visibleMessages_.begin(), visibleMessages_.end(),
-                         [messageId](const DisplayedMessage& displayed) {
-                           return displayed.message.id == messageId;
-                         });
-  if (it == visibleMessages_.end() || !it->forwardable) {
+  auto iter =
+      std::ranges::find_if(visibleMessages_, [messageId](const DisplayedMessage& displayed) {
+        return displayed.message.id == messageId;
+      });
+  if (iter == visibleMessages_.end() || !iter->forwardable) {
     QMessageBox::warning(this, "Cannot Forward", "This message is not available in plaintext.");
     return;
   }
@@ -731,13 +749,13 @@ void MainWindow::onForward() {
 
   try {
     const std::string payload =
-        kd::LocalKeyStore::encryptMessage(it->plaintext, session_.identityKey, target->publicKey,
+        kd::LocalKeyStore::encryptMessage(iter->plaintext, session_.identityKey, target->publicKey,
                                           target->conversationId, session_.userId, target->userId);
     auto sentJson =
         client_->sendMessage(target->conversationId, session_.userId, target->userId, payload);
     auto sentMsg = sentJson.get<kd::Message>();
     messageStore_.savePlaintext(sentMsg.id, sentMsg.conversationId, sentMsg.senderId,
-                                sentMsg.timestamp, it->plaintext);
+                                sentMsg.timestamp, iter->plaintext);
 
     QMessageBox::information(
         this, "Message Forwarded",
