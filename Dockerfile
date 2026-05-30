@@ -4,10 +4,12 @@ FROM nixos/nix:2.31.5 AS builder
 WORKDIR /app
 
 COPY config/build.shell.nix ./config/
-RUN nix-shell ./config/build.shell.nix --run "true"
-
 COPY . .
-RUN ./scripts/build.sh
+
+RUN --mount=type=cache,target=/nix/store,sharing=locked \
+    --mount=type=cache,target=/root/.cache/nix \
+    nix-shell ./config/build.shell.nix --run \
+      "cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release && cmake --build build"
 
 # Collect the full runtime closure for kds.
 # The binary's RPATH and PT_INTERP both reference absolute /nix/store/... paths,
