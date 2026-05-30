@@ -1,4 +1,9 @@
 function(configure_third_party)
+    # Never let FetchContent silently redirect to a system-installed package.
+    # Without this, CMake 3.24+ will call find_package() first and can pick up
+    # /usr/local installs instead of downloading the pinned version.
+    set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE NEVER)
+
     FetchContent_Declare(json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE

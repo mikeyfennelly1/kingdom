@@ -14,7 +14,7 @@ main() {
     printf "DEBUG: check connection to nix packages...\n" >&2
     check_nixos_packages_connection
     if [[ $? -ne 0 ]]; then
-        echo "Error: failed to connect to GitHub — NixOS nixpkgs tarballs are unreachable" >&2
+        printf "DEBUG: Error: failed to connect to GitHub — NixOS nixpkgs tarballs are unreachable" >&2
         exit 1
     fi
 
@@ -33,32 +33,45 @@ main() {
 # before script execution.
 function check_nixos_packages_connection() {
     local url="https://github.com"
-    printf "checking connectivity from build shell -> %s (required for NixOS nixpkgs tarballs)\n" "${url}"
+    printf "DEBUG: checking connectivity from build shell -> %s (required for NixOS nixpkgs tarballs)\n" "${url}"
 
     if ! curl -sf --connect-timeout 10 --max-time 15 "${url}" > /dev/null 2>&1; then
-        printf "unable to access %s\n" "${url}"
+        printf "ERROR: unable to access %s\n" "${url}"
         return 1
     fi
 
-    printf "connection to %s successful\n" "${url}"
+    printf "DEBUG: connection to %s successful\n" "${url}"
     return 0
 }
 
 function build_project() {
-    # Define the build command
     # Default to Release build for optimized performance unless specified otherwise
     BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
+
+    # Log level controls cmake configure verbosity.
+    # Set CMAKE_LOG_LEVEL=VERBOSE (or TRACE) to see all find_package resolutions.
+    # Set CMAKE_DEBUG_FIND_PKG=spdlog (comma-separated) to trace specific packages.
+    # Example: CMAKE_LOG_LEVEL=VERBOSE CMAKE_DEBUG_FIND_PKG=spdlog ./scripts/build.sh
+    CMAKE_LOG_LEVEL=${CMAKE_LOG_LEVEL:-STATUS}
+    CMAKE_EXTRA_FLAGS=()
+    if [[ -n "${CMAKE_DEBUG_FIND_PKG:-}" ]]; then
+        CMAKE_EXTRA_FLAGS+=(--debug-find-pkg="${CMAKE_DEBUG_FIND_PKG}")
+    fi
+
     printf "DEBUG: outputting build artifacts to ${BUILD_DIRECTORY}\n" >&2
-    BUILD_CMD="cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} && cmake --build ${BUILD_DIRECTORY}"
+    cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+        --log-level="${CMAKE_LOG_LEVEL}" \
+        "${CMAKE_EXTRA_FLAGS[@]}" \
+        && cmake --build ${BUILD_DIRECTORY}
 
     if [ $? -eq 0 ]; then
-        echo "-> artifacts outputted to '${BUILD_DIRECTORY}' directory..."
+        printf "DEBUG: -> artifacts outputted to '${BUILD_DIRECTORY}' directory..."
         export BUILD_DIRECTORY
-        echo "contents of ${BUILD_DIRECTORY}"
+        printf "DEBUG: contents of ${BUILD_DIRECTORY}"
         ls "${BUILD_DIRECTORY}"
         return 0
     else
-        echo " -> build failure. returning..."
+        printf "DEBUG:  -> build failure. returning..."
         return 1
     fi
 }

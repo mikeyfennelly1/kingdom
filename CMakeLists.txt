@@ -5,11 +5,17 @@ project(kingdom VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH FALSE)
 set(CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY FALSE)
 set(CMAKE_FIND_USE_PACKAGE_REGISTRY FALSE)
+# Disables CMAKE_SYSTEM_PREFIX_PATH (/usr/local, /usr, etc.) so nothing leaks in from the host.
+set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH FALSE)
 
 # HARD RULE: only search explicitly provided prefixes
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+# Redirect the default /usr/local install prefix into the build tree so GNUInstallDirs
+# never seeds /usr/local paths into target properties.
+set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "" FORCE)
 
 # Fail if anything is missing instead of falling back
 set(CMAKE_REQUIRED_QUIET OFF)
