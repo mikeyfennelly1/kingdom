@@ -32,6 +32,7 @@ class LoginWindow : public QDialog {
   void onLogin();
   void onSignup();
 
+  // NOLINTNEXTLINE(readability-redundant-access-specifiers)
  private:
   void performAuth(bool isSignup);
   void showError(const QString& msg);

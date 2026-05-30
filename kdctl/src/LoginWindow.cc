@@ -58,16 +58,26 @@ static const char* kSecondaryButtonStyle =
     "QPushButton:pressed { background-color: #dbeafe; }"
     "QPushButton:disabled { color: #93c5fd; border-color: #93c5fd; }";
 
+static constexpr int kMinPasswordLen = 12;
+static constexpr int kMaxPasswordLen = 72;
+static constexpr int kLoginWindowWidth = 420;
+static constexpr int kLogoSize = 56;
+static constexpr int kCardMargin = 28;
+static constexpr int kRootMargin = 32;
+static constexpr int kRootSpacing = 16;
+static constexpr int kRootSpacer = 8;
+
 static bool isValidSignupPassword(const std::string& password) {
-  if (password.size() < 12 || password.size() > 72) {
+  if (password.size() < static_cast<std::size_t>(kMinPasswordLen) ||
+      password.size() > static_cast<std::size_t>(kMaxPasswordLen)) {
     return false;
   }
 
   bool hasUppercase = false;
   bool hasNumber = false;
-  for (unsigned char ch : password) {
-    hasUppercase = hasUppercase || std::isupper(ch) != 0;
-    hasNumber = hasNumber || std::isdigit(ch) != 0;
+  for (unsigned char chr : password) {
+    hasUppercase = hasUppercase || std::isupper(chr) != 0;
+    hasNumber = hasNumber || std::isdigit(chr) != 0;
   }
 
   return hasUppercase && hasNumber;
@@ -75,13 +85,13 @@ static bool isValidSignupPassword(const std::string& password) {
 
 LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
   setWindowTitle("Kingdom");
-  setFixedWidth(420);
+  setFixedWidth(kLoginWindowWidth);
   setStyleSheet("background-color: #f8fafc;");
 
   // ---- Header ----
   auto* logo = new QLabel("K", this);
   logo->setAlignment(Qt::AlignCenter);
-  logo->setFixedSize(56, 56);
+  logo->setFixedSize(kLogoSize, kLogoSize);
   logo->setStyleSheet(
       "background-color: #2563eb;"
       "color: white;"
@@ -134,7 +144,7 @@ LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
   errorLabel_->hide();
 
   auto* cardLayout = new QVBoxLayout(card);
-  cardLayout->setContentsMargins(28, 28, 28, 28);
+  cardLayout->setContentsMargins(kCardMargin, kCardMargin, kCardMargin, kCardMargin);
   cardLayout->setSpacing(12);
   cardLayout->addWidget(serverUrlEdit_);
   cardLayout->addWidget(usernameEdit_);
@@ -146,12 +156,12 @@ LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
 
   // ---- Root layout ----
   auto* root = new QVBoxLayout(this);
-  root->setContentsMargins(32, 32, 32, 32);
-  root->setSpacing(16);
+  root->setContentsMargins(kRootMargin, kRootMargin, kRootMargin, kRootMargin);
+  root->setSpacing(kRootSpacing);
   root->addWidget(logo, 0, Qt::AlignHCenter);
   root->addWidget(title);
   root->addWidget(subtitle);
-  root->addSpacing(8);
+  root->addSpacing(kRootSpacer);
   root->addWidget(card);
 
   connect(loginButton_, &QPushButton::clicked, this, &LoginWindow::onLogin);
