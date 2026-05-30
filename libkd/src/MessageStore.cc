@@ -294,8 +294,8 @@ const std::vector<Message>& MessageStore::getAll() const {
 
 std::vector<Message> MessageStore::findBySender(uint64_t senderId) const {
   std::vector<Message> result;
-  std::copy_if(messages_.begin(), messages_.end(), std::back_inserter(result),
-               [senderId](const Message& message) { return message.senderId == senderId; });
+  std::ranges::copy_if(messages_, std::back_inserter(result),
+                       [senderId](const Message& message) { return message.senderId == senderId; });
   return result;
 }
 

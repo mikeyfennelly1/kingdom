@@ -412,7 +412,7 @@ void MainWindow::loadMessages(uint64_t conversationId) {
   try {
     auto msgs = client_->getMessages(conversationId);
 
-    std::sort(msgs.begin(), msgs.end(), [](const nlohmann::json& a, const nlohmann::json& b) {
+    std::ranges::sort(msgs, [](const nlohmann::json& a, const nlohmann::json& b) {
       return a["timestamp"].get<uint64_t>() < b["timestamp"].get<uint64_t>();
     });
 

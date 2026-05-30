@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 namespace kd {
 
 namespace content_types {
@@ -42,5 +44,20 @@ inline constexpr const char* ValidateSenderAuthenticity = "ValidateSenderAuthent
 inline constexpr const char* ValidateUntampered = "ValidateUntampered";
 inline constexpr const char* ValidateAuthenticated = "ValidateAuthenticated";
 }  // namespace security_predicates
+
+namespace domain {
+inline constexpr size_t kMinPasswordLen = 12;
+inline constexpr size_t kMaxPasswordLen = 72;
+inline constexpr size_t kMaxUsernameLen = 64;
+inline constexpr size_t kMaxConversationNameLen = 128;
+inline constexpr size_t kMaxPayloadLen = 65536;
+}  // namespace domain
+
+namespace timeouts {
+inline constexpr int kSidecarConnectionTimeoutSec = 30;
+inline constexpr int kSidecarReadTimeoutSec = 60;
+inline constexpr int kMessageReadTimeoutSec = 120;
+inline constexpr int kRateLimitWindowSec = 60;
+}  // namespace timeouts
 
 }  // namespace kd

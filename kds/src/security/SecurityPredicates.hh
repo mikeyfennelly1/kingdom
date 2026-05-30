@@ -21,13 +21,13 @@ namespace kd {
 class TokenBlacklist {
  public:
   static void revoke(const std::string& token) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock(mutex_);
     tokens_.insert(token);
   }
 
   static bool isRevoked(const std::string& token) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return tokens_.count(token) > 0;
+    std::scoped_lock lock(mutex_);
+    return tokens_.contains(token);
   }
 
  private:
@@ -68,7 +68,8 @@ class ValidateSenderAuthenticity : public SecurityPredicate {
       uint64_t authenticatedUserId = std::stoull((*payload)["sub"].get<std::string>());
       uint64_t senderId = body["senderId"].get<uint64_t>();
       if (authenticatedUserId != senderId) {
-        return SecurityError{"sender ID does not match authenticated user", 403};
+        return SecurityError{.message = "sender ID does not match authenticated user",
+                             .httpStatusCode = httplib::Forbidden_403};
       }
     } catch (const std::exception&) {
       return std::nullopt;
@@ -89,7 +90,8 @@ class ValidateUntampered : public SecurityPredicate {
 
     const auto contentType = req.get_header_value(http_headers::ContentType);
     if (contentType.empty() || contentType.find(content_types::Json) == std::string::npos) {
-      return SecurityError{"Content-Type must be application/json", 400};
+      return SecurityError{.message = "Content-Type must be application/json",
+                           .httpStatusCode = httplib::BadRequest_400};
     }
 
     return std::nullopt;
@@ -115,17 +117,21 @@ class ValidateAuthenticated : public SecurityPredicate {
     }
     auto token = bearerToken(req);
     if (!token.has_value()) {
-      return SecurityError{"authentication required", 401};
+      return SecurityError{.message = "authentication required",
+                           .httpStatusCode = httplib::Unauthorized_401};
     }
     const char* secret = std::getenv("KD_JWT_SECRET");
     if (secret == nullptr) {
-      return SecurityError{"server misconfiguration: JWT secret not set", 500};
+      return SecurityError{.message = "server misconfiguration: JWT secret not set",
+                           .httpStatusCode = httplib::InternalServerError_500};
     }
     if (!verifiedJwtPayload(*token, std::string(secret)).has_value()) {
-      return SecurityError{"invalid or expired session token", 401};
+      return SecurityError{.message = "invalid or expired session token",
+                           .httpStatusCode = httplib::Unauthorized_401};
     }
     if (TokenBlacklist::isRevoked(*token)) {
-      return SecurityError{"session has been revoked", 401};
+      return SecurityError{.message = "session has been revoked",
+                           .httpStatusCode = httplib::Unauthorized_401};
     }
     return std::nullopt;
   }

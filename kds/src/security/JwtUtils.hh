@@ -65,7 +65,7 @@ inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
     padded.push_back('=');
   }
 
-  std::vector<unsigned char> decoded((padded.size() / 4) * 3 + 3);
+  std::vector<unsigned char> decoded(((padded.size() / 4) * 3) + 3);
   const int decodedSize =
       EVP_DecodeBlock(decoded.data(), reinterpret_cast<const unsigned char*>(padded.data()),
                       static_cast<int>(padded.size()));
@@ -98,7 +98,7 @@ inline std::string signJwtInput(const std::string& signingInput, const std::stri
 inline std::optional<std::string> bearerToken(const httplib::Request& req) {
   const auto header = req.get_header_value(http_headers::Authorization);
   constexpr std::string_view prefix = jwt::BearerPrefix;
-  if (header.size() <= prefix.size() || header.compare(0, prefix.size(), prefix) != 0) {
+  if (header.size() <= prefix.size() || !header.starts_with(prefix)) {
     return std::nullopt;
   }
   return header.substr(prefix.size());
