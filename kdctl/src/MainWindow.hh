@@ -49,6 +49,7 @@ class MainWindow : public QMainWindow {
   void onLogout();
   void pollMessages();
 
+  // NOLINTNEXTLINE(readability-redundant-access-specifiers)
  private:
   struct DisplayedMessage {
     kd::Message message;
@@ -70,12 +71,13 @@ class MainWindow : public QMainWindow {
                            const std::string& text, bool forwardable);
   std::optional<std::string> decryptPlaintext(const kd::Message& msg, uint64_t recipientId);
   std::optional<ForwardTarget> chooseForwardTarget();
-  std::optional<uint64_t> findConversationWithUser(uint64_t userId) const;
+  [[nodiscard]] std::optional<uint64_t> findConversationWithUser(uint64_t userId) const;
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   bool confirmRecipientIdentity(uint64_t userId, const std::string& username,
                                 const std::string& publicKey);
-  QString formatTimestamp(uint64_t milliseconds);
-  QString fingerprintForPublicKey(const std::string& publicKey) const;
-  std::string usernameFor(uint64_t userId) const;
+  [[nodiscard]] static QString formatTimestamp(uint64_t milliseconds);
+  [[nodiscard]] static QString fingerprintForPublicKey(const std::string& publicKey);
+  [[nodiscard]] std::string usernameFor(uint64_t userId) const;
 
   // Session state
   Session session_;
