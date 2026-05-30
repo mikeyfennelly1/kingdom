@@ -51,8 +51,7 @@ class MainWindow : public QMainWindow {
   void loadConversations();
   void loadMessages(uint64_t conversationId);
   void loadUserCache();
-  void appendMessageToView(const std::string& sender, const std::string& text,
-                           uint64_t timestamp);
+  void appendMessageToView(const std::string& sender, const std::string& text, uint64_t timestamp);
   std::string decryptOrPlaceholder(const kd::Message& msg, uint64_t recipientId);
   QString formatTimestamp(uint64_t milliseconds);
   std::string usernameFor(uint64_t userId) const;

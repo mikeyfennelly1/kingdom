@@ -4,9 +4,12 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - 'ansible/**'
-      - '.github/**'
+    paths:
+      - 'kds/**'
+      - 'kdctl/**'
+      - 'libkd/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
 
 jobs:
   build:

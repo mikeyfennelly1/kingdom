@@ -3,10 +3,10 @@
 
 #include <cstdlib>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <regex>
 #include <string>
 #include <unordered_set>
-#include <nlohmann/json.hpp>
 
 #include "JwtUtils.hh"
 #include "SecurityPredicate.hh"

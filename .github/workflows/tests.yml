@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'ansible/**'
-      - '.github/**'
+    paths:
+      - 'kds/**'
+      - 'kdctl/**'
+      - 'libkd/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
 
 jobs:
   e2e:
@@ -46,7 +49,7 @@ jobs:
         run: docker pull postgres:16
 
       - name: Make test script executable
-        run: chmod +x test.sh
+        run: chmod +x scripts/test.sh
 
       - name: Run e2e tests
-        run: ./test.sh
+        run: ./scripts/test.sh
