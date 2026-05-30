@@ -267,20 +267,6 @@ std::string Client::getPublicKey(uint64_t userId) {
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
-void Client::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
-  auto cli = makeClient(baseUrl_, caCertPath_);
-  std::string path = "/users/" + std::to_string(userId) + "/one-time-prekeys/" +
-                     std::to_string(preKeyId) + "/consume";
-  auto headers = authHeaders(authToken_);
-  if (auto res = cli.Post(path, headers, "", "application/json")) {
-    if (res->status == 200 || res->status == 204 || res->status == 404) {
-      return;
-    }
-    throw std::runtime_error("Server returned status " + std::to_string(res->status));
-  }
-  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
-}
-
 nlohmann::json Client::createConversation(const std::string& name,
                                           const std::vector<uint64_t>& participantIds) {
   auto cli = makeClient(baseUrl_, caCertPath_);

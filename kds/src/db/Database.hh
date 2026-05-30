@@ -30,9 +30,6 @@ class Database {
   // Fetch a user's published public key. Returns std::nullopt if the user does not exist.
   std::optional<std::string> getUserPublicKey(uint64_t userId);
 
-  // Removes a published one-time prekey from the user's JSON key bundle.
-  bool consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId);
-
   // Create a conversation and add participants. Returns conversation id.
   uint64_t createConversation(const std::string& name, const std::vector<uint64_t>& participantIds);
 
@@ -41,7 +38,8 @@ class Database {
 
   // Insert a message. timestamp is Unix ms (passed in from server). Returns message id.
   uint64_t createMessage(uint64_t conversationId, uint64_t senderId, const std::string& payload,
-                         uint64_t timestamp, std::optional<uint64_t> recipientId = std::nullopt);
+                         uint64_t timestamp, std::optional<uint64_t> recipientId = std::nullopt,
+                         std::optional<uint64_t> oneTimePreKeyId = std::nullopt);
 
   // Get all messages in a conversation ordered by timestamp ASC.
   std::vector<kd::Message> getMessagesByConversationId(uint64_t conversationId);

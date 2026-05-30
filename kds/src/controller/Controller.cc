@@ -33,6 +33,18 @@ bool verifyPassword(const std::string& encodedHash, const std::string& password)
   return crypto_pwhash_str_verify(encodedHash.c_str(), password.c_str(), password.size()) == 0;
 }
 
+std::optional<uint64_t> oneTimePreKeyIdFromPayload(const std::string& payload) {
+  auto payloadJson = nlohmann::json::parse(payload, nullptr, false);
+  if (payloadJson.is_discarded() || !payloadJson.is_object() ||
+      !payloadJson.contains("oneTimePreKeyId") || payloadJson["oneTimePreKeyId"].is_null()) {
+    return std::nullopt;
+  }
+  if (!payloadJson["oneTimePreKeyId"].is_number_unsigned()) {
+    return std::nullopt;
+  }
+  return payloadJson["oneTimePreKeyId"].get<uint64_t>();
+}
+
 bool isValidSignupPassword(const std::string& password) {
   if (password.size() < 12 || password.size() > 72) {
     return false;
@@ -318,26 +330,6 @@ void Controller::publicKeyController_() {
              res.set_content(nlohmann::json{{"userId", userId}, {"publicKey", *publicKey}}.dump(),
                              "application/json");
            });
-
-  svr_.Post(R"(/users/(\d+)/one-time-prekeys/(\d+)/consume)",
-            [this](const httplib::Request& req, httplib::Response& res) -> void {
-              auto authenticatedUserId = authenticatedUserId_(req);
-              if (!authenticatedUserId.has_value()) {
-                res.status = 401;
-                res.set_content(nlohmann::json{{"error", "login required"}}.dump(),
-                                "application/json");
-                return;
-              }
-              uint64_t userId = std::stoull(std::string(req.matches[1]));
-              uint64_t preKeyId = std::stoull(std::string(req.matches[2]));
-              if (!db_.consumeOneTimePreKey(userId, preKeyId)) {
-                res.status = 404;
-                res.set_content(nlohmann::json{{"error", "one-time prekey not found"}}.dump(),
-                                "application/json");
-                return;
-              }
-              res.set_content(nlohmann::json{{"status", "consumed"}}.dump(), "application/json");
-            });
 }
 
 void Controller::conversationController_() {
@@ -461,7 +453,15 @@ void Controller::messageController_() {
                                          std::chrono::system_clock::now().time_since_epoch())
                                          .count());
 
-    uint64_t msgId = db_.createMessage(convId, senderId, payload, now, recipientId);
+    auto oneTimePreKeyId = oneTimePreKeyIdFromPayload(payload);
+    uint64_t msgId = 0;
+    try {
+      msgId = db_.createMessage(convId, senderId, payload, now, recipientId, oneTimePreKeyId);
+    } catch (const std::runtime_error& e) {
+      res.status = 409;
+      res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+      return;
+    }
     spdlog::info("Created message {} in conversation {}", msgId, convId);
 
     // Record hash on-chain via the blockchain sidecar

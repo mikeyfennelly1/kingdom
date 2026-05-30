@@ -295,50 +295,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /users/{userId}/one-time-prekeys/{preKeyId}/consume:
-    post:
-      summary: Consume a one-time pre-key from a user's key bundle
-      operationId: consumeOneTimePreKey
-      tags: [Users]
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: uint64
-        - name: preKeyId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: uint64
-      responses:
-        '200':
-          description: Pre-key consumed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: consumed
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Pre-key not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
   /users/{userId}/conversations:
     get:
       summary: List all conversations a user participates in

@@ -530,6 +530,16 @@ describe('Malicious paths', () => {
     expect(res.status).not.toBe(500)
   })
 
+  it('Standalone one-time prekey consume endpoint is not exposed', async () => {
+    const res = await api(
+      'POST',
+      `/users/${state.bobId}/one-time-prekeys/1/consume`,
+      undefined,
+      freshAliceToken,
+    )
+    expect(res.status).toBe(404)
+  })
+
   it('Non-participant cannot read messages in a conversation', async () => {
     // ATTACK: Horizontal privilege escalation — Eve has a valid token but is not in the
     // alice-bob conversation, so she must receive 403.

@@ -130,21 +130,19 @@ std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
   return result[0][0].as<std::string>();
 }
 
-bool Database::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  pqxx::work txn(conn_);
+namespace {
+
+bool consumeOneTimePreKeyInTransaction(pqxx::work& txn, uint64_t userId, uint64_t preKeyId) {
   pqxx::params params{static_cast<int64_t>(userId)};
   auto result =
       txn.exec("SELECT COALESCE(public_key, '') FROM users WHERE id = $1 FOR UPDATE", params);
   if (result.empty()) {
-    txn.commit();
     return false;
   }
 
   auto bundle = nlohmann::json::parse(result[0][0].as<std::string>(), nullptr, false);
   if (bundle.is_discarded() || !bundle.is_object() || !bundle.contains("oneTimePreKeys") ||
       !bundle["oneTimePreKeys"].is_array()) {
-    txn.commit();
     return false;
   }
 
@@ -158,15 +156,15 @@ bool Database::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
                        oneTimePreKeys.end());
 
   if (oneTimePreKeys.size() == originalSize) {
-    txn.commit();
     return false;
   }
 
   pqxx::params updateParams{bundle.dump(), static_cast<int64_t>(userId)};
   txn.exec("UPDATE users SET public_key = $1 WHERE id = $2", updateParams);
-  txn.commit();
   return true;
 }
+
+}  // namespace
 
 uint64_t Database::createConversation(const std::string& name,
                                       const std::vector<uint64_t>& participantIds) {
@@ -240,9 +238,16 @@ std::vector<kd::Conversation> Database::getConversationsByUserId(uint64_t userId
 
 uint64_t Database::createMessage(uint64_t conversationId, uint64_t senderId,
                                  const std::string& payload, uint64_t timestamp,
-                                 std::optional<uint64_t> recipientId) {
+                                 std::optional<uint64_t> recipientId,
+                                 std::optional<uint64_t> oneTimePreKeyId) {
   std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
+
+  if (recipientId.has_value() && oneTimePreKeyId.has_value() && *recipientId != senderId &&
+      !consumeOneTimePreKeyInTransaction(txn, *recipientId, *oneTimePreKeyId)) {
+    throw std::runtime_error("one-time prekey not found");
+  }
+
   pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(senderId), payload,
                       static_cast<int64_t>(timestamp)};
   auto result = txn.exec(
