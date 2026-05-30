@@ -30,6 +30,7 @@ class MainWindow : public QMainWindow {
     std::string username;
     std::string token;
     kd::LocalIdentityKey identityKey;
+    kd::MessageStore messageStore;
     std::string serverUrl;
   };
 
