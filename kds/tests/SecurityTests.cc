@@ -4,6 +4,7 @@
 
 #include <array>
 #include <filesystem>
+#include <fstream>
 #include <kd/Conversation.hpp>
 #include <kd/LocalKeyStore.hpp>
 #include <kd/MessageStore.hpp>
@@ -243,6 +244,65 @@ TEST(MessageStoreTest, DeletePlaintextRemovesCachedMessage) {
 
   store.deletePlaintext(42);
   EXPECT_EQ(store.getPlaintext(42), std::nullopt);
+
+  std::filesystem::remove(path, ignored);
+}
+
+
+TEST(MessageStoreTest, EncryptedStoreDoesNotPersistPlaintext) {
+  ASSERT_GE(sodium_init(), 0);
+
+  const auto path = std::filesystem::temp_directory_path() /
+                    "kingdom-message-store-encrypted-test.json";
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+
+  kd::MessageStore writer =
+      kd::MessageStore::encryptedAtPath(path, "alice", "AlicePassword123");
+  writer.savePlaintext(42, 7, 1, 123456, "cached secret hello");
+
+  std::ifstream input(path);
+  const std::string raw((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  EXPECT_EQ(raw.find("cached secret hello"), std::string::npos);
+  EXPECT_NE(raw.find("ciphertext"), std::string::npos);
+
+  kd::MessageStore reader =
+      kd::MessageStore::encryptedAtPath(path, "alice", "AlicePassword123");
+  EXPECT_EQ(reader.getPlaintext(42), std::optional<std::string>("cached secret hello"));
+
+  std::filesystem::remove(path, ignored);
+}
+
+TEST(MessageStoreTest, EncryptedStoreMigratesLegacyPlaintextStore) {
+  ASSERT_GE(sodium_init(), 0);
+
+  const auto path = std::filesystem::temp_directory_path() /
+                    "kingdom-message-store-migration-test.json";
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+
+  {
+    std::ofstream output(path, std::ios::trunc);
+    output << nlohmann::json{{"version", 1},
+                             {"messages",
+                              {{"42",
+                                {{"messageId", 42},
+                                 {"conversationId", 7},
+                                 {"senderId", 1},
+                                 {"timestamp", 123456},
+                                 {"plaintext", "legacy secret"}}}}}}
+                  .dump(2)
+           << '\n';
+  }
+
+  kd::MessageStore store =
+      kd::MessageStore::encryptedAtPath(path, "alice", "AlicePassword123");
+  EXPECT_EQ(store.getPlaintext(42), std::optional<std::string>("legacy secret"));
+
+  std::ifstream input(path);
+  const std::string raw((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  EXPECT_EQ(raw.find("legacy secret"), std::string::npos);
+  EXPECT_NE(raw.find("ciphertext"), std::string::npos);
 
   std::filesystem::remove(path, ignored);
 }

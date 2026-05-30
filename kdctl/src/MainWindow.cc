@@ -116,7 +116,7 @@ MainWindow::MainWindow(Session session, QWidget* parent)
                                              const char* e = std::getenv("KD_CA_CERT");
                                              return e != nullptr ? std::string(e) : std::string{};
                                            }())),
-      messageStore_(session_.username) {
+      messageStore_(std::move(session_.messageStore)) {
   client_->setAuthToken(session_.token);
   loadUserCache();
 

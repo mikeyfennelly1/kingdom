@@ -1,5 +1,7 @@
 #include "LoginWindow.hh"
 
+#include <sodium.h>
+
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -171,7 +173,7 @@ void LoginWindow::performAuth(bool isSignup) {
 
   const std::string serverUrl{serverUrlEdit_->text().trimmed().toUtf8().constData()};
   const std::string username{usernameEdit_->text().trimmed().toUtf8().constData()};
-  const std::string password{passwordEdit_->text().toUtf8().constData()};
+  std::string password{passwordEdit_->text().toUtf8().constData()};
 
   if (serverUrl.empty()) {
     showError("Server URL is required.");
@@ -220,18 +222,24 @@ void LoginWindow::performAuth(bool isSignup) {
     client.setAuthToken(token);
 
     kd::LocalIdentityKey identityKey = kd::LocalKeyStore::loadForLogin(username, password);
+    kd::MessageStore messageStore = kd::MessageStore::encryptedForUser(username, password);
+    sodium_memzero(password.data(), password.size());
 
     LoginResult res;
     res.userId = userJson["id"].get<uint64_t>();
     res.username = userJson["username"].get<std::string>();
     res.token = token;
     res.identityKey = std::move(identityKey);
+    res.messageStore = std::move(messageStore);
     res.serverUrl = serverUrl;
 
     result_ = std::move(res);
     accept();
 
   } catch (const std::exception& e) {
+    if (!password.empty()) {
+      sodium_memzero(password.data(), password.size());
+    }
     showError(QString::fromUtf8(e.what()));
     loginButton_->setEnabled(true);
     signupButton_->setEnabled(true);
