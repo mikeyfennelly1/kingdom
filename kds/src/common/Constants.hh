@@ -51,6 +51,7 @@ inline constexpr size_t kMaxPasswordLen = 72;
 inline constexpr size_t kMaxUsernameLen = 64;
 inline constexpr size_t kMaxConversationNameLen = 128;
 inline constexpr size_t kMaxPayloadLen = 65536;
+inline constexpr size_t kMaxPublicKeyLen = 8192;
 }  // namespace domain
 
 namespace timeouts {
