@@ -215,7 +215,7 @@ std::vector<kd::Conversation> Database::getConversationsByUserId(uint64_t userId
     conv.createdAt = row[2].as<uint64_t>();
 
     // Parse PostgreSQL array string e.g. {1,2,3}
-    std::string arrayStr = row[3].as<std::string>();
+    auto arrayStr = row[3].as<std::string>();
     if (arrayStr.size() >= 2) {
       std::string_view inner{arrayStr.data() + 1, arrayStr.size() - 2};
       while (!inner.empty()) {

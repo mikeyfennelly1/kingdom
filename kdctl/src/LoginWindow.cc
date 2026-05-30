@@ -67,6 +67,7 @@ static constexpr int kCardMargin = 28;
 static constexpr int kRootMargin = 32;
 static constexpr int kRootSpacing = 16;
 static constexpr int kRootSpacer = 8;
+static constexpr int kCardSpacing = 12;
 
 static bool isValidSignupPassword(const std::string& password) {
   if (password.size() < static_cast<std::size_t>(kMinPasswordLen) ||
@@ -164,7 +165,7 @@ LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
 
   auto* cardLayout = new QVBoxLayout(card);
   cardLayout->setContentsMargins(kCardMargin, kCardMargin, kCardMargin, kCardMargin);
-  cardLayout->setSpacing(12);
+  cardLayout->setSpacing(kCardSpacing);
   cardLayout->addWidget(serverUrlEdit_);
   cardLayout->addWidget(usernameEdit_);
   cardLayout->addWidget(passwordEdit_);
