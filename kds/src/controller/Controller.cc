@@ -70,7 +70,7 @@ std::optional<uint64_t> oneTimePreKeyIdFromPayload(const std::string& payload) {
 }
 
 bool isValidSignupPassword(const std::string& password) {
-  if (password.size() < 12 || password.size() > 72) {
+  if (password.size() < domain::kMinPasswordLen || password.size() > domain::kMaxPasswordLen) {
     return false;
   }
 
@@ -170,9 +170,9 @@ std::optional<uint64_t> Controller::authenticatedUserId_(const httplib::Request&
 
 bool Controller::isRateLimited_(const std::string& ip) {
   constexpr int kMaxAttempts = 10;
-  constexpr auto kWindow = std::chrono::seconds(60);
+  constexpr auto kWindow = std::chrono::seconds(timeouts::kRateLimitWindowSec);
 
-  std::lock_guard<std::mutex> lock(rateLimitMutex_);
+  std::scoped_lock lock(rateLimitMutex_);
   auto now = std::chrono::steady_clock::now();
   auto& entry = rateLimitMap_[ip];
 
@@ -223,7 +223,7 @@ void Controller::handleSignup_(const httplib::Request& req, httplib::Response& r
   std::string password = body[json_fields::Password];
   std::string publicKey = body[json_fields::PublicKey];
 
-  if (username.empty() || username.size() > 64) {
+  if (username.empty() || username.size() > domain::kMaxUsernameLen) {
     res.status = httplib::BadRequest_400;
     res.set_content(nlohmann::json{{json_fields::Error, "username must be 1–64 characters"}}.dump(),
                     content_types::Json);
@@ -288,13 +288,13 @@ void Controller::handleLogin_(const httplib::Request& req, httplib::Response& re
   std::string username = body[json_fields::Username];
   std::string password = body[json_fields::Password];
 
-  if (username.empty() || username.size() > 64) {
+  if (username.empty() || username.size() > domain::kMaxUsernameLen) {
     res.status = httplib::BadRequest_400;
     res.set_content(nlohmann::json{{json_fields::Error, "username must be 1–64 characters"}}.dump(),
                     content_types::Json);
     return;
   }
-  if (password.empty() || password.size() > 72) {
+  if (password.empty() || password.size() > domain::kMaxPasswordLen) {
     res.status = httplib::BadRequest_400;
     res.set_content(nlohmann::json{{json_fields::Error, "password must be 1–72 characters"}}.dump(),
                     content_types::Json);
@@ -406,7 +406,7 @@ void Controller::handleCreateConversation_(const httplib::Request& req, httplib:
 
   std::string name = body[json_fields::Name];
 
-  if (name.empty() || name.size() > 128) {
+  if (name.empty() || name.size() > domain::kMaxConversationNameLen) {
     res.status = httplib::BadRequest_400;
     res.set_content(nlohmann::json{{json_fields::Error, "name must be 1–128 characters"}}.dump(),
                     content_types::Json);
@@ -492,7 +492,7 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
     recipientId = body[json_fields::RecipientId].get<uint64_t>();
   }
 
-  if (payload.empty() || payload.size() > 65536) {
+  if (payload.empty() || payload.size() > domain::kMaxPayloadLen) {
     res.status = httplib::BadRequest_400;
     res.set_content(
         nlohmann::json{{json_fields::Error, "payload must be 1–65536 characters"}}.dump(),
@@ -546,8 +546,8 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
   std::string txHash;
   try {
     httplib::Client sidecar(sidecarUrl_);
-    sidecar.set_connection_timeout(30);
-    sidecar.set_read_timeout(60);
+    sidecar.set_connection_timeout(timeouts::kSidecarConnectionTimeoutSec);
+    sidecar.set_read_timeout(timeouts::kSidecarReadTimeoutSec);
     nlohmann::json sidecarBody = {{json_fields::ConversationId, convId},
                                   {json_fields::MsgId, msgId},
                                   {json_fields::Ciphertext, payload}};
@@ -564,7 +564,12 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
     spdlog::warn("Blockchain sidecar error for message {}: {}", msgId, e.what());
   }
 
-  kd::Message msg{msgId, senderId, convId, payload, now, txHash};
+  kd::Message msg{.id = msgId,
+                  .senderId = senderId,
+                  .conversationId = convId,
+                  .payload = payload,
+                  .timestamp = now,
+                  .blockchainDigest = txHash};
   nlohmann::json result = msg;
   res.status = httplib::Created_201;
   res.set_content(result.dump(), content_types::Json);

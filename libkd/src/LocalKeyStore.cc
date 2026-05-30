@@ -312,8 +312,8 @@ nlohmann::json encryptedPrivateMaterial(const LocalIdentityKey& identity) {
 }
 
 void eraseOneTimePreKey(LocalIdentityKey& identity, uint64_t preKeyId) {
-  auto it = std::find_if(identity.oneTimePreKeys.begin(), identity.oneTimePreKeys.end(),
-                         [preKeyId](const LocalPreKey& key) { return key.id == preKeyId; });
+  auto it = std::ranges::find_if(identity.oneTimePreKeys,
+                                 [preKeyId](const LocalPreKey& key) { return key.id == preKeyId; });
   if (it == identity.oneTimePreKeys.end()) {
     throw std::runtime_error("One-time prekey is missing or already used");
   }
@@ -327,7 +327,7 @@ void eraseOneTimePreKey(LocalIdentityKey& identity, uint64_t preKeyId) {
     if (!used.is_array()) {
       used = nlohmann::json::array();
     }
-    const bool alreadyRecorded = std::any_of(used.begin(), used.end(), [preKeyId](const auto& id) {
+    const bool alreadyRecorded = std::ranges::any_of(used, [preKeyId](const auto& id) {
       return id.template get<uint64_t>() == preKeyId;
     });
     if (!alreadyRecorded) {
@@ -406,7 +406,7 @@ RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& userna
                          {"usedOneTimePreKeyIds", nlohmann::json::array()}};
 
   writeJsonFile(keyPath, file);
-  return RegistrationKeyMaterial{bundle.dump(), keyPath.string()};
+  return RegistrationKeyMaterial{.publicKeyBundle = bundle.dump(), .keyFilePath = keyPath.string()};
 }
 
 LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
@@ -492,7 +492,7 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
 
   for (const auto& preKeyJson : privateMaterial.at("oneTimePreKeys")) {
     const auto id = preKeyJson.at("id").get<uint64_t>();
-    if (std::find(usedIds.begin(), usedIds.end(), id) != usedIds.end()) {
+    if (std::ranges::find(usedIds, id) != usedIds.end()) {
       continue;
     }
     LocalPreKey preKey;
@@ -612,10 +612,9 @@ std::string LocalKeyStore::decryptMessage(const std::string& payload, LocalIdent
   std::optional<LocalPreKey> oneTimePreKey;
   if (!payloadJson.at("oneTimePreKeyId").is_null()) {
     oneTimePreKeyId = payloadJson.at("oneTimePreKeyId").get<uint64_t>();
-    auto it = std::find_if(recipient.oneTimePreKeys.begin(), recipient.oneTimePreKeys.end(),
-                           [oneTimePreKeyId](const LocalPreKey& key) {
-                             return key.id == *oneTimePreKeyId;
-                           });
+    auto it = std::ranges::find_if(recipient.oneTimePreKeys, [oneTimePreKeyId](const LocalPreKey& key) {
+      return key.id == *oneTimePreKeyId;
+    });
     if (it == recipient.oneTimePreKeys.end()) {
       throw std::runtime_error("One-time prekey is missing or already used");
     }

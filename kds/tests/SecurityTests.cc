@@ -188,9 +188,9 @@ TEST(LocalKeyStoreTest, X3dhMessageRejectsMissingUsedOneTimePreKey) {
 
 TEST(MessageStoreTest, FindBySenderReturnsOnlyMatchingMessages) {
   MessageStore store;
-  store.add(Message{1, 10, 100, "msg1", 1000, ""});
-  store.add(Message{2, 20, 100, "msg2", 2000, ""});
-  store.add(Message{3, 10, 100, "msg3", 3000, ""});
+  store.add(Message{.id = 1, .senderId = 10, .conversationId = 100, .payload = "msg1", .timestamp = 1000, .blockchainDigest = ""});
+  store.add(Message{.id = 2, .senderId = 20, .conversationId = 100, .payload = "msg2", .timestamp = 2000, .blockchainDigest = ""});
+  store.add(Message{.id = 3, .senderId = 10, .conversationId = 100, .payload = "msg3", .timestamp = 3000, .blockchainDigest = ""});
 
   auto results = store.findBySender(10);
   ASSERT_EQ(results.size(), 2U);
@@ -200,7 +200,7 @@ TEST(MessageStoreTest, FindBySenderReturnsOnlyMatchingMessages) {
 
 TEST(MessageStoreTest, FindBySenderReturnsEmptyForUnknownSender) {
   MessageStore store;
-  store.add(Message{1, 10, 100, "msg1", 1000, ""});
+  store.add(Message{.id = 1, .senderId = 10, .conversationId = 100, .payload = "msg1", .timestamp = 1000, .blockchainDigest = ""});
 
   auto results = store.findBySender(99);
   EXPECT_TRUE(results.empty());
