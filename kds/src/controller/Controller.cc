@@ -3,6 +3,7 @@
 #include <sodium.h>
 
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <kd/Conversation.hpp>
@@ -55,6 +56,12 @@ namespace api_info {
 constexpr const char* Name = "Kingdom Server";
 constexpr const char* Version = "1.0";
 }  // namespace api_info
+
+std::optional<uint64_t> parseId(std::string_view s) noexcept {
+  uint64_t val{};
+  auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), val);
+  return (ec == std::errc{} && ptr == s.data() + s.size()) ? std::optional{val} : std::nullopt;
+}
 
 std::optional<uint64_t> oneTimePreKeyIdFromPayload(const std::string& payload) {
   auto payloadJson = nlohmann::json::parse(payload, nullptr, false);
@@ -362,15 +369,22 @@ void Controller::userController_() {
 void Controller::publicKeyController_() {
   svr_.Get(routes::UserPublicKey,
            [this](const httplib::Request& req, httplib::Response& res) -> void {
-             uint64_t userId = std::stoull(std::string(req.matches[1]));
-             auto publicKey = db_.getUserPublicKey(userId);
+             auto userId = parseId(req.matches[1].str());
+             if (!userId) {
+               res.status = httplib::BadRequest_400;
+               res.set_content(
+                   nlohmann::json{{json_fields::Error, "invalid user id"}}.dump(),
+                   content_types::Json);
+               return;
+             }
+             auto publicKey = db_.getUserPublicKey(*userId);
              if (!publicKey.has_value()) {
                res.status = httplib::NotFound_404;
                res.set_content(nlohmann::json{{json_fields::Error, "user not found"}}.dump(),
                                content_types::Json);
                return;
              }
-             res.set_content(nlohmann::json{{json_fields::UserId, userId},
+             res.set_content(nlohmann::json{{json_fields::UserId, *userId},
                                             {json_fields::PublicKey, *publicKey}}
                                  .dump(),
                              content_types::Json);
@@ -442,14 +456,20 @@ void Controller::handleListUserConversations_(const httplib::Request& req, httpl
                     content_types::Json);
     return;
   }
-  uint64_t userId = std::stoull(std::string(req.matches[1]));
-  if (*authenticatedUserId != userId) {
+  auto userId = parseId(req.matches[1].str());
+  if (!userId) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "invalid user id"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+  if (*authenticatedUserId != *userId) {
     res.status = httplib::Forbidden_403;
     res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
     return;
   }
-  spdlog::info("Fetching conversations for user: {}", userId);
-  auto convs = db_.getConversationsByUserId(userId);
+  spdlog::info("Fetching conversations for user: {}", *userId);
+  auto convs = db_.getConversationsByUserId(*userId);
   nlohmann::json result = convs;
   res.set_content(result.dump(), content_types::Json);
 }
@@ -477,7 +497,13 @@ void Controller::registerMessageRoutes_() {
 }
 
 void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Response& res) {
-  uint64_t convId = std::stoull(std::string(req.matches[1]));
+  auto convId = parseId(req.matches[1].str());
+  if (!convId) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "invalid conversation id"}}.dump(),
+                    content_types::Json);
+    return;
+  }
 
   auto body = nlohmann::json::parse(req.body, nullptr, false);
   if (body.is_discarded() || !body.contains(json_fields::SenderId) ||
@@ -517,12 +543,12 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
         content_types::Json);
     return;
   }
-  if (!db_.isParticipant(convId, *authenticatedUserId)) {
+  if (!db_.isParticipant(*convId, *authenticatedUserId)) {
     res.status = httplib::Forbidden_403;
     res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
     return;
   }
-  if (recipientId.has_value() && !db_.isParticipant(convId, *recipientId)) {
+  if (recipientId.has_value() && !db_.isParticipant(*convId, *recipientId)) {
     res.status = httplib::BadRequest_400;
     res.set_content(
         nlohmann::json{{json_fields::Error, "recipient must be a conversation participant"}}.dump(),
@@ -537,13 +563,13 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
   auto oneTimePreKeyId = oneTimePreKeyIdFromPayload(payload);
   uint64_t msgId = 0;
   try {
-    msgId = db_.createMessage(convId, senderId, payload, now, recipientId, oneTimePreKeyId);
+    msgId = db_.createMessage(*convId, senderId, payload, now, recipientId, oneTimePreKeyId);
   } catch (const std::runtime_error& e) {
     res.status = httplib::Conflict_409;
     res.set_content(nlohmann::json{{json_fields::Error, e.what()}}.dump(), content_types::Json);
     return;
   }
-  spdlog::info("Created message {} in conversation {}", msgId, convId);
+  spdlog::info("Created message {} in conversation {}", msgId, *convId);
 
   // Record hash on-chain via the blockchain sidecar
   std::string txHash;
@@ -551,7 +577,7 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
     httplib::Client sidecar(sidecarUrl_);
     sidecar.set_connection_timeout(timeouts::kSidecarConnectionTimeoutSec);
     sidecar.set_read_timeout(timeouts::kSidecarReadTimeoutSec);
-    nlohmann::json sidecarBody = {{json_fields::ConversationId, convId},
+    nlohmann::json sidecarBody = {{json_fields::ConversationId, *convId},
                                   {json_fields::MsgId, msgId},
                                   {json_fields::Ciphertext, payload}};
     auto sidecarRes = sidecar.Post(routes::SidecarRecord, sidecarBody.dump(), content_types::Json);
@@ -569,7 +595,7 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
 
   kd::Message msg{.id = msgId,
                   .senderId = senderId,
-                  .conversationId = convId,
+                  .conversationId = *convId,
                   .payload = payload,
                   .timestamp = now,
                   .blockchainDigest = txHash};
@@ -587,15 +613,20 @@ void Controller::handleDeleteMessage_(const httplib::Request& req, httplib::Resp
     return;
   }
 
-  uint64_t convId = std::stoull(std::string(req.matches[1]));
-  uint64_t messageId = std::stoull(std::string(req.matches[2]));
-  if (!db_.isParticipant(convId, *authenticatedUserId)) {
+  auto convId = parseId(req.matches[1].str());
+  auto messageId = parseId(req.matches[2].str());
+  if (!convId || !messageId) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "invalid id"}}.dump(), content_types::Json);
+    return;
+  }
+  if (!db_.isParticipant(*convId, *authenticatedUserId)) {
     res.status = httplib::Forbidden_403;
     res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
     return;
   }
 
-  if (!db_.deleteMessage(convId, messageId, *authenticatedUserId)) {
+  if (!db_.deleteMessage(*convId, *messageId, *authenticatedUserId)) {
     res.status = httplib::NotFound_404;
     res.set_content(nlohmann::json{{json_fields::Error, "message not found"}}.dump(),
                     content_types::Json);
@@ -603,7 +634,7 @@ void Controller::handleDeleteMessage_(const httplib::Request& req, httplib::Resp
   }
 
   res.set_content(
-      nlohmann::json{{json_fields::Status, "deleted"}, {json_fields::MessageId, messageId}}.dump(),
+      nlohmann::json{{json_fields::Status, "deleted"}, {json_fields::MessageId, *messageId}}.dump(),
       content_types::Json);
 }
 
@@ -616,11 +647,16 @@ void Controller::handleRevokeMessageAccess_(const httplib::Request& req, httplib
     return;
   }
 
-  uint64_t convId = std::stoull(std::string(req.matches[1]));
-  uint64_t messageId = std::stoull(std::string(req.matches[2]));
-  uint64_t targetUserId = std::stoull(std::string(req.matches[3]));
-  if (!db_.isParticipant(convId, *authenticatedUserId) ||
-      !db_.isParticipant(convId, targetUserId)) {
+  auto convId = parseId(req.matches[1].str());
+  auto messageId = parseId(req.matches[2].str());
+  auto targetUserId = parseId(req.matches[3].str());
+  if (!convId || !messageId || !targetUserId) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "invalid id"}}.dump(), content_types::Json);
+    return;
+  }
+  if (!db_.isParticipant(*convId, *authenticatedUserId) ||
+      !db_.isParticipant(*convId, *targetUserId)) {
     res.status = httplib::Forbidden_403;
     res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
     return;
@@ -629,7 +665,7 @@ void Controller::handleRevokeMessageAccess_(const httplib::Request& req, httplib
   auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                        std::chrono::system_clock::now().time_since_epoch())
                                        .count());
-  if (!db_.revokeMessageAccess(convId, messageId, *authenticatedUserId, targetUserId, now)) {
+  if (!db_.revokeMessageAccess(*convId, *messageId, *authenticatedUserId, *targetUserId, now)) {
     res.status = httplib::NotFound_404;
     res.set_content(nlohmann::json{{json_fields::Error, "message access not found"}}.dump(),
                     content_types::Json);
@@ -637,8 +673,8 @@ void Controller::handleRevokeMessageAccess_(const httplib::Request& req, httplib
   }
 
   res.set_content(nlohmann::json{{json_fields::Status, "revoked"},
-                                 {json_fields::MessageId, messageId},
-                                 {json_fields::UserId, targetUserId}}
+                                 {json_fields::MessageId, *messageId},
+                                 {json_fields::UserId, *targetUserId}}
                       .dump(),
                   content_types::Json);
 }
@@ -652,13 +688,19 @@ void Controller::handleListConversationMessages_(const httplib::Request& req,
                     content_types::Json);
     return;
   }
-  uint64_t convId = std::stoull(std::string(req.matches[1]));
-  if (!db_.isParticipant(convId, *authenticatedUserId)) {
+  auto convId = parseId(req.matches[1].str());
+  if (!convId) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "invalid conversation id"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+  if (!db_.isParticipant(*convId, *authenticatedUserId)) {
     res.status = httplib::Forbidden_403;
     res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
     return;
   }
-  auto msgs = db_.getMessagesByConversationIdForUser(convId, *authenticatedUserId);
+  auto msgs = db_.getMessagesByConversationIdForUser(*convId, *authenticatedUserId);
   nlohmann::json result = msgs;
   res.set_content(result.dump(), content_types::Json);
 }
