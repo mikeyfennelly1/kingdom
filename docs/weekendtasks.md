@@ -12,7 +12,7 @@ MAKE SURE FRONTEND IS WORKING CORRECTLY AND HAS ALL FUNCTIONALITY AND SHI
 FIONN
 1. password stuff e.g. 12 characters etc, forgot password or no?
 2. encrypt local store?
-3. any authenticated user can consume another user’s one-time prekey by calling /users/{id}/one-time-prekeys/{id}/consume;
+3. [x] one-time prekeys are now consumed only transactionally during message creation; standalone consume endpoint removed.
 4. do full signal / ratchet stuff????
 5. crypto doc or sum
 make sure dependecnys pinned

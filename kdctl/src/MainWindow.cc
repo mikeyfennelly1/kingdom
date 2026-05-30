@@ -556,11 +556,6 @@ void MainWindow::onSend() {
     messageStore_.savePlaintext(sentMsg.id, sentMsg.conversationId, sentMsg.senderId,
                                 sentMsg.timestamp, text);
 
-    auto usedPreKeyId = kd::LocalKeyStore::oneTimePreKeyIdFromPayload(payload);
-    if (usedPreKeyId.has_value()) {
-      client_->consumeOneTimePreKey(recipientId, *usedPreKeyId);
-    }
-
     appendMessageToView(session_.username, text, sentMsg.timestamp);
     auto* bar = messageView_->verticalScrollBar();
     bar->setValue(bar->maximum());
