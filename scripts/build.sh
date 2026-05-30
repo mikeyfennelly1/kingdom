@@ -9,6 +9,11 @@ main() {
         echo "Error: failed to connect to GitHub — NixOS nixpkgs tarballs are unreachable" >&2
         exit 1
     fi
+
+    output_tarball_location="/tmp/kds-closure.tar.gz"
+    binary_location="/app/build/kds/kds"
+
+
     echo " Building Kingdom with Pinned Nix Dependencies in nix shell"
     build_project
     if [[ $? -ne 0 ]]; then
@@ -39,6 +44,61 @@ function orient_script() {
     # Ensure we are in the project root
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     cd "${SCRIPT_DIR}/.."
+    return 0
+}
+
+# Constructs a tarball with the minimum required
+# artifacts
+function construct_min_runtime_closure() {
+    binary_location=$1
+    output_tarball_location=$2
+    if [[ -z "${output_tarball_location}" ]]; then
+        printf "ERROR: argument output_tarball_location is an empty string \n"
+        return 1
+    elif [-z "${binary_location}" ]; then
+        printf "ERROR: argument binary_location is an empty string \n"
+        return 1
+    fi
+    printf "DEBUG: constructing minimum runtime closure \n"
+    # use ldd to list dynamic dependencies
+    #   see -> https://man7.org/linux/man-pages/man1/ldd.1.html
+    ldd "${binary_location}" \
+      | awk '$2=="=>" && $3~/^\/nix\/store/ { n=split($3,a,"/"); print "/nix/store/"a[4] }' \
+      | sort -u \
+      | xargs nix-store --query --requisites \
+      | sort -u \
+      | tar -czPf "${output_tarball_location}" --files-from=-
+    return 0
+}
+
+function construct_runtime_closure_graph() {
+    local binary_location=$1
+    local output_dot_location=${2:-"/tmp/kds-closure.dot"}
+
+    if [[ -z "${binary_location}" ]]; then
+        printf "ERROR: argument binary_location is an empty string\n"
+        return 1
+    fi
+
+    printf "constructing runtime closure dependency graph for %s\n" "${binary_location}"
+
+    local requisites
+    requisites=$(ldd "${binary_location}" \
+      | awk '$2=="=>" && $3~/^\/nix\/store/ { n=split($3,a,"/"); print "/nix/store/"a[4] }' \
+      | sort -u \
+      | xargs nix-store --query --requisites \
+      | sort -u)
+
+    if [[ -z "${requisites}" ]]; then
+        printf "ERROR: no nix store dependencies found for %s\n" "${binary_location}"
+        return 1
+    fi
+
+    echo "${requisites}" \
+      | xargs nix-store --query --graph \
+      > "${output_dot_location}"
+
+    printf "dependency graph written to %s\n" "${output_dot_location}"
     return 0
 }
 
