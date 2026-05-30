@@ -251,9 +251,9 @@ MessageStore::MessageStore(const std::string& username) : storePath_(defaultStor
 MessageStore::MessageStore(std::filesystem::path storePath) : storePath_(std::move(storePath)) {
 }
 
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 MessageStore::MessageStore(std::filesystem::path storePath, std::string username,
                            std::array<unsigned char, kEncryptionKeySize> encryptionKey,
+                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                            std::array<unsigned char, kSaltSize> salt, unsigned long long opsLimit,
                            size_t memLimit)
     : storePath_(std::move(storePath))
@@ -264,18 +264,16 @@ MessageStore::MessageStore(std::filesystem::path storePath, std::string username
     , memLimit_(memLimit)
     , encryptedAtRest_(true) {
 }
-// NOLINTEND(bugprone-easily-swappable-parameters)
 
 MessageStore MessageStore::encryptedForUser(const std::string& username,
                                             const std::string& password) {
   return encryptedAtPath(defaultStorePath(username), username, password);
 }
 
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 MessageStore MessageStore::encryptedAtPath(std::filesystem::path storePath,
+                                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                            const std::string& username,
                                            const std::string& password) {
-  // NOLINTEND(bugprone-easily-swappable-parameters)
   ensureSodiumInitialized();
 
   auto params = kdfParamsForStore(storePath);
