@@ -2,13 +2,12 @@
 #include <cstdint>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
+#include <kd/User.hpp>
 #include <mutex>
 #include <optional>
 #include <pqxx/pqxx>
 #include <string>
 #include <vector>
-
-#include <kd/User.hpp>
 
 namespace kd {
 

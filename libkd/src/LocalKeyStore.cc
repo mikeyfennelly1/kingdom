@@ -119,8 +119,9 @@ std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> deriveKey
     throw std::runtime_error("Failed to create HKDF context");
   }
 
-  char digestName[] = "SHA256";                          // NOLINT(modernize-avoid-c-arrays)
-  OSSL_PARAM params[] = {                                // NOLINT(modernize-avoid-c-arrays)
+  char digestName[] = "SHA256";  // NOLINT(modernize-avoid-c-arrays)
+  OSSL_PARAM params[] = {
+      // NOLINT(modernize-avoid-c-arrays)
       OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
       OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, const_cast<unsigned char*>(secret),
                                         secretSize),
@@ -314,8 +315,9 @@ nlohmann::json encryptedPrivateMaterial(const LocalIdentityKey& identity) {
 }
 
 void eraseOneTimePreKey(LocalIdentityKey& identity, uint64_t preKeyId) {
-  auto iter = std::ranges::find_if(identity.oneTimePreKeys,
-                                   [preKeyId](const LocalPreKey& key) { return key.id == preKeyId; });
+  auto iter = std::ranges::find_if(identity.oneTimePreKeys, [preKeyId](const LocalPreKey& key) {
+    return key.id == preKeyId;
+  });
   if (iter == identity.oneTimePreKeys.end()) {
     throw std::runtime_error("One-time prekey is missing or already used");
   }
@@ -614,9 +616,10 @@ std::string LocalKeyStore::decryptMessage(const std::string& payload, LocalIdent
   std::optional<LocalPreKey> oneTimePreKey;
   if (!payloadJson.at("oneTimePreKeyId").is_null()) {
     oneTimePreKeyId = payloadJson.at("oneTimePreKeyId").get<uint64_t>();
-    auto iter = std::ranges::find_if(recipient.oneTimePreKeys, [oneTimePreKeyId](const LocalPreKey& key) {
-      return key.id == *oneTimePreKeyId;
-    });
+    auto iter =
+        std::ranges::find_if(recipient.oneTimePreKeys, [oneTimePreKeyId](const LocalPreKey& key) {
+          return key.id == *oneTimePreKeyId;
+        });
     if (iter == recipient.oneTimePreKeys.end()) {
       throw std::runtime_error("One-time prekey is missing or already used");
     }

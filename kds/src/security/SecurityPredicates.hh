@@ -7,7 +7,6 @@
 #include <regex>
 #include <string>
 #include <unordered_set>
-
 #include <vector>
 
 #include "../common/Constants.hh"
