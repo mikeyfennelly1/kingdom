@@ -341,7 +341,7 @@ QString MainWindow::formatTimestamp(uint64_t milliseconds) {
   if (tmInfo == nullptr) {
     return QString::number(static_cast<qulonglong>(milliseconds));
   }
-  char buf[32];
+  char buf[32];  // NOLINT(modernize-avoid-c-arrays)
   std::strftime(buf, sizeof(buf), "%H:%M", tmInfo);
   return QString(buf);
 }

@@ -1,4 +1,4 @@
-Checks: 'misc-unused-includes,bugprone-*,modernize-*,performance-*,readability-*'
+Checks: 'misc-unused-includes,bugprone-*,modernize-*,performance-*,readability-*,-modernize-use-trailing-return-type'
 WarningsAsErrors: 'misc-unused-includes'
 CheckOptions:
   - key: misc-unused-includes.IncludeCleaner

@@ -85,7 +85,7 @@ inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
 }
 
 inline std::string signJwtInput(const std::string& signingInput, const std::string& secret) {
-  unsigned char digest[EVP_MAX_MD_SIZE]{};
+  unsigned char digest[EVP_MAX_MD_SIZE]{};  // NOLINT(modernize-avoid-c-arrays)
   unsigned int digestSize = 0;
   if (HMAC(EVP_sha256(), secret.data(), static_cast<int>(secret.size()),
            reinterpret_cast<const unsigned char*>(signingInput.data()), signingInput.size(), digest,
