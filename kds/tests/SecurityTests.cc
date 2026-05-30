@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
+#include "../src/common/Constants.hh"
 #include "../src/security/SecurityFilterChain.hh"
 #include "../src/security/SecurityPredicateFactory.hh"
 
@@ -22,19 +23,21 @@ class SecurityTest : public ::testing::Test {
 
   void SetUp() override {
     req.method = "GET";
-    req.path = "/health";
+    req.path = routes::Health;
   }
 };
 
 TEST_F(SecurityTest, FactoryCreatesCorrectPredicates) {
   auto validateSenderAuthenticity =
-      SecurityPredicateFactory::GetPredicate("ValidateSenderAuthenticity");
+      SecurityPredicateFactory::GetPredicate(security_predicates::ValidateSenderAuthenticity);
   ASSERT_NE(validateSenderAuthenticity, nullptr);
 
-  auto validateUntampered = SecurityPredicateFactory::GetPredicate("ValidateUntampered");
+  auto validateUntampered =
+      SecurityPredicateFactory::GetPredicate(security_predicates::ValidateUntampered);
   ASSERT_NE(validateUntampered, nullptr);
 
-  auto validateAuthenticated = SecurityPredicateFactory::GetPredicate("ValidateAuthenticated");
+  auto validateAuthenticated =
+      SecurityPredicateFactory::GetPredicate(security_predicates::ValidateAuthenticated);
   ASSERT_NE(validateAuthenticated, nullptr);
 }
 
@@ -43,8 +46,9 @@ TEST_F(SecurityTest, FactoryThrowsOnUnknownPredicate) {
 }
 
 TEST_F(SecurityTest, FilterChainExecutesAllSuccess) {
-  std::vector<std::string> names = {"ValidateSenderAuthenticity", "ValidateUntampered",
-                                    "ValidateAuthenticated"};
+  std::vector<std::string> names = {security_predicates::ValidateSenderAuthenticity,
+                                    security_predicates::ValidateUntampered,
+                                    security_predicates::ValidateAuthenticated};
 
   SecurityFilterChain chain(names);
   auto result = chain.Execute(req);

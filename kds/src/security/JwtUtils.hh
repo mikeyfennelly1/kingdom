@@ -13,7 +13,10 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#include "../common/Constants.hh"
 
 namespace kd {
 
@@ -93,8 +96,8 @@ inline std::string signJwtInput(const std::string& signingInput, const std::stri
 }
 
 inline std::optional<std::string> bearerToken(const httplib::Request& req) {
-  const auto header = req.get_header_value("Authorization");
-  constexpr std::string_view prefix = "Bearer ";
+  const auto header = req.get_header_value(http_headers::Authorization);
+  constexpr std::string_view prefix = jwt::BearerPrefix;
   if (header.size() <= prefix.size() || header.compare(0, prefix.size(), prefix) != 0) {
     return std::nullopt;
   }
@@ -129,7 +132,8 @@ inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token
 
   auto header = nlohmann::json::parse(*headerBody, nullptr, false);
   auto payload = nlohmann::json::parse(*payloadBody, nullptr, false);
-  if (header.is_discarded() || payload.is_discarded() || header.value("alg", "") != "HS256") {
+  if (header.is_discarded() || payload.is_discarded() ||
+      header.value("alg", "") != jwt::AlgorithmHs256) {
     return std::nullopt;
   }
   if (!payload.contains("exp") || payload["exp"].get<uint64_t>() < epochSeconds()) {
