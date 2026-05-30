@@ -6,6 +6,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <cctype>
 #include <cstdlib>
 #include <exception>
 #include <kd/Client.hpp>
@@ -54,6 +55,21 @@ static const char* kSecondaryButtonStyle =
     "QPushButton:hover { background-color: #eff6ff; }"
     "QPushButton:pressed { background-color: #dbeafe; }"
     "QPushButton:disabled { color: #93c5fd; border-color: #93c5fd; }";
+
+static bool isValidSignupPassword(const std::string& password) {
+  if (password.size() < 12 || password.size() > 72) {
+    return false;
+  }
+
+  bool hasUppercase = false;
+  bool hasNumber = false;
+  for (unsigned char ch : password) {
+    hasUppercase = hasUppercase || std::isupper(ch) != 0;
+    hasNumber = hasNumber || std::isdigit(ch) != 0;
+  }
+
+  return hasUppercase && hasNumber;
+}
 
 LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
   setWindowTitle("Kingdom");
@@ -167,6 +183,12 @@ void LoginWindow::performAuth(bool isSignup) {
   }
   if (password.empty()) {
     showError("Password is required.");
+    return;
+  }
+  if (isSignup && !isValidSignupPassword(password)) {
+    showError(
+        "Password must be 12-72 characters and include at least one uppercase letter and one "
+        "number.");
     return;
   }
 
