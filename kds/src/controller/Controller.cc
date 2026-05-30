@@ -3,6 +3,7 @@
 #include <sodium.h>
 
 #include <chrono>
+#include <cctype>
 #include <cstdint>
 #include <kd/Conversation.hpp>
 #include <kd/Message.hpp>
@@ -30,6 +31,21 @@ std::string hashPassword(const std::string& password) {
 
 bool verifyPassword(const std::string& encodedHash, const std::string& password) {
   return crypto_pwhash_str_verify(encodedHash.c_str(), password.c_str(), password.size()) == 0;
+}
+
+bool isValidSignupPassword(const std::string& password) {
+  if (password.size() < 12 || password.size() > 72) {
+    return false;
+  }
+
+  bool hasUppercase = false;
+  bool hasNumber = false;
+  for (unsigned char ch : password) {
+    hasUppercase = hasUppercase || std::isupper(ch) != 0;
+    hasNumber = hasNumber || std::isdigit(ch) != 0;
+  }
+
+  return hasUppercase && hasNumber;
 }
 
 }  // namespace
@@ -160,10 +176,15 @@ void Controller::authController_() {
                       "application/json");
       return;
     }
-    if (password.empty() || password.size() > 72) {
+    if (!isValidSignupPassword(password)) {
       res.status = 400;
-      res.set_content(nlohmann::json{{"error", "password must be 1–72 characters"}}.dump(),
-                      "application/json");
+      res.set_content(
+          nlohmann::json{
+              {"error",
+               "password must be 12–72 characters and include at least one uppercase letter and "
+               "one number"}}
+              .dump(),
+          "application/json");
       return;
     }
     if (publicKey.empty()) {

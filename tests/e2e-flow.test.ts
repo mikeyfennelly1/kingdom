@@ -262,8 +262,35 @@ describe('Unhappy paths', () => {
     expect(res.status).toBe(400)
   })
 
+  it('POST /signup rejects password shorter than 12 characters', async () => {
+    const res = await api('POST', '/signup', {
+      username: `shortpw_${run}`,
+      password: 'Short123',
+      publicKey: 'key',
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('POST /signup rejects password without an uppercase letter', async () => {
+    const res = await api('POST', '/signup', {
+      username: `noupper_${run}`,
+      password: 'lowercase123',
+      publicKey: 'key',
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('POST /signup rejects password without a number', async () => {
+    const res = await api('POST', '/signup', {
+      username: `nonumber_${run}`,
+      password: 'NoNumberHere',
+      publicKey: 'key',
+    })
+    expect(res.status).toBe(400)
+  })
+
   it('POST /signup rejects duplicate username', async () => {
-    const creds = { username: `dupe_${run}`, password: 'pass123', publicKey: 'k' }
+    const creds = { username: `dupe_${run}`, password: 'ValidPass123', publicKey: 'k' }
     await api('POST', '/signup', creds)
     const res = await api('POST', '/signup', creds)
     expect(res.status).toBe(409)
@@ -409,7 +436,7 @@ describe('Malicious paths', () => {
     // Parameterised queries in Database.cc must neutralise this.
     const res = await api('POST', '/signup', {
       username: `' UNION SELECT id, username, password_hash FROM users; --`,
-      password: 'pass123',
+      password: 'ValidPass123',
       publicKey: 'key',
     })
     expect(res.status).not.toBe(500)
@@ -497,7 +524,7 @@ describe('Malicious paths', () => {
     // ATTACK: Embed a null byte to truncate string parsing in C standard library functions.
     const res = await api('POST', '/signup', {
       username: `safe\x00evil_${run}`,
-      password: 'pass123',
+      password: 'ValidPass123',
       publicKey: 'key',
     })
     expect(res.status).not.toBe(500)
@@ -541,7 +568,7 @@ describe('Malicious paths', () => {
     for (let i = 0; i < 15; i++) {
       const res = await api('POST', '/signup', {
         username: `ratelimit_${run}_${i}`,
-        password: 'pass123',
+        password: 'ValidPass123',
         publicKey: 'key',
       })
       results.push(res.status)
