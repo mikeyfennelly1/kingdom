@@ -1,45 +1,35 @@
 # Stage 1: Build
 FROM nixos/nix:2.31.5 AS builder
 
-# Set up the working directory
 WORKDIR /app
 
-# Copy nix configuration first to leverage Docker layer caching
 COPY config/build.shell.nix ./config/
-
-# Pre-fetch and realize the build environment
 RUN nix-shell ./config/build.shell.nix --run "true"
 
-# Copy the rest of the source code
 COPY . .
-
-# Build the project using the build script
-# This script uses nix-shell ./config/build.shell.nix internally
 RUN ./scripts/build.sh
 
-# Stage 2: Runtime
-FROM nixos/nix:2.31.5
+# Collect the full runtime closure for kds.
+# The binary's RPATH and PT_INTERP both reference absolute /nix/store/... paths,
+# so those exact paths must exist in the runtime image.
+RUN ldd /app/build/kds/kds \
+      | awk '$2=="=>" && $3~/^\/nix\/store/ { n=split($3,a,"/"); print "/nix/store/"a[4] }' \
+      | sort -u \
+      | xargs nix-store --query --requisites \
+      | sort -u \
+      | tar -czPf /tmp/kds-closure.tar.gz --files-from=-
 
-# Set up the working directory
-WORKDIR /app
+# Stage 2: Minimal Alpine runtime
+FROM alpine:3.20
 
-# Copy nix configuration
-COPY config/build.shell.nix ./config/
+# Unpack the nix closure at the same /nix/store/... paths the binary references
+COPY --from=builder /tmp/kds-closure.tar.gz /tmp/
+RUN tar -xzPf /tmp/kds-closure.tar.gz && rm /tmp/kds-closure.tar.gz
 
-# Realize the environment so all dependencies (libraries) are in the Nix store
-RUN nix-shell ./config/build.shell.nix --run "true"
-
-# Copy binaries and shared library from the builder stage
 COPY --from=builder /app/build/kds/kds /app/kds
-COPY --from=builder /app/build/kdctl/kdctl /app/kdctl
-COPY --from=builder /app/build/libkd/libkd.so.1 /app/libkd.so.1
 
-# Expose the default server port
 EXPOSE 8080
 
-# Build-time parameters — no defaults, must be supplied via --build-arg
-# Secrets (POSTGRES_PASSWORD, KD_TLS_KEY, KD_DB_URL) are excluded: they
-# must never be baked into the image and are injected at runtime via -e.
 ARG POSTGRES_USER
 ARG POSTGRES_DB
 ARG POSTGRES_HOST
@@ -49,20 +39,13 @@ ARG KD_JWT_TTL_SECONDS
 ARG KD_LOG_LEVEL
 ARG KD_PORT
 
-# Promote to runtime environment
-ENV POSTGRES_USER=${POSTGRES_USER}
-ENV POSTGRES_DB=${POSTGRES_DB}
-ENV POSTGRES_HOST=${POSTGRES_HOST}
-ENV POSTGRES_PORT=${POSTGRES_PORT}
-ENV KD_TLS_CERT=${KD_TLS_CERT}
-ENV KD_JWT_TTL_SECONDS=${KD_JWT_TTL_SECONDS}
-ENV KD_LOG_LEVEL=${KD_LOG_LEVEL}
-ENV KD_PORT=${KD_PORT}
+ENV POSTGRES_USER=${POSTGRES_USER} \
+    POSTGRES_DB=${POSTGRES_DB} \
+    POSTGRES_HOST=${POSTGRES_HOST} \
+    POSTGRES_PORT=${POSTGRES_PORT} \
+    KD_TLS_CERT=${KD_TLS_CERT} \
+    KD_JWT_TTL_SECONDS=${KD_JWT_TTL_SECONDS} \
+    KD_LOG_LEVEL=${KD_LOG_LEVEL} \
+    KD_PORT=${KD_PORT}
 
-# Bake the Nix LD_LIBRARY_PATH into a launcher so the entrypoint never
-# needs to invoke nix-shell (and re-unpack tarballs) at container start.
-RUN nix-shell ./config/build.shell.nix --run \
-    'printf "#!/bin/sh\nexport LD_LIBRARY_PATH=/app:%s\nexec /app/kds \"$@\"\n" "$LD_LIBRARY_PATH" > /app/launch.sh' && \
-    chmod +x /app/launch.sh
-
-ENTRYPOINT ["/app/launch.sh"]
+ENTRYPOINT ["/app/kds"]
