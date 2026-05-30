@@ -2,20 +2,29 @@
 # build.sh - Build the project using the pinned Nix environment
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJ_ROOT="${SCRIPT_DIR}/.."
+BUILD_DIRECTORY="${SCRIPT_DIR}/../build"
+
 main() {
-    echo " check connection to nix packages..."
+    printf "DEBUG: entering build environment\n" >&2
+    pushd "${PROJ_ROOT}"
+    mkdir -p build
+
+    printf "DEBUG: check connection to nix packages...\n" >&2
     check_nixos_packages_connection
     if [[ $? -ne 0 ]]; then
         echo "Error: failed to connect to GitHub — NixOS nixpkgs tarballs are unreachable" >&2
         exit 1
     fi
 
-    echo " Building Kingdom with Pinned Nix Dependencies in nix shell"
+    printf "DEBUG: Building Kingdom with Pinned Nix Dependencies in nix shell\n" >&2
     build_project
     if [[ $? -ne 0 ]]; then
-        echo "FATAL: BUILD FAILURE.. exiting" >&2
+        printf "FATAL: BUILD FAILURE.. exiting" >&2
         exit 1
     fi
+    return 0
 }
 
 # ─── helpers... ────────────────────────────────────────────────
@@ -35,25 +44,12 @@ function check_nixos_packages_connection() {
     return 0
 }
 
-
-function orient_script() {
-    # Ensure we are in the project root
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    cd "${SCRIPT_DIR}/.."
-    return 0
-}
-
 function build_project() {
     # Define the build command
     # Default to Release build for optimized performance unless specified otherwise
     BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    BUILD_DIRECTORY="${SCRIPT_DIR}/../build"
-    echo "outputting build artifacts to ${BUILD_DIRECTORY}"
+    printf "DEBUG: outputting build artifacts to ${BUILD_DIRECTORY}\n" >&2
     BUILD_CMD="cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} && cmake --build ${BUILD_DIRECTORY}"
-
-    # Execute the build inside the nix-shell using the local build.shell.nix
-    nix-shell ./config/build.shell.nix --run "${BUILD_CMD}"
 
     if [ $? -eq 0 ]; then
         echo "-> artifacts outputted to '${BUILD_DIRECTORY}' directory..."
