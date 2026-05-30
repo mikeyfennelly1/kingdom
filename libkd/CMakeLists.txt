@@ -4,7 +4,7 @@ add_library(kd SHARED
     src/MessageStore.cc
     src/Client.cc
     src/LocalKeyStore.cc
-    src/MessageStore.cc
+    src/User.cc
 )
 
 add_custom_command(TARGET kd POST_BUILD

@@ -1,5 +1,7 @@
 #include "Database.hh"
 
+#include <kd/User.hpp>
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -86,7 +88,7 @@ uint64_t Database::createUser(const std::string& username, const std::string& pa
   }
 }
 
-std::optional<UserRow> Database::getUserByUsername(const std::string& username) {
+std::optional<User> Database::getUserByUsername(const std::string& username) {
   std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   pqxx::params params{username};
@@ -99,20 +101,20 @@ std::optional<UserRow> Database::getUserByUsername(const std::string& username) 
     return std::nullopt;
   }
 
-  return UserRow{result[0][0].as<uint64_t>(), result[0][1].as<std::string>(),
-                 result[0][2].as<std::string>(), result[0][3].as<std::string>()};
+  return User{result[0][0].as<uint64_t>(), result[0][1].as<std::string>(),
+              result[0][2].as<std::string>(), result[0][3].as<std::string>()};
 }
 
-std::vector<UserRow> Database::getAllUsers() {
+std::vector<User> Database::getAllUsers() {
   std::lock_guard<std::mutex> lock(mutex_);
   pqxx::work txn(conn_);
   auto result = txn.exec("SELECT id, username FROM users ORDER BY id ASC");
   txn.commit();
 
-  std::vector<UserRow> users;
+  std::vector<User> users;
   users.reserve(result.size());
   for (const auto& row : result) {
-    users.push_back(UserRow{row[0].as<uint64_t>(), row[1].as<std::string>(), "", ""});
+    users.emplace_back(row[0].as<uint64_t>(), row[1].as<std::string>());
   }
   return users;
 }

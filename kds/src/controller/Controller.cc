@@ -1,7 +1,5 @@
 #include "Controller.hh"
 
-#include <sodium.h>
-
 #include <chrono>
 #include <cctype>
 #include <cstdint>
@@ -15,23 +13,13 @@
 #include "../security/JwtUtils.hh"
 #include "../security/SecurityPredicates.hh"
 
+#include <sodium.h>
+
+#include <kd/User.hpp>
+
 namespace kd {
 
 namespace {
-
-std::string hashPassword(const std::string& password) {
-  char encodedHash[crypto_pwhash_STRBYTES];
-  if (crypto_pwhash_str_alg(encodedHash, password.c_str(), password.size(),
-                            crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
-                            crypto_pwhash_ALG_ARGON2ID13) != 0) {
-    throw std::runtime_error("Failed to hash password");
-  }
-  return encodedHash;
-}
-
-bool verifyPassword(const std::string& encodedHash, const std::string& password) {
-  return crypto_pwhash_str_verify(encodedHash.c_str(), password.c_str(), password.size()) == 0;
-}
 
 bool isValidSignupPassword(const std::string& password) {
   if (password.size() < 12 || password.size() > 72) {
@@ -49,6 +37,7 @@ bool isValidSignupPassword(const std::string& password) {
 }
 
 }  // namespace
+
 
 Controller::Controller(std::string host, int port, std::string dbConnectionString,
                        std::string sidecarUrl, std::string certPath, std::string keyPath,
@@ -195,7 +184,7 @@ void Controller::authController_() {
     }
 
     try {
-      auto passwordHash = hashPassword(password);
+      auto passwordHash = User::hashPassword(password);
       uint64_t id = db_.createUser(username, passwordHash, publicKey);
       auto sessionToken = createSession_(id, username);
       spdlog::info("Created user '{}' with id {}", username, id);
@@ -248,16 +237,16 @@ void Controller::authController_() {
     }
 
     auto user = db_.getUserByUsername(username);
-    if (!user.has_value() || !verifyPassword(user->passwordHash, password)) {
+    if (!user.has_value() || !user->verifyPassword(password)) {
       res.status = 401;
       res.set_content(nlohmann::json{{"error", "invalid username or password"}}.dump(),
                       "application/json");
       return;
     }
 
-    auto sessionToken = createSession_(user->id, user->username);
-    res.set_content(nlohmann::json{{"id", user->id},
-                                   {"username", user->username},
+    auto sessionToken = createSession_(user->id(), user->username());
+    res.set_content(nlohmann::json{{"id", user->id()},
+                                   {"username", user->username()},
                                    {"token", sessionToken},
                                    {"sessionToken", sessionToken}}
                         .dump(),
@@ -298,7 +287,7 @@ void Controller::userController_() {
     auto users = db_.getAllUsers();
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& u : users) {
-      arr.push_back({{"id", u.id}, {"username", u.username}});
+      arr.push_back({{"id", u.id()}, {"username", u.username()}});
     }
     res.set_content(arr.dump(), "application/json");
   });
