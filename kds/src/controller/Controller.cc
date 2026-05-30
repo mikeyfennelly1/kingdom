@@ -126,16 +126,16 @@ void Controller::setupRoutes() {
     res.set_header(http_headers::XFrameOptions, http_headers::Deny);
   });
 
-  notFoundHandler_();
+  registerNotFoundHandler_();
   healthController_();
-  authController_();
+  registerAuthRoutes_();
   userController_();
   publicKeyController_();
   basicApiInfo_();
 
   // conversations
-  conversationController_();
-  messageController_();
+  registerConversationRoutes_();
+  registerMessageRoutes_();
 }
 
 std::string Controller::createSession_(uint64_t userId, const std::string& username) const {
@@ -185,142 +185,149 @@ bool Controller::isRateLimited_(const std::string& ip) {
   return entry.count > kMaxAttempts;
 }
 
-void Controller::authController_() {
+void Controller::registerAuthRoutes_() {
   svr_.Post(routes::Signup, [this](const httplib::Request& req, httplib::Response& res) {
-    spdlog::info("Sign-up request received");
-
-    if (isRateLimited_(req.remote_addr)) {
-      res.status = httplib::TooManyRequests_429;
-      res.set_content(nlohmann::json{{json_fields::Error, "too many requests"}}.dump(),
-                      content_types::Json);
-      return;
-    }
-
-    auto body = nlohmann::json::parse(req.body, nullptr, false);
-    if (body.is_discarded() || !body.contains(json_fields::Username) ||
-        !body.contains(json_fields::Password) || !body.contains(json_fields::PublicKey)) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "username, password, and publicKey required"}}.dump(),
-          content_types::Json);
-      return;
-    }
-
-    std::string username = body[json_fields::Username];
-    std::string password = body[json_fields::Password];
-    std::string publicKey = body[json_fields::PublicKey];
-
-    if (username.empty() || username.size() > 64) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "username must be 1–64 characters"}}.dump(),
-          content_types::Json);
-      return;
-    }
-    if (!isValidSignupPassword(password)) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{
-              {json_fields::Error,
-               "password must be 12–72 characters and include at least one uppercase letter and "
-               "one number"}}
-              .dump(),
-          content_types::Json);
-      return;
-    }
-    if (publicKey.empty()) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(nlohmann::json{{json_fields::Error, "publicKey must not be empty"}}.dump(),
-                      content_types::Json);
-      return;
-    }
-
-    try {
-      auto passwordHash = User::hashPassword(password);
-      uint64_t id = db_.createUser(username, passwordHash, publicKey);
-      auto sessionToken = createSession_(id, username);
-      spdlog::info("Created user '{}' with id {}", username, id);
-      res.status = httplib::Created_201;
-      res.set_content(nlohmann::json{{json_fields::Id, id},
-                                     {json_fields::Username, username},
-                                     {json_fields::PublicKey, publicKey},
-                                     {json_fields::Token, sessionToken},
-                                     {json_fields::SessionToken, sessionToken}}
-                          .dump(),
-                      content_types::Json);
-    } catch (const std::runtime_error& e) {
-      res.status = httplib::Conflict_409;
-      res.set_content(nlohmann::json{{json_fields::Error, e.what()}}.dump(), content_types::Json);
-    }
+    handleSignup_(req, res);
   });
 
-  // Login endpoint
   svr_.Post(routes::Login, [this](const httplib::Request& req, httplib::Response& res) {
-    spdlog::info("Login request received from {}", req.remote_addr);
+    handleLogin_(req, res);
+  });
 
-    if (isRateLimited_(req.remote_addr)) {
-      res.status = httplib::TooManyRequests_429;
-      res.set_content(nlohmann::json{{json_fields::Error, "too many requests"}}.dump(),
-                      content_types::Json);
-      return;
-    }
+  svr_.Post(routes::Logout, [this](const httplib::Request& req, httplib::Response& res) {
+    handleLogout_(req, res);
+  });
+}
 
-    auto body = nlohmann::json::parse(req.body, nullptr, false);
-    if (body.is_discarded() || !body.contains(json_fields::Username) ||
-        !body.contains(json_fields::Password)) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(nlohmann::json{{json_fields::Error, "username and password required"}}.dump(),
-                      content_types::Json);
-      return;
-    }
+void Controller::handleSignup_(const httplib::Request& req, httplib::Response& res) {
+  spdlog::info("Sign-up request received");
 
-    std::string username = body[json_fields::Username];
-    std::string password = body[json_fields::Password];
+  if (isRateLimited_(req.remote_addr)) {
+    res.status = httplib::TooManyRequests_429;
+    res.set_content(nlohmann::json{{json_fields::Error, "too many requests"}}.dump(),
+                    content_types::Json);
+    return;
+  }
 
-    if (username.empty() || username.size() > 64) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "username must be 1–64 characters"}}.dump(),
-          content_types::Json);
-      return;
-    }
-    if (password.empty() || password.size() > 72) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "password must be 1–72 characters"}}.dump(),
-          content_types::Json);
-      return;
-    }
+  auto body = nlohmann::json::parse(req.body, nullptr, false);
+  if (body.is_discarded() || !body.contains(json_fields::Username) ||
+      !body.contains(json_fields::Password) || !body.contains(json_fields::PublicKey)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(
+        nlohmann::json{{json_fields::Error, "username, password, and publicKey required"}}.dump(),
+        content_types::Json);
+    return;
+  }
 
-    auto user = db_.getUserByUsername(username);
-    if (!user.has_value() || !user->verifyPassword(password)) {
-      res.status = httplib::Unauthorized_401;
-      res.set_content(nlohmann::json{{json_fields::Error, "invalid username or password"}}.dump(),
-                      content_types::Json);
-      return;
-    }
+  std::string username = body[json_fields::Username];
+  std::string password = body[json_fields::Password];
+  std::string publicKey = body[json_fields::PublicKey];
 
-    auto sessionToken = createSession_(user->id(), user->username());
-    res.set_content(nlohmann::json{{json_fields::Id, user->id()},
-                                   {json_fields::Username, user->username()},
+  if (username.empty() || username.size() > 64) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "username must be 1–64 characters"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+  if (!isValidSignupPassword(password)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(
+        nlohmann::json{
+            {json_fields::Error,
+             "password must be 12–72 characters and include at least one uppercase letter and "
+             "one number"}}
+            .dump(),
+        content_types::Json);
+    return;
+  }
+  if (publicKey.empty()) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "publicKey must not be empty"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  try {
+    auto passwordHash = User::hashPassword(password);
+    uint64_t id = db_.createUser(username, passwordHash, publicKey);
+    auto sessionToken = createSession_(id, username);
+    spdlog::info("Created user '{}' with id {}", username, id);
+    res.status = httplib::Created_201;
+    res.set_content(nlohmann::json{{json_fields::Id, id},
+                                   {json_fields::Username, username},
+                                   {json_fields::PublicKey, publicKey},
                                    {json_fields::Token, sessionToken},
                                    {json_fields::SessionToken, sessionToken}}
                         .dump(),
                     content_types::Json);
-  });
+  } catch (const std::runtime_error& e) {
+    res.status = httplib::Conflict_409;
+    res.set_content(nlohmann::json{{json_fields::Error, e.what()}}.dump(), content_types::Json);
+  }
+}
 
-  // Logout endpoint — revokes the token server-side so it cannot be reused
-  svr_.Post(routes::Logout, [](const httplib::Request& req, httplib::Response& res) {
-    spdlog::info("Logout request received");
-    auto token = bearerToken(req);
-    if (token.has_value()) {
-      TokenBlacklist::revoke(*token);
-      spdlog::info("Token revoked");
-    }
-    nlohmann::json response = {{json_fields::Status, "success"},
-                               {json_fields::Message, "Logged out"}};
-    res.set_content(response.dump(), content_types::Json);
-  });
+void Controller::handleLogin_(const httplib::Request& req, httplib::Response& res) {
+  spdlog::info("Login request received from {}", req.remote_addr);
+
+  if (isRateLimited_(req.remote_addr)) {
+    res.status = httplib::TooManyRequests_429;
+    res.set_content(nlohmann::json{{json_fields::Error, "too many requests"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  auto body = nlohmann::json::parse(req.body, nullptr, false);
+  if (body.is_discarded() || !body.contains(json_fields::Username) ||
+      !body.contains(json_fields::Password)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "username and password required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  std::string username = body[json_fields::Username];
+  std::string password = body[json_fields::Password];
+
+  if (username.empty() || username.size() > 64) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "username must be 1–64 characters"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+  if (password.empty() || password.size() > 72) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "password must be 1–72 characters"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  auto user = db_.getUserByUsername(username);
+  if (!user.has_value() || !user->verifyPassword(password)) {
+    res.status = httplib::Unauthorized_401;
+    res.set_content(nlohmann::json{{json_fields::Error, "invalid username or password"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  auto sessionToken = createSession_(user->id(), user->username());
+  res.set_content(nlohmann::json{{json_fields::Id, user->id()},
+                                 {json_fields::Username, user->username()},
+                                 {json_fields::Token, sessionToken},
+                                 {json_fields::SessionToken, sessionToken}}
+                      .dump(),
+                  content_types::Json);
+}
+
+void Controller::handleLogout_(const httplib::Request& req, httplib::Response& res) {
+  spdlog::info("Logout request received");
+  auto token = bearerToken(req);
+  if (token.has_value()) {
+    TokenBlacklist::revoke(*token);
+    spdlog::info("Token revoked");
+  }
+  nlohmann::json response = {{json_fields::Status, "success"},
+                             {json_fields::Message, "Logged out"}};
+  res.set_content(response.dump(), content_types::Json);
 }
 
 void Controller::start() {
@@ -368,269 +375,284 @@ void Controller::publicKeyController_() {
            });
 }
 
-void Controller::conversationController_() {
+void Controller::registerConversationRoutes_() {
   svr_.Post("/conversations", [this](const httplib::Request& req, httplib::Response& res) {
-    auto authenticatedUserId = authenticatedUserId_(req);
-    if (!authenticatedUserId.has_value()) {
-      res.status = httplib::Unauthorized_401;
-      res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
-                      content_types::Json);
-      return;
-    }
-
-    auto body = nlohmann::json::parse(req.body, nullptr, false);
-    if (body.is_discarded() || !body.contains(json_fields::Name) ||
-        !body.contains(json_fields::ParticipantIds)) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "name and participantIds required"}}.dump(),
-          content_types::Json);
-      return;
-    }
-
-    std::string name = body[json_fields::Name];
-
-    if (name.empty() || name.size() > 128) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(nlohmann::json{{json_fields::Error, "name must be 1–128 characters"}}.dump(),
-                      content_types::Json);
-      return;
-    }
-
-    auto participantIds = body[json_fields::ParticipantIds].get<std::vector<uint64_t>>();
-
-    std::set<uint64_t> seen(participantIds.begin(), participantIds.end());
-    if (seen.size() != participantIds.size()) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "participantIds must not contain duplicates"}}.dump(),
-          content_types::Json);
-      return;
-    }
-
-    uint64_t id = db_.createConversation(name, participantIds);
-    spdlog::info("Created conversation '{}' with id {}", name, id);
-    res.status = httplib::Created_201;
-    res.set_content(nlohmann::json{{json_fields::Id, id}, {json_fields::Name, name}}.dump(),
-                    content_types::Json);
+    handleCreateConversation_(req, res);
   });
 
   svr_.Get(R"(/users/(\d+)/conversations)",
            [this](const httplib::Request& req, httplib::Response& res) -> void {
-             auto authenticatedUserId = authenticatedUserId_(req);
-             if (!authenticatedUserId.has_value()) {
-               res.status = httplib::Unauthorized_401;
-               res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
-                               content_types::Json);
-               return;
-             }
-             uint64_t userId = std::stoull(std::string(req.matches[1]));
-             if (*authenticatedUserId != userId) {
-               res.status = httplib::Forbidden_403;
-               res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(),
-                               content_types::Json);
-               return;
-             }
-             spdlog::info("Fetching conversations for user: {}", userId);
-             auto convs = db_.getConversationsByUserId(userId);
-             nlohmann::json result = convs;
-             res.set_content(result.dump(), content_types::Json);
+             handleListUserConversations_(req, res);
            });
 }
 
-void Controller::messageController_() {
-  svr_.Post(R"(/conversations/(\d+)/messages)", [this](const httplib::Request& req,
-                                                       httplib::Response& res) {
-    uint64_t convId = std::stoull(std::string(req.matches[1]));
+void Controller::handleCreateConversation_(const httplib::Request& req, httplib::Response& res) {
+  auto authenticatedUserId = authenticatedUserId_(req);
+  if (!authenticatedUserId.has_value()) {
+    res.status = httplib::Unauthorized_401;
+    res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
 
-    auto body = nlohmann::json::parse(req.body, nullptr, false);
-    if (body.is_discarded() || !body.contains(json_fields::SenderId) ||
-        !body.contains(json_fields::Payload)) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(nlohmann::json{{json_fields::Error, "senderId and payload required"}}.dump(),
-                      content_types::Json);
-      return;
-    }
+  auto body = nlohmann::json::parse(req.body, nullptr, false);
+  if (body.is_discarded() || !body.contains(json_fields::Name) ||
+      !body.contains(json_fields::ParticipantIds)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "name and participantIds required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
 
-    uint64_t senderId = body[json_fields::SenderId];
-    std::string payload = body[json_fields::Payload];
-    std::optional<uint64_t> recipientId;
-    if (body.contains(json_fields::RecipientId) && !body[json_fields::RecipientId].is_null()) {
-      recipientId = body[json_fields::RecipientId].get<uint64_t>();
-    }
+  std::string name = body[json_fields::Name];
 
-    if (payload.empty() || payload.size() > 65536) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "payload must be 1–65536 characters"}}.dump(),
-          content_types::Json);
-      return;
-    }
+  if (name.empty() || name.size() > 128) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "name must be 1–128 characters"}}.dump(),
+                    content_types::Json);
+    return;
+  }
 
-    auto authenticatedUserId = authenticatedUserId_(req);
-    if (!authenticatedUserId.has_value()) {
-      res.status = httplib::Unauthorized_401;
-      res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
-                      content_types::Json);
-      return;
-    }
-    if (*authenticatedUserId != senderId) {
-      res.status = httplib::Forbidden_403;
-      res.set_content(
-          nlohmann::json{{json_fields::Error, "session user cannot send as another user"}}.dump(),
-          content_types::Json);
-      return;
-    }
-    if (!db_.isParticipant(convId, *authenticatedUserId)) {
-      res.status = httplib::Forbidden_403;
-      res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(),
-                      content_types::Json);
-      return;
-    }
-    if (recipientId.has_value() && !db_.isParticipant(convId, *recipientId)) {
-      res.status = httplib::BadRequest_400;
-      res.set_content(nlohmann::json{{json_fields::Error,
-                                      "recipient must be a conversation participant"}}
-                          .dump(),
-                      content_types::Json);
-      return;
-    }
+  auto participantIds = body[json_fields::ParticipantIds].get<std::vector<uint64_t>>();
 
-    auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                         std::chrono::system_clock::now().time_since_epoch())
-                                         .count());
+  std::set<uint64_t> seen(participantIds.begin(), participantIds.end());
+  if (seen.size() != participantIds.size()) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(
+        nlohmann::json{{json_fields::Error, "participantIds must not contain duplicates"}}.dump(),
+        content_types::Json);
+    return;
+  }
 
-    auto oneTimePreKeyId = oneTimePreKeyIdFromPayload(payload);
-    uint64_t msgId = 0;
-    try {
-      msgId = db_.createMessage(convId, senderId, payload, now, recipientId, oneTimePreKeyId);
-    } catch (const std::runtime_error& e) {
-      res.status = httplib::Conflict_409;
-      res.set_content(nlohmann::json{{json_fields::Error, e.what()}}.dump(), content_types::Json);
-      return;
-    }
-    spdlog::info("Created message {} in conversation {}", msgId, convId);
+  uint64_t id = db_.createConversation(name, participantIds);
+  spdlog::info("Created conversation '{}' with id {}", name, id);
+  res.status = httplib::Created_201;
+  res.set_content(nlohmann::json{{json_fields::Id, id}, {json_fields::Name, name}}.dump(),
+                  content_types::Json);
+}
 
-    // Record hash on-chain via the blockchain sidecar
-    std::string txHash;
-    try {
-      httplib::Client sidecar(sidecarUrl_);
-      sidecar.set_connection_timeout(30);
-      sidecar.set_read_timeout(60);
-      nlohmann::json sidecarBody = {{json_fields::ConversationId, convId},
-                                    {json_fields::MsgId, msgId},
-                                    {json_fields::Ciphertext, payload}};
-      auto sidecarRes =
-          sidecar.Post(routes::SidecarRecord, sidecarBody.dump(), content_types::Json);
-      if (sidecarRes && sidecarRes->status == 200) {
-        auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
-        txHash = sidecarJson[json_fields::TxHash].get<std::string>();
-        db_.updateMessageBlockchainDigest(msgId, txHash);
-        spdlog::info("Blockchain digest recorded for message {}: {}", msgId, txHash);
-      } else {
-        spdlog::warn("Blockchain sidecar unavailable for message {}", msgId);
-      }
-    } catch (const std::exception& e) {
-      spdlog::warn("Blockchain sidecar error for message {}: {}", msgId, e.what());
-    }
+void Controller::handleListUserConversations_(const httplib::Request& req, httplib::Response& res) {
+  auto authenticatedUserId = authenticatedUserId_(req);
+  if (!authenticatedUserId.has_value()) {
+    res.status = httplib::Unauthorized_401;
+    res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+  uint64_t userId = std::stoull(std::string(req.matches[1]));
+  if (*authenticatedUserId != userId) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
+    return;
+  }
+  spdlog::info("Fetching conversations for user: {}", userId);
+  auto convs = db_.getConversationsByUserId(userId);
+  nlohmann::json result = convs;
+  res.set_content(result.dump(), content_types::Json);
+}
 
-    kd::Message msg{msgId, senderId, convId, payload, now, txHash};
-    nlohmann::json result = msg;
-    res.status = httplib::Created_201;
-    res.set_content(result.dump(), content_types::Json);
-  });
+void Controller::registerMessageRoutes_() {
+  svr_.Post(R"(/conversations/(\d+)/messages)",
+            [this](const httplib::Request& req, httplib::Response& res) {
+              handleCreateMessage_(req, res);
+            });
 
   svr_.Delete(R"(/conversations/(\d+)/messages/(\d+))",
               [this](const httplib::Request& req, httplib::Response& res) -> void {
-                auto authenticatedUserId = authenticatedUserId_(req);
-                if (!authenticatedUserId.has_value()) {
-                  res.status = httplib::Unauthorized_401;
-                  res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
-                                  content_types::Json);
-                  return;
-                }
-
-                uint64_t convId = std::stoull(std::string(req.matches[1]));
-                uint64_t messageId = std::stoull(std::string(req.matches[2]));
-                if (!db_.isParticipant(convId, *authenticatedUserId)) {
-                  res.status = httplib::Forbidden_403;
-                  res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(),
-                                  content_types::Json);
-                  return;
-                }
-
-                if (!db_.deleteMessage(convId, messageId, *authenticatedUserId)) {
-                  res.status = httplib::NotFound_404;
-                  res.set_content(nlohmann::json{{json_fields::Error, "message not found"}}.dump(),
-                                  content_types::Json);
-                  return;
-                }
-
-                res.set_content(nlohmann::json{{json_fields::Status, "deleted"},
-                                               {json_fields::MessageId, messageId}}
-                                    .dump(),
-                                content_types::Json);
+                handleDeleteMessage_(req, res);
               });
 
-  svr_.Delete(
-      R"(/conversations/(\d+)/messages/(\d+)/access/(\d+))",
-      [this](const httplib::Request& req, httplib::Response& res) -> void {
-        auto authenticatedUserId = authenticatedUserId_(req);
-        if (!authenticatedUserId.has_value()) {
-          res.status = httplib::Unauthorized_401;
-          res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
-                          content_types::Json);
-          return;
-        }
-
-        uint64_t convId = std::stoull(std::string(req.matches[1]));
-        uint64_t messageId = std::stoull(std::string(req.matches[2]));
-        uint64_t targetUserId = std::stoull(std::string(req.matches[3]));
-        if (!db_.isParticipant(convId, *authenticatedUserId) ||
-            !db_.isParticipant(convId, targetUserId)) {
-          res.status = httplib::Forbidden_403;
-          res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(),
-                          content_types::Json);
-          return;
-        }
-
-        auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                             std::chrono::system_clock::now().time_since_epoch())
-                                             .count());
-        if (!db_.revokeMessageAccess(convId, messageId, *authenticatedUserId, targetUserId, now)) {
-          res.status = httplib::NotFound_404;
-          res.set_content(nlohmann::json{{json_fields::Error, "message access not found"}}.dump(),
-                          content_types::Json);
-          return;
-        }
-
-        res.set_content(nlohmann::json{{json_fields::Status, "revoked"},
-                                       {json_fields::MessageId, messageId},
-                                       {json_fields::UserId, targetUserId}}
-                            .dump(),
-                        content_types::Json);
-      });
+  svr_.Delete(R"(/conversations/(\d+)/messages/(\d+)/access/(\d+))",
+              [this](const httplib::Request& req, httplib::Response& res) -> void {
+                handleRevokeMessageAccess_(req, res);
+              });
 
   svr_.Get(R"(/conversations/(\d+)/messages)",
            [this](const httplib::Request& req, httplib::Response& res) -> void {
-             auto authenticatedUserId = authenticatedUserId_(req);
-             if (!authenticatedUserId.has_value()) {
-               res.status = httplib::Unauthorized_401;
-               res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
-                               content_types::Json);
-               return;
-             }
-             uint64_t convId = std::stoull(std::string(req.matches[1]));
-             if (!db_.isParticipant(convId, *authenticatedUserId)) {
-               res.status = httplib::Forbidden_403;
-               res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(),
-                               content_types::Json);
-               return;
-             }
-             auto msgs = db_.getMessagesByConversationIdForUser(convId, *authenticatedUserId);
-             nlohmann::json result = msgs;
-             res.set_content(result.dump(), content_types::Json);
+             handleListConversationMessages_(req, res);
            });
+}
+
+void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Response& res) {
+  uint64_t convId = std::stoull(std::string(req.matches[1]));
+
+  auto body = nlohmann::json::parse(req.body, nullptr, false);
+  if (body.is_discarded() || !body.contains(json_fields::SenderId) ||
+      !body.contains(json_fields::Payload)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "senderId and payload required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  uint64_t senderId = body[json_fields::SenderId];
+  std::string payload = body[json_fields::Payload];
+  std::optional<uint64_t> recipientId;
+  if (body.contains(json_fields::RecipientId) && !body[json_fields::RecipientId].is_null()) {
+    recipientId = body[json_fields::RecipientId].get<uint64_t>();
+  }
+
+  if (payload.empty() || payload.size() > 65536) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(
+        nlohmann::json{{json_fields::Error, "payload must be 1–65536 characters"}}.dump(),
+        content_types::Json);
+    return;
+  }
+
+  auto authenticatedUserId = authenticatedUserId_(req);
+  if (!authenticatedUserId.has_value()) {
+    res.status = httplib::Unauthorized_401;
+    res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+  if (*authenticatedUserId != senderId) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(
+        nlohmann::json{{json_fields::Error, "session user cannot send as another user"}}.dump(),
+        content_types::Json);
+    return;
+  }
+  if (!db_.isParticipant(convId, *authenticatedUserId)) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
+    return;
+  }
+  if (recipientId.has_value() && !db_.isParticipant(convId, *recipientId)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(
+        nlohmann::json{{json_fields::Error, "recipient must be a conversation participant"}}.dump(),
+        content_types::Json);
+    return;
+  }
+
+  auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::system_clock::now().time_since_epoch())
+                                       .count());
+
+  auto oneTimePreKeyId = oneTimePreKeyIdFromPayload(payload);
+  uint64_t msgId = 0;
+  try {
+    msgId = db_.createMessage(convId, senderId, payload, now, recipientId, oneTimePreKeyId);
+  } catch (const std::runtime_error& e) {
+    res.status = httplib::Conflict_409;
+    res.set_content(nlohmann::json{{json_fields::Error, e.what()}}.dump(), content_types::Json);
+    return;
+  }
+  spdlog::info("Created message {} in conversation {}", msgId, convId);
+
+  // Record hash on-chain via the blockchain sidecar
+  std::string txHash;
+  try {
+    httplib::Client sidecar(sidecarUrl_);
+    sidecar.set_connection_timeout(30);
+    sidecar.set_read_timeout(60);
+    nlohmann::json sidecarBody = {{json_fields::ConversationId, convId},
+                                  {json_fields::MsgId, msgId},
+                                  {json_fields::Ciphertext, payload}};
+    auto sidecarRes = sidecar.Post(routes::SidecarRecord, sidecarBody.dump(), content_types::Json);
+    if (sidecarRes && sidecarRes->status == 200) {
+      auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
+      txHash = sidecarJson[json_fields::TxHash].get<std::string>();
+      db_.updateMessageBlockchainDigest(msgId, txHash);
+      spdlog::info("Blockchain digest recorded for message {}: {}", msgId, txHash);
+    } else {
+      spdlog::warn("Blockchain sidecar unavailable for message {}", msgId);
+    }
+  } catch (const std::exception& e) {
+    spdlog::warn("Blockchain sidecar error for message {}: {}", msgId, e.what());
+  }
+
+  kd::Message msg{msgId, senderId, convId, payload, now, txHash};
+  nlohmann::json result = msg;
+  res.status = httplib::Created_201;
+  res.set_content(result.dump(), content_types::Json);
+}
+
+void Controller::handleDeleteMessage_(const httplib::Request& req, httplib::Response& res) {
+  auto authenticatedUserId = authenticatedUserId_(req);
+  if (!authenticatedUserId.has_value()) {
+    res.status = httplib::Unauthorized_401;
+    res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  uint64_t convId = std::stoull(std::string(req.matches[1]));
+  uint64_t messageId = std::stoull(std::string(req.matches[2]));
+  if (!db_.isParticipant(convId, *authenticatedUserId)) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
+    return;
+  }
+
+  if (!db_.deleteMessage(convId, messageId, *authenticatedUserId)) {
+    res.status = httplib::NotFound_404;
+    res.set_content(nlohmann::json{{json_fields::Error, "message not found"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  res.set_content(
+      nlohmann::json{{json_fields::Status, "deleted"}, {json_fields::MessageId, messageId}}.dump(),
+      content_types::Json);
+}
+
+void Controller::handleRevokeMessageAccess_(const httplib::Request& req, httplib::Response& res) {
+  auto authenticatedUserId = authenticatedUserId_(req);
+  if (!authenticatedUserId.has_value()) {
+    res.status = httplib::Unauthorized_401;
+    res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  uint64_t convId = std::stoull(std::string(req.matches[1]));
+  uint64_t messageId = std::stoull(std::string(req.matches[2]));
+  uint64_t targetUserId = std::stoull(std::string(req.matches[3]));
+  if (!db_.isParticipant(convId, *authenticatedUserId) ||
+      !db_.isParticipant(convId, targetUserId)) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
+    return;
+  }
+
+  auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::system_clock::now().time_since_epoch())
+                                       .count());
+  if (!db_.revokeMessageAccess(convId, messageId, *authenticatedUserId, targetUserId, now)) {
+    res.status = httplib::NotFound_404;
+    res.set_content(nlohmann::json{{json_fields::Error, "message access not found"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  res.set_content(nlohmann::json{{json_fields::Status, "revoked"},
+                                 {json_fields::MessageId, messageId},
+                                 {json_fields::UserId, targetUserId}}
+                      .dump(),
+                  content_types::Json);
+}
+
+void Controller::handleListConversationMessages_(const httplib::Request& req,
+                                                 httplib::Response& res) {
+  auto authenticatedUserId = authenticatedUserId_(req);
+  if (!authenticatedUserId.has_value()) {
+    res.status = httplib::Unauthorized_401;
+    res.set_content(nlohmann::json{{json_fields::Error, "login required"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+  uint64_t convId = std::stoull(std::string(req.matches[1]));
+  if (!db_.isParticipant(convId, *authenticatedUserId)) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
+    return;
+  }
+  auto msgs = db_.getMessagesByConversationIdForUser(convId, *authenticatedUserId);
+  nlohmann::json result = msgs;
+  res.set_content(result.dump(), content_types::Json);
 }
 
 void Controller::basicApiInfo_() {
@@ -641,7 +663,7 @@ void Controller::basicApiInfo_() {
   });
 }
 
-void Controller::notFoundHandler_() {
+void Controller::registerNotFoundHandler_() {
   svr_.set_error_handler([](const httplib::Request&, httplib::Response& res) -> void {
     if (res.status == httplib::NotFound_404) {
       nlohmann::json error = {{json_fields::Error, "Not Found"},
