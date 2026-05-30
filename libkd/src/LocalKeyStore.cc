@@ -121,8 +121,8 @@ std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> deriveKey
   }
 
   char digestName[] = "SHA256";  // NOLINT(modernize-avoid-c-arrays)
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   OSSL_PARAM params[] = {
-      // NOLINT(modernize-avoid-c-arrays)
       OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
       OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, const_cast<unsigned char*>(secret),
                                         secretSize),

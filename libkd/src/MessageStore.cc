@@ -87,8 +87,8 @@ std::array<unsigned char, MessageStore::kEncryptionKeySize> deriveKey(const unsi
   }
 
   char digestName[] = "SHA256";  // NOLINT(modernize-avoid-c-arrays)
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   OSSL_PARAM params[] = {
-      // NOLINT(modernize-avoid-c-arrays)
       OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
       OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, const_cast<unsigned char*>(secret),
                                         secretSize),
@@ -251,7 +251,7 @@ MessageStore::MessageStore(const std::string& username) : storePath_(defaultStor
 MessageStore::MessageStore(std::filesystem::path storePath) : storePath_(std::move(storePath)) {
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 MessageStore::MessageStore(std::filesystem::path storePath, std::string username,
                            std::array<unsigned char, kEncryptionKeySize> encryptionKey,
                            std::array<unsigned char, kSaltSize> salt, unsigned long long opsLimit,
@@ -264,16 +264,18 @@ MessageStore::MessageStore(std::filesystem::path storePath, std::string username
     , memLimit_(memLimit)
     , encryptedAtRest_(true) {
 }
+// NOLINTEND(bugprone-easily-swappable-parameters)
 
 MessageStore MessageStore::encryptedForUser(const std::string& username,
                                             const std::string& password) {
   return encryptedAtPath(defaultStorePath(username), username, password);
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 MessageStore MessageStore::encryptedAtPath(std::filesystem::path storePath,
                                            const std::string& username,
                                            const std::string& password) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   ensureSodiumInitialized();
 
   auto params = kdfParamsForStore(storePath);
