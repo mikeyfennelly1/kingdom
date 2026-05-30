@@ -14,6 +14,7 @@ namespace {
 
 constexpr int kMessageReadTimeoutSec = 120;
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 httplib::Client makeClient(const std::string& baseUrl, const std::string& caCertPath) {
   httplib::Client cli(baseUrl);
   cli.enable_server_certificate_verification(true);
@@ -124,8 +125,9 @@ std::string pinPublicKey(uint64_t userId, const std::string& publicKey) {
 
 namespace kd {
 
-Client::Client(const std::string& baseUrl, std::string caCertPath)
-    : baseUrl_(baseUrl), caCertPath_(std::move(caCertPath)) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+Client::Client(std::string baseUrl, std::string caCertPath)
+    : baseUrl_(std::move(baseUrl)), caCertPath_(std::move(caCertPath)) {
 }
 
 nlohmann::json Client::getHealth() {
@@ -282,6 +284,7 @@ nlohmann::json Client::createConversation(const std::string& name,
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
                                    const std::string& payload) {
   auto cli = makeClient(baseUrl_, caCertPath_);
@@ -298,6 +301,7 @@ nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId, uint64_t recipientId,
                                    const std::string& payload) {
   auto cli = makeClient(baseUrl_, caCertPath_);

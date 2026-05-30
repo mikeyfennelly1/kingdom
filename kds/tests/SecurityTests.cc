@@ -15,6 +15,9 @@
 #include "../src/security/SecurityFilterChain.hh"
 #include "../src/security/SecurityPredicateFactory.hh"
 
+// Test files use arbitrary numeric literals as IDs and timestamps.
+// NOLINTBEGIN(readability-magic-numbers)
+
 namespace kd {
 
 class SecurityTest : public ::testing::Test {
@@ -79,17 +82,19 @@ std::vector<unsigned char> decodeBase64(const std::string& encoded) {
 }
 
 void appendUint64Le(std::vector<unsigned char>& out, uint64_t value) {
-  for (size_t i = 0; i < 8; ++i) {
-    out.push_back(static_cast<unsigned char>((value >> (i * 8)) & 0xff));
+  constexpr size_t kBitsPerByte = 8;
+  constexpr uint64_t kByteMask = 0xff;
+  for (size_t i = 0; i < sizeof(uint64_t); ++i) {
+    out.push_back(static_cast<unsigned char>((value >> (i * kBitsPerByte)) & kByteMask));
   }
 }
 
-std::string signPreKey(uint64_t id, const std::string& publicKey,
+std::string signPreKey(uint64_t preKeyId, const std::string& publicKey,
                        const std::array<unsigned char, kSigningSecretKeySize>& signingSecretKey) {
   std::vector<unsigned char> input;
   const std::string info = "kd-x3dh-signed-prekey-signature-v1";
   input.insert(input.end(), info.begin(), info.end());
-  appendUint64Le(input, id);
+  appendUint64Le(input, preKeyId);
   auto publicKeyBytes = decodeBase64(publicKey);
   input.insert(input.end(), publicKeyBytes.begin(), publicKeyBytes.end());
 
@@ -99,9 +104,9 @@ std::string signPreKey(uint64_t id, const std::string& publicKey,
   return encodeBase64(signature);
 }
 
-LocalPreKey makePreKey(uint64_t id) {
+LocalPreKey makePreKey(uint64_t preKeyId) {
   LocalPreKey preKey;
-  preKey.id = id;
+  preKey.id = preKeyId;
   std::array<unsigned char, crypto_box_PUBLICKEYBYTES> publicKey{};
   crypto_box_keypair(publicKey.data(), preKey.privateKey.data());
   preKey.publicKey = encodeBase64(publicKey);
@@ -325,3 +330,5 @@ TEST(MessageStoreTest, EncryptedStoreMigratesLegacyPlaintextStore) {
 
   std::filesystem::remove(path, ignored);
 }
+
+// NOLINTEND(readability-magic-numbers)

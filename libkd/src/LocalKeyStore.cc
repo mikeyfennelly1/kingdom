@@ -48,6 +48,7 @@ std::string base64Encode(const std::array<unsigned char, N>& data) {
   return base64Encode(data.data(), data.size());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<unsigned char> base64Decode(const std::string& encoded, const std::string& fieldName) {
   std::vector<unsigned char> decoded(encoded.size(), 0);
   size_t decodedSize = 0;
@@ -191,6 +192,7 @@ void verifySignedPreKeySignature(const nlohmann::json& bundle) {
   }
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 nlohmann::json parseJson(const std::string& text, const std::string& label) {
   auto parsed = nlohmann::json::parse(text, nullptr, false);
   if (parsed.is_discarded() || !parsed.is_object()) {
@@ -343,6 +345,7 @@ void eraseOneTimePreKey(LocalIdentityKey& identity, uint64_t preKeyId) {
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& username,
                                                        const std::string& password) {
   ensureSodiumInitialized();
@@ -413,6 +416,7 @@ RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& userna
   return RegistrationKeyMaterial{.publicKeyBundle = bundle.dump(), .keyFilePath = keyPath.string()};
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
                                              const std::string& password) {
   ensureSodiumInitialized();
