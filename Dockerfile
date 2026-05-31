@@ -47,3 +47,11 @@ ENV POSTGRES_USER=${POSTGRES_USER} \
     KD_PORT=${KD_PORT}
 
 ENTRYPOINT ["/app/kds"]
+
+# ── logs export stage ─────────────────────────────────────────────────────────
+# Extracts build-time logs from the builder stage onto the host via BuildKit
+# --output without polluting the runtime image. build.docker.sh handles this
+# automatically after the main build. Does not re-run create-closure.sh —
+# BuildKit reuses the cached builder layer.
+FROM scratch AS logs
+COPY --from=builder /app/out/nix-cache-fetches.log /nix-cache-fetches.log

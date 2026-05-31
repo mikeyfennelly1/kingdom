@@ -27,3 +27,11 @@ docker build "${PROJ_ROOT}" \
     --build-arg KD_PORT="${KD_PORT:-8080}" \
     --tag kds:latest \
     "$@"
+
+# Extract the nix cache fetch log from the builder stage onto the host.
+# --target logs hits the FROM scratch stage; BuildKit reuses the cached builder
+# layer so create-closure.sh is not re-executed.
+mkdir -p "${PROJ_ROOT}/out"
+docker build "${PROJ_ROOT}" \
+    --target logs \
+    --output "type=local,dest=${PROJ_ROOT}/out"
