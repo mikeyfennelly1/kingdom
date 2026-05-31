@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build-and-push:
+  docker-release:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
@@ -16,6 +16,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Find build run for merged PR
+        id: find-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MERGE_SHA="${{ github.event.workflow_run.head_sha }}"
+
+          # Resolve the PR that introduced this merge commit, then get its head SHA
+          HEAD_SHA=$(gh api "repos/${{ github.repository }}/commits/${MERGE_SHA}/pulls" \
+            --jq '.[0].head.sha')
+
+          # Find the most recent successful build run for that PR head commit
+          RUN_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/build.yml/runs?head_sha=${HEAD_SHA}&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id')
+
+          echo "head_sha=${HEAD_SHA}" >> $GITHUB_OUTPUT
+          echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
+
+      - name: Download build artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download ${{ steps.find-run.outputs.run_id }} --name kds-out --dir out/
 
       - name: Extract semver from latest tag
         id: version

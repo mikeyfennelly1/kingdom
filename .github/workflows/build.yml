@@ -18,8 +18,11 @@ jobs:
       - name: Setup Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@main
 
-      - name: Make build script executable
-        run: chmod +x ./scripts/build.sh
+      - name: Build artifacts
+        run: bash ./scripts/create-closure.sh
 
-      - name: Build with Nix
-        run: nix develop .#kds --command bash ./scripts/build.sh
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kds-out
+          path: out/
