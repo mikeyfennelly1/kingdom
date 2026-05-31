@@ -6,7 +6,7 @@ PROJ_ROOT="${SCRIPT_DIR}/../"
 ENV_FILE="${PROJ_ROOT}/.env"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
-    echo "Error: ${ENV_FILE} not found — copy .env.example to .env and fill in your values." >&2
+    printf "ERROR: ${ENV_FILE} not found — copy .env.example to .env and fill in your values." >&2
     exit 1
 fi
 
