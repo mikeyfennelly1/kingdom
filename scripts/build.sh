@@ -7,6 +7,10 @@ PROJ_ROOT="${SCRIPT_DIR}/.."
 BUILD_DIRECTORY="${SCRIPT_DIR}/../build"
 
 main() {
+    if [[ -z "${IN_NIX_SHELL:-}" ]]; then
+        exec nix develop "${PROJ_ROOT}#kds" --command bash "$0" "$@"
+    fi
+
     printf "DEBUG: entering build environment\n" >&2
     pushd "${PROJ_ROOT}"
     mkdir -p build
