@@ -8,6 +8,14 @@ CURRENT_COMMIT_HASH=$(git rev-parse --short HEAD)
 IMAGE_NAME="mikeyfennelly/kds:${CURRENT_COMMIT_HASH}"
 
 main() {
+    local extract_logs=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -l|--logs) extract_logs=true; shift ;;
+            *) break ;;
+        esac
+    done
+
     pushd "${PROJ_ROOT}"
     trap popd EXIT
 
@@ -30,6 +38,11 @@ main() {
     if [[ $? -ne 0 ]]; then
         printf "ERROR: failed to load environment\n" >&2
         exit 1
+    fi
+
+    if [[ "${extract_logs}" == true ]]; then
+        extract_build_logs
+        return 0
     fi
 
     package_runtime_docker_img
@@ -56,6 +69,15 @@ function load_env() {
     source "${ENV_FILE}"
     set +a
     return 0
+}
+
+function extract_build_logs() {
+    local logs_dir="${PROJ_ROOT}/logs"
+    mkdir -p "${logs_dir}"
+    printf "Extracting build logs to ${logs_dir}\n"
+    docker build "${PROJ_ROOT}" \
+        --target logs \
+        --output type=local,dest="${logs_dir}"
 }
 
 function package_runtime_docker_img() {

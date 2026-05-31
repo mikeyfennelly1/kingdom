@@ -1,25 +1,34 @@
-FROM nixos/nix:2.34.7 AS builder
+FROM alpine:3.20 AS builder
 
-RUN echo 'experimental-features = nix-command flakes' >> /etc/nix/nix.conf && \
-    echo 'sandbox = false' >> /etc/nix/nix.conf
+RUN apk add --no-cache bash curl tar xz && \
+    curl -fsSL https://install.determinate.systems/nix | bash -s -- install linux \
+        --init none \
+        --extra-conf "sandbox = false" \
+        --no-confirm && \
+    echo 'experimental-features = nix-command flakes' >> /etc/nix/nix.conf
+
+ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
 
 WORKDIR /app
 COPY . .
+
+# Unpack the nix closure at the same /nix/store/... paths the binary references.
+# GNU tar is required: BusyBox tar does not support -P (preserve absolute paths).
+COPY scripts/audit-compile-environment.sh /app/audit-compile-environment.sh
+COPY scripts/unpack-closure.sh /app/unpack-closure.sh
+RUN --mount=type=bind,source=out,target=/mnt/out \
+    bash -o pipefail -c 'bash /app/audit-compile-environment.sh 2>&1 | tee /app/audit-compile-environment.log'
+
 RUN nix develop .#kds --command bash ./scripts/build.sh
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 
+FROM scratch AS logs
+COPY --from=builder /app/audit-compile-environment.log /
+
 FROM alpine:3.20
 
 WORKDIR /app
-
-# Unpack the nix closure at the same /nix/store/... paths the binary references.
-# GNU tar is required: BusyBox tar does not support -P (preserve absolute paths).
-RUN --mount=type=bind,source=out,target=/mnt/out \
-    stat /mnt/out/kds-closure.tar.gz > /dev/null 2>&1 \
-    || { printf "\nERROR: out/kds-closure.tar.gz not found.\nRun scripts/create-closure.sh to generate it before building this image.\n\n" >&2; exit 1; }
-COPY out/kds-closure.tar.gz /tmp/
-RUN apk add --no-cache tar && tar -xzPf /tmp/kds-closure.tar.gz && rm /tmp/kds-closure.tar.gz
 
 COPY --from=builder /app/build/kds/kds /app/kds
 
