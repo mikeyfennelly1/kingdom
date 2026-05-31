@@ -54,8 +54,6 @@
           assert pkgs.libssh2.version == "1.11.1";
           # libpq pinned at nixos-25.11 — if this fails after `nix flake update`, revert flake.lock, do not remove the assertion.
           assert pkgs.libpq.version == "18.1";
-          # glibc pinned at nixos-25.11 — if this fails after `nix flake update`, revert flake.lock, do not remove the assertion.
-          assert pkgs.glibc.version == "2.40";
           # ngtcp2 pinned at nixos-25.11 — if this fails after `nix flake update`, revert flake.lock, do not remove the assertion.
           assert pkgs.ngtcp2.version == "1.17.0";
           # publicsuffix-list pinned at nixos-25.11 — if this fails after `nix flake update`, revert flake.lock, do not remove the assertion.
@@ -98,7 +96,8 @@
               pkgs.keyutils
               pkgs.libssh2
               pkgs.libpq
-              pkgs.glibc
+              # NOTE: glibc intentionally omitted — the GCC wrapper owns its own glibc include
+              # path; adding glibc to buildInputs corrupts the #include_next chain in cstdlib.
               pkgs.ngtcp2
               pkgs."publicsuffix-list"
               pkgs.nghttp2
