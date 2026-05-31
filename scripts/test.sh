@@ -212,7 +212,7 @@ function install_test_dependencies() {
 function run_tests() {
     cd "${SCRIPT_DIR}/../tests"
     npm test
-    return 0
+    return $?
 }
 
 main "$@"
