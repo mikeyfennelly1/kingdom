@@ -25,4 +25,4 @@ jobs:
         run: chmod +x ./scripts/build.sh
 
       - name: Build with Nix
-        run: ./scripts/build.sh
+        run: nix develop --command bash ./scripts/build.sh
