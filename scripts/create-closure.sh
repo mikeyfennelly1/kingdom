@@ -13,7 +13,7 @@ main() {
     rm -rf "${build_dir}"
 
     printf "DEBUG: building artifact in nix...\n" >&2
-    nix develop --command bash ./scripts/build.sh
+    nix develop .#kds --command bash ./scripts/build.sh
 
     mkdir -p "$(dirname "${out}")"
     printf "DEBUG: assembling nix store closure...\n" >&2
@@ -22,7 +22,7 @@ main() {
     # guaranteed present — the nixos/nix Docker builder image does not
     # ship them on its PATH, but they come from stdenv inside the devShell.
     export _KD_BINARY="${build_dir}" _KD_OUT="${out}"
-    nix develop --command bash -c '
+    nix develop .#kds --command bash -c '
         set -euo pipefail
         ldd "${_KD_BINARY}" \
             | awk '"'"'$2=="=>" && $3~/^\/nix\/store/ { n=split($3,a,"/"); print "/nix/store/"a[4] }'"'"' \

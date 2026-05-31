@@ -33,8 +33,11 @@ include(cmake/dependencies.cmake)
 
 configure_third_party()
 enable_testing()
+option(BUILD_KDCTL "Build the kdctl GUI client (requires Qt6)" ON)
 add_subdirectory(libkd)
-add_subdirectory(kdctl)
+if(BUILD_KDCTL)
+    add_subdirectory(kdctl)
+endif()
 add_subdirectory(kds)
 # Enable clang-tidy & clang-format
 find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
