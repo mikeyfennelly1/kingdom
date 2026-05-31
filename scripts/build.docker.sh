@@ -4,18 +4,27 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="${SCRIPT_DIR}/../"
 ENV_FILE="${PROJ_ROOT}/.env"
+CURRENT_COMMIT_HASH=$(git rev-parse --short HEAD)
+IMAGE_NAME="mikeyfennelly/kds:${CURRENT_COMMIT_HASH}"
 
 main() {
     pushd "${PROJ_ROOT}"
     trap popd EXIT
 
-    printf "DEBUG: executing create-closure script\n" >&2
-    bash -c "${SCRIPT_DIR}/create-closure.sh"
+    local closure_path="${PROJ_ROOT}/out"
+    printf "DEBUG: checking for existing closure at ${closure_path}\n" >&2
+    stat "${closure_path}"
     if [[ $? -ne 0 ]]; then
-        printf "ERROR: create-closure script failed\n" >&2
-        exit 1
+        printf "DEBUG: no closure found, running closure creation script\n" >&2
+        bash -c "${SCRIPT_DIR}/create-closure.sh"
+        if [[ $? -ne 0 ]]; then
+            printf "ERROR: create-closure script failed\n" >&2
+            exit 1
+        fi
+        printf "DEBUG: closure creation script executed successfully\n" >&2
+    else 
+        printf "DEBUG: closure found at ${closure_path}\n" >&2
     fi
-    printf "DEBUG: closure creation script executed successfully\n" >&2
 
     load_env
     if [[ $? -ne 0 ]]; then
@@ -60,7 +69,7 @@ function package_runtime_docker_img() {
         --build-arg KD_JWT_TTL_SECONDS="${KD_JWT_TTL_SECONDS}" \
         --build-arg KD_LOG_LEVEL="${KD_LOG_LEVEL:-info}" \
         --build-arg KD_PORT="${KD_PORT:-8080}" \
-        --tag kds:latest \
+        --tag "${IMAGE_NAME}" \
         "$@"
     return 0
 }

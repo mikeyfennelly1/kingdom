@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/.."
+OUTPUT_LOG="buildtime.test.log"
 
 main() {
     # parse flags
@@ -14,8 +15,8 @@ main() {
                 shift
                 ;;
             *)
-                echo "Unknown option: $1" >&2
-                echo "Usage: $0 [--rebuild|-r]" >&2
+                printf "DEBUG: Unknown option: $1\n" >&2
+                printf "DEBUG: Usage: $0 [--rebuild|-r]" \n>&2
                 exit 1
                 ;;
         esac
@@ -24,68 +25,61 @@ main() {
     # basic script setup
     init_test_vars
     if [[ $? -ne 0 ]]; then
-        echo "Error: failed to initialize test variables" >&2
+        printf "DEBUG: Error: failed to initialize test variables\n" >&2
         exit 1
     fi
 
     export_necessary_vars
     if [[ $? -ne 0 ]]; then
-        echo "Error: failed to export necessary environment variables" >&2
+        printf "DEBUG: Error: failed to export necessary environment variables\n" >&2
+        exit 1
+    fi
+
+    generate_tls_test_cert
+    if [[ $? -ne 0 ]]; then
+
+        printf "DEBUG: Error: failed to generate TLS certificate for testing.\n" >&2
         exit 1
     fi
 
     pushd "${PROJECT_ROOT}"
-     trap 'popd > /dev/null' EXIT INT TERM ERR
+    trap 'popd > /dev/null' EXIT INT TERM ERR
 
-    echo "--- Checking connectivity required for build ---"
-    check_build_connectivity
-    if [[ $? -ne 0 ]]; then
-        echo "Error: GitHub is unreachable — Docker build will fail fetching NixOS nixpkgs tarballs" >&2
-        echo "NOTE: CHECK IF YOU HAVE A VPN OR FIREWALL CONFIGURED." >&2
-        exit 1
-    fi
-
-    echo "--- Tearing down test environment ---"
+    printf "DEBUG: Tearing down test environment \n"
     cleanup
     trap cleanup EXIT # ensures that when script finishes, test objects are cleaned up
 
-    generate_tls_test_cert
-    if [[ $? -ne 0 ]]; then
-        echo "Error: failed to generate TLS certificate for testing." >&2
-        exit 1
-    fi
-
     # application runtime setup
     if [[ "${REBUILD}" == "true" ]]; then
-        echo ""
-        echo "--- Building docker artifacts ---"
+        printf "DEBUG: "
+        printf "DEBUG: Building docker artifacts \n"
         build_services
         if [[ $? -ne 0 ]]; then
-            echo "Error: failed to build dependent services for environment." >&2
+            printf "ERROR: failed to build dependent services for environment.\n" >&2
             exit 1
         fi
     else
-        echo ""
-        echo "--- Skipping build (pass --rebuild to force a fresh build) ---"
+        printf "DEBUG: "
+        printf "DEBUG: Skipping build (pass --rebuild to force a fresh build) \n"
     fi
 
-    echo "--- Starting test environment dependencies (docker compose) ---"
+    printf "DEBUG: Starting test environment dependencies (docker compose) \n"
     start_services
     if [[ $? -ne 0 ]]; then
-        echo "Error: failed to start dependent services for environment." >&2
+        printf "DEBUG: Error: failed to start dependent services for environment.\n" >&2
         exit 1
     fi
 
-    echo "--- waiting for dependent services to be healthy..."
+    printf "DEBUG: waiting for dependent services to be healthy...\n"
     wait_for_health # times out after given timeframe
 
-    echo "--- Installing test dependencies ---"
+    printf "DEBUG: Installing test dependencies.\n"
     install_test_dependencies
 
-    echo "--- Running tests against target on ${KD_BASE_URL}"
+    printf "DEBUG: Running tests against target on ${KD_BASE_URL}\n"
     run_tests
     if [[ $? -ne 0 ]]; then
-        echo "Error: test run exited with failure code" >&2
+        printf "DEBUG: Error: test run exited with failure code.\n" >&2
         exit 1
     fi
 }
@@ -119,19 +113,13 @@ function export_necessary_vars() {
     return 0
 }
 
-function orient_at_script() {
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    cd "${SCRIPT_DIR}"
-    return 0
-}
-
 function generate_tls_test_cert() {
-    local cert_dir="${SCRIPT_DIR}/../certs"
-    if [ ! -f "${cert_dir}/server.key" ]; then
-      mkdir -p "${cert_dir}"
+    CERT_DIR="${PROJECT_ROOT}/certs"
+    if [ ! -f "${CERT_DIR}/server.key" ]; then
+      mkdir -p "${CERT_DIR}"
       openssl req -x509 -newkey rsa:2048 \
-        -keyout "${cert_dir}/server.key" \
-        -out "${cert_dir}/server.crt" \
+        -keyout "${CERT_DIR}/server.key" \
+        -out "${CERT_DIR}/server.crt" \
         -days 365 -nodes \
         -subj "/CN=localhost" 2>/dev/null
       echo "Generated self-signed TLS certificate for testing."
@@ -142,24 +130,12 @@ function generate_tls_test_cert() {
     return 0
 }
 
-function check_build_connectivity() {
-    local url="https://github.com"
-    echo " Verifying connectivity from host -> ${url} (required for NixOS nixpkgs tarballs)..."
-    if ! curl -sf --connect-timeout 10 --max-time 10 "${url}" > /dev/null 2>&1; then
-        echo "ERROR: Cannot reach ${url}"
-        return 1
-    fi
-    echo " GitHub reachable."
-    return 0
-}
-
 cleanup() {
   docker compose down -v 2>/dev/null || true
   return 0
 }
 
 function build_services() {
-    OUTPUT_LOG="buildtime.test.log"
     echo "removing file if exists: ${OUTPUT_LOG}"
     rm "${OUTPUT_LOG}" || true
     echo "building docker services, forwarding to: ${OUTPUT_LOG}"
