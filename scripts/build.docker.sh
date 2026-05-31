@@ -16,6 +16,28 @@ set -a
 source "${ENV_FILE}"
 set +a
 
+# ── Step 1: Build binary and closure ──────────────────────────────────────────
+# Mount the host /nix into the builder container so nix develop finds all
+# packages already present — no downloads from cache.nixos.org.
+# Artifacts land in the project tree via the /app bind mount:
+#   out/kds-closure.tar.gz   — runtime Nix closure
+#   out/nix-cache-fetches.log — fetches that hit cache.nixos.org (should be empty)
+#   build/kds/kds            — compiled binary
+printf "Building kds with host Nix store mounted...\n"
+docker run --rm \
+    -v /nix:/nix \
+    -v "${PROJ_ROOT}:/app" \
+    -w /app \
+    nixos/nix:2.34.7 \
+    bash -c 'bash ./scripts/configure-nix-host.sh && bash ./scripts/create-closure.sh'
+
+# Copy binary into out/ — build/ is excluded from the Docker build context
+# (.dockerignore), so we stage the binary alongside the closure tarball.
+mkdir -p "${PROJ_ROOT}/out"
+cp "${PROJ_ROOT}/build/kds/kds" "${PROJ_ROOT}/out/kds"
+
+# ── Step 2: Package into minimal runtime image ────────────────────────────────
+printf "Packaging runtime Docker image...\n"
 docker build "${PROJ_ROOT}" \
     --build-arg POSTGRES_USER="${POSTGRES_USER}" \
     --build-arg POSTGRES_DB="${POSTGRES_DB}" \
@@ -27,11 +49,3 @@ docker build "${PROJ_ROOT}" \
     --build-arg KD_PORT="${KD_PORT:-8080}" \
     --tag kds:latest \
     "$@"
-
-# Extract the nix cache fetch log from the builder stage onto the host.
-# --target logs hits the FROM scratch stage; BuildKit reuses the cached builder
-# layer so create-closure.sh is not re-executed.
-mkdir -p "${PROJ_ROOT}/out"
-docker build "${PROJ_ROOT}" \
-    --target logs \
-    --output "type=local,dest=${PROJ_ROOT}/out"
