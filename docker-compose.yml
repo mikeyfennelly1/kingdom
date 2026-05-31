@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    image: kds:latest
+    image: mikeyfennelly/kds:latest
     container_name: kingdom-app
     restart: unless-stopped
     ports:
