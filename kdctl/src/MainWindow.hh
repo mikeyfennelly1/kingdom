@@ -45,6 +45,8 @@ class MainWindow : public QMainWindow {
   void onNewConversation();
   void onSend();
   void onForward();
+  void onDelete();
+  void onRevoke();
   void onMessageSelectionChanged();
   void onLogout();
   void pollMessages();
@@ -100,6 +102,8 @@ class MainWindow : public QMainWindow {
   QLineEdit* messageInput_;
   QPushButton* sendButton_;
   QPushButton* forwardButton_;
+  QPushButton* deleteButton_;
+  QPushButton* revokeButton_;
   QLabel* conversationLabel_;
 
   // Polling
