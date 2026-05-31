@@ -1,31 +1,24 @@
 # Stage 1: Build
-FROM nixos/nix:2.31.5 AS builder
+# Runs inside a Nix-enabled image. Delegates entirely to the project build
+# scripts — no inline cmake/nix commands here.
+FROM nixos/nix:2.34.7 AS builder
 
 WORKDIR /app
-
-COPY config/build.shell.nix ./config/
 COPY . .
 
-RUN --mount=type=cache,target=/nix/store,sharing=locked \
-    --mount=type=cache,target=/root/.cache/nix \
-    nix-shell ./config/build.shell.nix --run \
-      "cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release && cmake --build build"
+# Configure nix.conf (enables flakes, disables sandbox for Docker).
+RUN bash ./scripts/configure-nix-host.sh
 
-# Collect the full runtime closure for kds.
-# The binary's RPATH and PT_INTERP both reference absolute /nix/store/... paths,
-# so those exact paths must exist in the runtime image.
-RUN ldd /app/build/kds/kds \
-      | awk '$2=="=>" && $3~/^\/nix\/store/ { n=split($3,a,"/"); print "/nix/store/"a[4] }' \
-      | sort -u \
-      | xargs nix-store --query --requisites \
-      | sort -u \
-      | tar -czPf /tmp/kds-closure.tar.gz --files-from=-
+# Build the binary and assemble the nix store closure.
+# create-closure.sh calls build.sh internally, then tars the closure to
+# out/kds-closure.tar.gz.
+RUN bash ./scripts/create-closure.sh
 
 # Stage 2: Minimal Alpine runtime
 FROM alpine:3.20
 
-# Unpack the nix closure at the same /nix/store/... paths the binary references
-COPY --from=builder /tmp/kds-closure.tar.gz /tmp/
+# Unpack the nix closure at the same /nix/store/... paths the binary references.
+COPY --from=builder /app/out/kds-closure.tar.gz /tmp/
 RUN tar -xzPf /tmp/kds-closure.tar.gz && rm /tmp/kds-closure.tar.gz
 
 COPY --from=builder /app/build/kds/kds /app/kds

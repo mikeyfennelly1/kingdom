@@ -48,13 +48,21 @@ function build_project() {
     # Default to Release build for optimized performance unless specified otherwise
     BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
 
-    # Log level controls cmake configure verbosity.
-    # Set CMAKE_LOG_LEVEL=VERBOSE (or TRACE) to see all find_package resolutions.
-    # Set CMAKE_DEBUG_FIND_PKG=spdlog (comma-separated) to trace specific packages.
-    # Example: CMAKE_LOG_LEVEL=VERBOSE CMAKE_DEBUG_FIND_PKG=spdlog ./scripts/build.sh
+    # ── cmake diagnostic knobs ───────────────────────────────────────────────
+    # CMAKE_LOG_LEVEL=VERBOSE|DEBUG|TRACE   verbose configure messages
+    # CMAKE_DEBUG_FIND=1                    log every find_package/find_library call
+    # CMAKE_DEBUG_FIND_PKG=spdlog,openssl   log find calls for specific packages only
+    #
+    # Examples:
+    #   CMAKE_DEBUG_FIND=1 ./scripts/build.sh 2>&1 | tee find.log
+    #   CMAKE_LOG_LEVEL=VERBOSE CMAKE_DEBUG_FIND_PKG=spdlog ./scripts/build.sh
+    # ────────────────────────────────────────────────────────────────────────
     CMAKE_LOG_LEVEL=${CMAKE_LOG_LEVEL:-STATUS}
     CMAKE_EXTRA_FLAGS=()
-    if [[ -n "${CMAKE_DEBUG_FIND_PKG:-}" ]]; then
+    if [[ -n "${CMAKE_DEBUG_FIND:-}" ]]; then
+        CMAKE_EXTRA_FLAGS+=(--debug-find)
+    elif [[ -n "${CMAKE_DEBUG_FIND_PKG:-}" ]]; then
+        # --debug-find-pkg is ignored when --debug-find is already set
         CMAKE_EXTRA_FLAGS+=(--debug-find-pkg="${CMAKE_DEBUG_FIND_PKG}")
     fi
 
