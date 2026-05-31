@@ -4,10 +4,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="${SCRIPT_DIR}/.."
+UNPACK_LOCATION="${PROJ_ROOT}/unpacked-store"
 
 main() {
-    local UNPACK_LOCATION="${PROJ_ROOT}/unpacked-store"
-
     if [[ $# -eq 0 ]]; then
         printf "ERROR: usage: unpack-store.sh <tarball> [<tarball> ...]\n" >&2
         exit 1
@@ -24,6 +23,11 @@ main() {
     done
 
     printf "DEBUG: unpacked-store entry count: $(ls "${UNPACK_LOCATION}" | wc -l)\n" >&2
+    populate_nix_store
+}
+
+function populate_nix_store() {
+    mv "${UNPACK_LOCATION}/nix/store" "/nix/store"
 }
 
 function store_must_exist() {

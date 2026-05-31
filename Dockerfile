@@ -16,7 +16,6 @@ WORKDIR /app
 COPY . .
 
 RUN bash /app/scripts/unpack-store.sh /app/out/kds-closure.tar.gz /app/out/kds-toolchain.tar.gz
-# RUN bash -o pipefail -c 'bash /app/scripts/move-store.sh 2>&1'
 
 
 ENTRYPOINT ["/bin/bash"]

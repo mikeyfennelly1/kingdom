@@ -19,21 +19,6 @@ main() {
     pushd "${PROJ_ROOT}"
     trap popd EXIT
 
-    local closure_path="${PROJ_ROOT}/out"
-    printf "DEBUG: checking for existing closure at ${closure_path}\n" >&2
-    stat "${closure_path}"
-    if [[ $? -ne 0 ]]; then
-        printf "DEBUG: no closure found, running closure creation script\n" >&2
-        bash -c "${SCRIPT_DIR}/create-closure.sh"
-        if [[ $? -ne 0 ]]; then
-            printf "ERROR: create-closure script failed\n" >&2
-            exit 1
-        fi
-        printf "DEBUG: closure creation script executed successfully\n" >&2
-    else 
-        printf "DEBUG: closure found at ${closure_path}\n" >&2
-    fi
-
     load_env
     if [[ $? -ne 0 ]]; then
         printf "ERROR: failed to load environment\n" >&2

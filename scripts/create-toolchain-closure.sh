@@ -36,18 +36,19 @@ function assemble_toolchain_closure() {
 
     printf "DEBUG: printing dev env for devShells.kds\n" >&2
     local env_paths
-    env_paths=$(nix develop "${PROJ_ROOT}#kds" --print-dev-env 2>"${fetch_log_tmp}" \
+    env_paths=$(nix print-dev-env "${PROJ_ROOT}#kds" \
+        2> >(tee "${fetch_log_tmp}" >&2) \
         | grep -o '/nix/store/[^[:space:]:\"'"'"']*' \
         | sort -u)
-    cat "${fetch_log_tmp}" >&2
     grep 'cache\.nixos\.org' "${fetch_log_tmp}" >> "${fetch_log}" || true
 
     printf "DEBUG: direct dev env store paths:\n%s\n" "${env_paths}" >&2
 
     printf "DEBUG: computing full requisite closure via nix-store\n" >&2
     local closure
-    closure=$(echo "${env_paths}" | xargs nix-store --query --requisites 2>"${fetch_log_tmp}" | sort -u)
-    cat "${fetch_log_tmp}" >&2
+    closure=$(echo "${env_paths}" | xargs nix-store --query --requisites \
+        2> >(tee "${fetch_log_tmp}" >&2) \
+        | sort -u)
     grep 'cache\.nixos\.org' "${fetch_log_tmp}" >> "${fetch_log}" || true
     rm -f "${fetch_log_tmp}"
 
