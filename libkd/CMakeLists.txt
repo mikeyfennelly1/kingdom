@@ -1,4 +1,9 @@
-add_library(kd SHARED
+# Static linking: libkd is only ever consumed by kds and kdctl within the same
+# image — no process-sharing benefit to a .so. Shared linking caused
+# libkd.so.1 to be missing at runtime because the Docker build only copies
+# the kds binary and the Nix store closure (project-local .so files are not
+# captured by the ldd/closure script and are never explicitly staged).
+add_library(kd STATIC
     src/Conversation.cc
     src/Message.cc
     src/MessageStore.cc
@@ -30,6 +35,4 @@ target_include_directories(kd
 
 set_target_properties(kd PROPERTIES
     OUTPUT_NAME "kd"
-    VERSION ${PROJECT_VERSION}
-    SOVERSION 1
 )

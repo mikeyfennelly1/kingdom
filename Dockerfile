@@ -17,6 +17,8 @@ RUN bash ./scripts/create-closure.sh
 # Stage 2: Minimal Alpine runtime
 FROM alpine:3.20
 
+WORKDIR /app
+
 # Unpack the nix closure at the same /nix/store/... paths the binary references.
 # GNU tar is required: BusyBox tar does not support -P (preserve absolute paths).
 COPY --from=builder /app/out/kds-closure.tar.gz /tmp/
