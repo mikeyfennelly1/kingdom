@@ -1,45 +1,48 @@
-{ pkgs ? import <nixpkgs> {} }:
+{
+  description = "Kingdom Rigorous Build Shell";
 
-let
-  # Revisions sourced from devbox.lock to match versions rigorously
-  # GCC 15.2.0 revision
-  pkgs_gcc = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/01fbdeef22b76df85ea168fbfe1bfd9e63681b30.tar.gz") {};
-  
-  # CMake 4.1.2 and Ninja 1.13.1 revision
-  pkgs_build = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/ee09932cedcef15aaf476f9343d1dea2cb77e261.tar.gz") {};
-  
-  # OpenSSL, libsodium, libpqxx, and pkg-config revision
-  pkgs_libs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/d233902339c02a9c334e7e593de68855ad26c4cb.tar.gz") {};
-in
-pkgs.mkShell {
-  # nativeBuildInputs contains tools required for the build process
-  nativeBuildInputs = [
-    pkgs_gcc.gcc
-    pkgs_build.cmake
-    pkgs_build.ninja
-    pkgs_libs.pkg-config
-  ];
+  inputs = {
+    # GCC 15.2.0
+    nixpkgs-gcc.url = "github:NixOS/nixpkgs/01fbdeef22b76df85ea168fbfe1bfd9e63681b30";
 
-  # buildInputs contains the libraries the project links against
-  buildInputs = [
-    pkgs_libs.openssl
-    pkgs_libs.libsodium
-    pkgs_libs.libpqxx
-    pkgs_libs.qt6.qtbase
-    pkgs_libs.qt6.wrapQtAppsHook
-  ];
+    # CMake 4.1.2 and Ninja 1.13.1
+    nixpkgs-build.url = "github:NixOS/nixpkgs/ee09932cedcef15aaf476f9343d1dea2cb77e261";
 
-  shellHook = ''
-    export CXX=g++
-    export CC=gcc
-    
-    echo "---------------------------------------------------------"
-    echo " Kingdom Rigorous Build Shell "
-    echo "---------------------------------------------------------"
-    echo " GCC:     $(g++ --version | head -n 1)"
-    echo " CMake:   $(cmake --version | head -n 1)"
-    echo " Ninja:   $(ninja --version | head -n 1)"
-    echo " OpenSSL: $(openssl version)"
-    echo "---------------------------------------------------------"
-  '';
+    # OpenSSL, libsodium, libpqxx, pkg-config, Qt6
+    nixpkgs-libs.url = "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb";
+
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+
+  outputs = { self, nixpkgs-gcc, nixpkgs-build, nixpkgs-libs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs-gcc   = nixpkgs-gcc.legacyPackages.${system};
+        pkgs-build = nixpkgs-build.legacyPackages.${system};
+        pkgs-libs  = nixpkgs-libs.legacyPackages.${system};
+      in {
+      devShells.default = pkgs-libs.mkShell {
+        # Tools required for the build process
+        nativeBuildInputs = [
+          pkgs-gcc.gcc
+          pkgs-build.cmake
+          pkgs-build.ninja
+          pkgs-libs.pkg-config
+        ];
+
+        # Libraries the project links against
+        buildInputs = [
+          pkgs-libs.openssl
+          pkgs-libs.libsodium
+          pkgs-libs.libpqxx
+          pkgs-libs.qt6.qtbase
+          pkgs-libs.qt6.wrapQtAppsHook
+        ];
+
+        shellHook = ''
+          export CXX=g++
+          export CC=gcc
+        '';
+      };
+    });
 }
