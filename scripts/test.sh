@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}/.."
 
 main() {
     # parse flags
@@ -33,7 +34,8 @@ main() {
         exit 1
     fi
 
-    orient_at_script
+    pushd "${PROJECT_ROOT}"
+     trap 'popd > /dev/null' EXIT INT TERM ERR
 
     echo "--- Checking connectivity required for build ---"
     check_build_connectivity
