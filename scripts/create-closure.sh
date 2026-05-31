@@ -7,13 +7,19 @@ PROJ_ROOT="${SCRIPT_DIR}/.."
 main() {
     local build_dir="${PROJ_ROOT}/build/kds/kds"
     local out="${PROJ_ROOT}/out/kds-closure.tar.gz"
+    local fetch_log="${PROJ_ROOT}/out/nix-cache-fetches.log"
+
+    mkdir -p "${PROJ_ROOT}/out"
+    : > "${fetch_log}"
+
     pushd "${PROJ_ROOT}"
 
     printf "DEBUG: cleaning build directory\n" >&2
     rm -rf "${build_dir}"
 
     printf "DEBUG: building artifact in nix...\n" >&2
-    nix develop .#kds --command bash ./scripts/build.sh
+    nix develop .#kds --command bash ./scripts/build.sh \
+        2> >(tee >(grep -F 'from https://cache.nixos.org' >> "${fetch_log}") >&2)
 
     mkdir -p "$(dirname "${out}")"
     printf "DEBUG: assembling nix store closure...\n" >&2
@@ -30,12 +36,14 @@ main() {
             | xargs nix-store --query --requisites \
             | sort -u \
             | tar -czPf "${_KD_OUT}" --files-from=-
-    '
+    ' 2> >(tee >(grep -F 'from https://cache.nixos.org' >> "${fetch_log}") >&2)
 
     if [[ $? -ne 0 ]]; then
         printf "ERROR: failed to construct closure artifact\n" >&2
         exit 1
     fi
+
+    printf "INFO: nix cache fetch log written to %s\n" "${fetch_log}" >&2
     popd
     return 0
 }
