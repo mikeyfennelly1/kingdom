@@ -12,6 +12,9 @@
 
 namespace {
 
+constexpr int kMessageReadTimeoutSec = 120;
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 httplib::Client makeClient(const std::string& baseUrl, const std::string& caCertPath) {
   httplib::Client cli(baseUrl);
   cli.enable_server_certificate_verification(true);
@@ -22,7 +25,7 @@ httplib::Client makeClient(const std::string& baseUrl, const std::string& caCert
 }
 
 std::string connectError(const std::string& baseUrl, const std::string& caCertPath) {
-  if (caCertPath.empty() && baseUrl.rfind("https://", 0) == 0) {
+  if (caCertPath.empty() && baseUrl.starts_with("https://")) {
     return "TLS certificate verification failed — no CA certificate provided. Use --ca-cert to "
            "specify one.";
   }
@@ -31,8 +34,9 @@ std::string connectError(const std::string& baseUrl, const std::string& caCertPa
 
 httplib::Headers authHeaders(const std::string& authToken) {
   httplib::Headers headers;
-  if (!authToken.empty())
+  if (!authToken.empty()) {
     headers.emplace("Authorization", "Bearer " + authToken);
+  }
   return headers;
 }
 
@@ -121,32 +125,31 @@ std::string pinPublicKey(uint64_t userId, const std::string& publicKey) {
 
 namespace kd {
 
-Client::Client(const std::string& baseUrl, std::string caCertPath)
-    : baseUrl_(baseUrl), caCertPath_(std::move(caCertPath)) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+Client::Client(std::string baseUrl, std::string caCertPath)
+    : baseUrl_(std::move(baseUrl)), caCertPath_(std::move(caCertPath)) {
 }
 
 nlohmann::json Client::getHealth() {
   auto cli = makeClient(baseUrl_, caCertPath_);
   if (auto res = cli.Get("/health")) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       return nlohmann::json::parse(res->body);
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
-  } else {
-    throw std::runtime_error(connectError(baseUrl_, caCertPath_));
   }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::getInfo() {
   auto cli = makeClient(baseUrl_, caCertPath_);
   if (auto res = cli.Get("/")) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       return nlohmann::json::parse(res->body);
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
-  } else {
-    throw std::runtime_error(connectError(baseUrl_, caCertPath_));
   }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::getConversations(uint64_t userId) {
@@ -154,21 +157,21 @@ nlohmann::json Client::getConversations(uint64_t userId) {
   std::string path = "/users/" + std::to_string(userId) + "/conversations";
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Get(path, headers)) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       return nlohmann::json::parse(res->body);
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
-  } else {
-    throw std::runtime_error(connectError(baseUrl_, caCertPath_));
   }
+  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
 nlohmann::json Client::getUsers() {
   auto cli = makeClient(baseUrl_, caCertPath_);
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Get("/users", headers)) {
-    if (res->status == 200)
+    if (res->status == httplib::OK_200) {
       return nlohmann::json::parse(res->body);
+    }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
@@ -186,7 +189,7 @@ nlohmann::json Client::signup(const std::string& username, const std::string& pa
                          {"password", password},
                          {"publicKey", keyMaterial.publicKeyBundle}};
   if (auto res = cli.Post("/signup", body.dump(), "application/json")) {
-    if (res->status == 200 || res->status == 201) {
+    if (res->status == httplib::OK_200 || res->status == httplib::Created_201) {
       auto response = nlohmann::json::parse(res->body);
       if (response.contains("token")) {
         authToken_ = response["token"];
@@ -207,7 +210,7 @@ nlohmann::json Client::login(const std::string& username, const std::string& pas
   auto cli = makeClient(baseUrl_, caCertPath_);
   nlohmann::json body = {{"username", username}, {"password", password}};
   if (auto res = cli.Post("/login", body.dump(), "application/json")) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       auto response = nlohmann::json::parse(res->body);
       if (response.contains("token")) {
         authToken_ = response["token"];
@@ -225,7 +228,7 @@ nlohmann::json Client::logout() {
   auto cli = makeClient(baseUrl_, caCertPath_);
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Post("/logout", headers, "{}", "application/json")) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       clearAuthToken();
       return nlohmann::json::parse(res->body);
     }
@@ -255,26 +258,12 @@ std::string Client::getPublicKey(uint64_t userId) {
   std::string path = "/users/" + std::to_string(userId) + "/public-key";
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Get(path, headers)) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       auto body = nlohmann::json::parse(res->body);
       if (!body.contains("publicKey") || !body["publicKey"].is_string()) {
         throw std::runtime_error("Server public-key response is missing publicKey");
       }
       return pinPublicKey(userId, body["publicKey"].get<std::string>());
-    }
-    throw std::runtime_error("Server returned status " + std::to_string(res->status));
-  }
-  throw std::runtime_error(connectError(baseUrl_, caCertPath_));
-}
-
-void Client::consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId) {
-  auto cli = makeClient(baseUrl_, caCertPath_);
-  std::string path = "/users/" + std::to_string(userId) + "/one-time-prekeys/" +
-                     std::to_string(preKeyId) + "/consume";
-  auto headers = authHeaders(authToken_);
-  if (auto res = cli.Post(path, headers, "", "application/json")) {
-    if (res->status == 200 || res->status == 204 || res->status == 404) {
-      return;
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
@@ -287,40 +276,45 @@ nlohmann::json Client::createConversation(const std::string& name,
   nlohmann::json body = {{"name", name}, {"participantIds", participantIds}};
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Post("/conversations", headers, body.dump(), "application/json")) {
-    if (res->status == 200 || res->status == 201)
+    if (res->status == httplib::OK_200 || res->status == httplib::Created_201) {
       return nlohmann::json::parse(res->body);
+    }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId,
                                    const std::string& payload) {
   auto cli = makeClient(baseUrl_, caCertPath_);
-  cli.set_read_timeout(120);
+  cli.set_read_timeout(kMessageReadTimeoutSec);
   std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
   nlohmann::json body = {{"senderId", senderId}, {"payload", payload}};
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Post(path, headers, body.dump(), "application/json")) {
-    if (res->status == 200 || res->status == 201)
+    if (res->status == httplib::OK_200 || res->status == httplib::Created_201) {
       return nlohmann::json::parse(res->body);
+    }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 nlohmann::json Client::sendMessage(uint64_t conversationId, uint64_t senderId, uint64_t recipientId,
                                    const std::string& payload) {
   auto cli = makeClient(baseUrl_, caCertPath_);
-  cli.set_read_timeout(120);
+  cli.set_read_timeout(kMessageReadTimeoutSec);
   std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
   nlohmann::json body = {{"senderId", senderId},
                          {"recipientId", recipientId},
                          {"payload", payload}};
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Post(path, headers, body.dump(), "application/json")) {
-    if (res->status == 200 || res->status == 201)
+    if (res->status == httplib::OK_200 || res->status == httplib::Created_201) {
       return nlohmann::json::parse(res->body);
+    }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));
@@ -332,7 +326,7 @@ nlohmann::json Client::deleteMessage(uint64_t conversationId, uint64_t messageId
       "/conversations/" + std::to_string(conversationId) + "/messages/" + std::to_string(messageId);
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Delete(path, headers)) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       return nlohmann::json::parse(res->body);
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
@@ -347,7 +341,7 @@ nlohmann::json Client::revokeMessageAccess(uint64_t conversationId, uint64_t mes
                      std::to_string(messageId) + "/access/" + std::to_string(targetUserId);
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Delete(path, headers)) {
-    if (res->status == 200) {
+    if (res->status == httplib::OK_200) {
       return nlohmann::json::parse(res->body);
     }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
@@ -360,8 +354,9 @@ nlohmann::json Client::getMessages(uint64_t conversationId) {
   std::string path = "/conversations/" + std::to_string(conversationId) + "/messages";
   auto headers = authHeaders(authToken_);
   if (auto res = cli.Get(path, headers)) {
-    if (res->status == 200)
+    if (res->status == httplib::OK_200) {
       return nlohmann::json::parse(res->body);
+    }
     throw std::runtime_error("Server returned status " + std::to_string(res->status));
   }
   throw std::runtime_error(connectError(baseUrl_, caCertPath_));

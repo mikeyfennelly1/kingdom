@@ -13,7 +13,10 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#include "../common/Constants.hh"
 
 namespace kd {
 
@@ -32,11 +35,11 @@ inline std::string base64UrlEncode(const unsigned char* data, size_t size) {
   }
   encoded.resize(static_cast<size_t>(encodedSize));
 
-  for (char& ch : encoded) {
-    if (ch == '+') {
-      ch = '-';
-    } else if (ch == '/') {
-      ch = '_';
+  for (char& chr : encoded) {
+    if (chr == '+') {
+      chr = '-';
+    } else if (chr == '/') {
+      chr = '_';
     }
   }
   while (!encoded.empty() && encoded.back() == '=') {
@@ -51,18 +54,18 @@ inline std::string base64UrlEncode(const std::string& data) {
 
 inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
   std::string padded = encoded;
-  for (char& ch : padded) {
-    if (ch == '-') {
-      ch = '+';
-    } else if (ch == '_') {
-      ch = '/';
+  for (char& chr : padded) {
+    if (chr == '-') {
+      chr = '+';
+    } else if (chr == '_') {
+      chr = '/';
     }
   }
   while (padded.size() % 4 != 0) {
     padded.push_back('=');
   }
 
-  std::vector<unsigned char> decoded((padded.size() / 4) * 3 + 3);
+  std::vector<unsigned char> decoded(((padded.size() / 4) * 3) + 3);
   const int decodedSize =
       EVP_DecodeBlock(decoded.data(), reinterpret_cast<const unsigned char*>(padded.data()),
                       static_cast<int>(padded.size()));
@@ -77,12 +80,15 @@ inline std::optional<std::string> base64UrlDecode(const std::string& encoded) {
   if (padded.size() > 1 && padded[padded.size() - 2] == '=') {
     ++padding;
   }
+  if (static_cast<size_t>(decodedSize) < padding) {
+    return std::nullopt;
+  }
   decoded.resize(static_cast<size_t>(decodedSize) - padding);
   return std::string(reinterpret_cast<const char*>(decoded.data()), decoded.size());
 }
 
 inline std::string signJwtInput(const std::string& signingInput, const std::string& secret) {
-  unsigned char digest[EVP_MAX_MD_SIZE]{};
+  unsigned char digest[EVP_MAX_MD_SIZE]{};  // NOLINT(modernize-avoid-c-arrays)
   unsigned int digestSize = 0;
   if (HMAC(EVP_sha256(), secret.data(), static_cast<int>(secret.size()),
            reinterpret_cast<const unsigned char*>(signingInput.data()), signingInput.size(), digest,
@@ -93,14 +99,15 @@ inline std::string signJwtInput(const std::string& signingInput, const std::stri
 }
 
 inline std::optional<std::string> bearerToken(const httplib::Request& req) {
-  const auto header = req.get_header_value("Authorization");
-  constexpr std::string_view prefix = "Bearer ";
-  if (header.size() <= prefix.size() || header.compare(0, prefix.size(), prefix) != 0) {
+  const auto header = req.get_header_value(http_headers::Authorization);
+  constexpr std::string_view prefix = jwt::BearerPrefix;
+  if (header.size() <= prefix.size() || !header.starts_with(prefix)) {
     return std::nullopt;
   }
   return header.substr(prefix.size());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token,
                                                         const std::string& secret) {
   const auto firstDot = token.find('.');
@@ -129,7 +136,8 @@ inline std::optional<nlohmann::json> verifiedJwtPayload(const std::string& token
 
   auto header = nlohmann::json::parse(*headerBody, nullptr, false);
   auto payload = nlohmann::json::parse(*payloadBody, nullptr, false);
-  if (header.is_discarded() || payload.is_discarded() || header.value("alg", "") != "HS256") {
+  if (header.is_discarded() || payload.is_discarded() ||
+      header.value("alg", "") != jwt::AlgorithmHs256) {
     return std::nullopt;
   }
   if (!payload.contains("exp") || payload["exp"].get<uint64_t>() < epochSeconds()) {

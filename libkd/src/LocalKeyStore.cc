@@ -48,6 +48,7 @@ std::string base64Encode(const std::array<unsigned char, N>& data) {
   return base64Encode(data.data(), data.size());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<unsigned char> base64Decode(const std::string& encoded, const std::string& fieldName) {
   std::vector<unsigned char> decoded(encoded.size(), 0);
   size_t decodedSize = 0;
@@ -119,7 +120,8 @@ std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> deriveKey
     throw std::runtime_error("Failed to create HKDF context");
   }
 
-  char digestName[] = "SHA256";
+  char digestName[] = "SHA256";  // NOLINT(modernize-avoid-c-arrays)
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   OSSL_PARAM params[] = {
       OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digestName, 0),
       OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, const_cast<unsigned char*>(secret),
@@ -147,8 +149,10 @@ std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_KEYBYTES> deriveKey
 }
 
 void appendUint64Le(std::vector<unsigned char>& out, uint64_t value) {
-  for (size_t i = 0; i < 8; ++i) {
-    out.push_back(static_cast<unsigned char>((value >> (i * 8)) & 0xff));
+  constexpr size_t kBitsPerByte = 8;
+  constexpr uint64_t kByteMask = 0xff;
+  for (size_t i = 0; i < sizeof(uint64_t); ++i) {
+    out.push_back(static_cast<unsigned char>((value >> (i * kBitsPerByte)) & kByteMask));
   }
 }
 
@@ -188,6 +192,7 @@ void verifySignedPreKeySignature(const nlohmann::json& bundle) {
   }
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 nlohmann::json parseJson(const std::string& text, const std::string& label) {
   auto parsed = nlohmann::json::parse(text, nullptr, false);
   if (parsed.is_discarded() || !parsed.is_object()) {
@@ -274,10 +279,10 @@ nlohmann::json associatedData(uint64_t conversationId, uint64_t senderId, uint64
 std::string sanitizedUsername(const std::string& username) {
   std::string value;
   value.reserve(username.size());
-  for (char ch : username) {
-    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
-        ch == '-' || ch == '_') {
-      value.push_back(ch);
+  for (char chr : username) {
+    if ((chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z') || (chr >= '0' && chr <= '9') ||
+        chr == '-' || chr == '_') {
+      value.push_back(chr);
     } else {
       value.push_back('_');
     }
@@ -285,9 +290,9 @@ std::string sanitizedUsername(const std::string& username) {
   return value.empty() ? "user" : value;
 }
 
-LocalPreKey makePreKey(uint64_t id) {
+LocalPreKey makePreKey(uint64_t preKeyId) {
   LocalPreKey preKey;
-  preKey.id = id;
+  preKey.id = preKeyId;
   std::array<unsigned char, crypto_box_PUBLICKEYBYTES> publicKey{};
   crypto_box_keypair(publicKey.data(), preKey.privateKey.data());
   preKey.publicKey = base64Encode(publicKey);
@@ -312,13 +317,14 @@ nlohmann::json encryptedPrivateMaterial(const LocalIdentityKey& identity) {
 }
 
 void eraseOneTimePreKey(LocalIdentityKey& identity, uint64_t preKeyId) {
-  auto it = std::find_if(identity.oneTimePreKeys.begin(), identity.oneTimePreKeys.end(),
-                         [preKeyId](const LocalPreKey& key) { return key.id == preKeyId; });
-  if (it == identity.oneTimePreKeys.end()) {
+  auto iter = std::ranges::find_if(identity.oneTimePreKeys, [preKeyId](const LocalPreKey& key) {
+    return key.id == preKeyId;
+  });
+  if (iter == identity.oneTimePreKeys.end()) {
     throw std::runtime_error("One-time prekey is missing or already used");
   }
-  sodium_memzero(it->privateKey.data(), it->privateKey.size());
-  identity.oneTimePreKeys.erase(it);
+  sodium_memzero(iter->privateKey.data(), iter->privateKey.size());
+  identity.oneTimePreKeys.erase(iter);
 
   if (!identity.keyFilePath.empty()) {
     auto path = std::filesystem::path(identity.keyFilePath);
@@ -327,8 +333,8 @@ void eraseOneTimePreKey(LocalIdentityKey& identity, uint64_t preKeyId) {
     if (!used.is_array()) {
       used = nlohmann::json::array();
     }
-    const bool alreadyRecorded = std::any_of(used.begin(), used.end(), [preKeyId](const auto& id) {
-      return id.template get<uint64_t>() == preKeyId;
+    const bool alreadyRecorded = std::ranges::any_of(used, [preKeyId](const auto& usedId) {
+      return usedId.template get<uint64_t>() == preKeyId;
     });
     if (!alreadyRecorded) {
       used.push_back(preKeyId);
@@ -339,6 +345,7 @@ void eraseOneTimePreKey(LocalIdentityKey& identity, uint64_t preKeyId) {
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& username,
                                                        const std::string& password) {
   ensureSodiumInitialized();
@@ -380,7 +387,7 @@ RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& userna
   std::vector<unsigned char> ciphertext(privateMaterial.size() +
                                         crypto_aead_xchacha20poly1305_ietf_ABYTES);
   unsigned long long ciphertextSize = 0;
-  const std::string associatedDataText = username;
+  const std::string& associatedDataText = username;
   crypto_aead_xchacha20poly1305_ietf_encrypt(
       ciphertext.data(), &ciphertextSize,
       reinterpret_cast<const unsigned char*>(privateMaterial.data()), privateMaterial.size(),
@@ -406,9 +413,10 @@ RegistrationKeyMaterial LocalKeyStore::createForSignup(const std::string& userna
                          {"usedOneTimePreKeyIds", nlohmann::json::array()}};
 
   writeJsonFile(keyPath, file);
-  return RegistrationKeyMaterial{bundle.dump(), keyPath.string()};
+  return RegistrationKeyMaterial{.publicKeyBundle = bundle.dump(), .keyFilePath = keyPath.string()};
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
                                              const std::string& password) {
   ensureSodiumInitialized();
@@ -451,7 +459,7 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
 
   std::vector<unsigned char> plaintext(ciphertext.size());
   unsigned long long plaintextSize = 0;
-  const std::string associatedDataText = username;
+  const std::string& associatedDataText = username;
   const auto decryptResult = crypto_aead_xchacha20poly1305_ietf_decrypt(
       plaintext.data(), &plaintextSize, nullptr, ciphertext.data(), ciphertext.size(),
       reinterpret_cast<const unsigned char*>(associatedDataText.data()), associatedDataText.size(),
@@ -485,18 +493,18 @@ LocalIdentityKey LocalKeyStore::loadForLogin(const std::string& username,
 
   std::vector<uint64_t> usedIds;
   if (file.contains("usedOneTimePreKeyIds") && file.at("usedOneTimePreKeyIds").is_array()) {
-    for (const auto& id : file.at("usedOneTimePreKeyIds")) {
-      usedIds.push_back(id.get<uint64_t>());
+    for (const auto& usedEntry : file.at("usedOneTimePreKeyIds")) {
+      usedIds.push_back(usedEntry.get<uint64_t>());
     }
   }
 
   for (const auto& preKeyJson : privateMaterial.at("oneTimePreKeys")) {
-    const auto id = preKeyJson.at("id").get<uint64_t>();
-    if (std::find(usedIds.begin(), usedIds.end(), id) != usedIds.end()) {
+    const auto preKeyId = preKeyJson.at("id").get<uint64_t>();
+    if (std::ranges::find(usedIds, preKeyId) != usedIds.end()) {
       continue;
     }
     LocalPreKey preKey;
-    preKey.id = id;
+    preKey.id = preKeyId;
     preKey.publicKey = preKeyJson.at("publicKey").get<std::string>();
     preKey.privateKey =
         base64DecodeArray<kPrivateKeySize>(preKeyJson.at("privateKey"), "oneTimePreKey.privateKey");
@@ -551,7 +559,7 @@ std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
   std::array<unsigned char, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES> nonce{};
   randombytes_buf(nonce.data(), nonce.size());
 
-  const auto ad =
+  const auto aad =
       associatedData(conversationId, senderId, recipientId, sender.publicKey, ephemeralPublicKey,
                      recipientIdentityPublicKey, signedPreKeyId, oneTimePreKeyId)
           .dump();
@@ -561,7 +569,7 @@ std::string LocalKeyStore::encryptMessage(const std::string& plaintext,
   if (crypto_aead_xchacha20poly1305_ietf_encrypt(
           ciphertext.data(), &ciphertextSize,
           reinterpret_cast<const unsigned char*>(plaintext.data()), plaintext.size(),
-          reinterpret_cast<const unsigned char*>(ad.data()), ad.size(), nullptr, nonce.data(),
+          reinterpret_cast<const unsigned char*>(aad.data()), aad.size(), nullptr, nonce.data(),
           messageKey.data()) != 0) {
     sodium_memzero(messageKey.data(), messageKey.size());
     throw std::runtime_error("Encryption failed");
@@ -612,14 +620,14 @@ std::string LocalKeyStore::decryptMessage(const std::string& payload, LocalIdent
   std::optional<LocalPreKey> oneTimePreKey;
   if (!payloadJson.at("oneTimePreKeyId").is_null()) {
     oneTimePreKeyId = payloadJson.at("oneTimePreKeyId").get<uint64_t>();
-    auto it = std::find_if(recipient.oneTimePreKeys.begin(), recipient.oneTimePreKeys.end(),
-                           [oneTimePreKeyId](const LocalPreKey& key) {
-                             return key.id == *oneTimePreKeyId;
-                           });
-    if (it == recipient.oneTimePreKeys.end()) {
+    auto iter =
+        std::ranges::find_if(recipient.oneTimePreKeys, [oneTimePreKeyId](const LocalPreKey& key) {
+          return key.id == *oneTimePreKeyId;
+        });
+    if (iter == recipient.oneTimePreKeys.end()) {
       throw std::runtime_error("One-time prekey is missing or already used");
     }
-    oneTimePreKey = *it;
+    oneTimePreKey = *iter;
   }
 
   std::vector<std::vector<unsigned char>> dhOutputs;
@@ -647,7 +655,7 @@ std::string LocalKeyStore::decryptMessage(const std::string& payload, LocalIdent
     throw std::runtime_error("Ciphertext too short");
   }
 
-  const auto ad =
+  const auto aad =
       associatedData(conversationId, senderId, recipientId, senderIdentityPublicKey,
                      senderEphemeralPublicKey, recipient.publicKey, signedPreKeyId, oneTimePreKeyId)
           .dump();
@@ -657,8 +665,8 @@ std::string LocalKeyStore::decryptMessage(const std::string& payload, LocalIdent
   const auto decryptResult =
       crypto_aead_xchacha20poly1305_ietf_decrypt(plaintext.data(), &plaintextSize, nullptr,
                                                  ciphertext.data(), ciphertext.size(),
-                                                 reinterpret_cast<const unsigned char*>(ad.data()),
-                                                 ad.size(), nonce.data(), messageKey.data());
+                                                 reinterpret_cast<const unsigned char*>(aad.data()),
+                                                 aad.size(), nonce.data(), messageKey.data());
   sodium_memzero(messageKey.data(), messageKey.size());
   if (decryptResult != 0) {
     throw std::runtime_error("Decryption failed");

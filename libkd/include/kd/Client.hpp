@@ -18,7 +18,8 @@ class Client {
    * @param caCertPath Path to the CA certificate for TLS verification. Required for
    *                   self-signed certs; leave empty to use system CAs.
    */
-  Client(const std::string& baseUrl, std::string caCertPath = "");
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+  Client(std::string baseUrl, std::string caCertPath = "");
 
   /**
    * @brief Check server health
@@ -51,7 +52,6 @@ class Client {
   void setSessionToken(const std::string& sessionToken);
   void clearSessionToken();
   std::string getPublicKey(uint64_t userId);
-  void consumeOneTimePreKey(uint64_t userId, uint64_t preKeyId);
 
   nlohmann::json createConversation(const std::string& name,
                                     const std::vector<uint64_t>& participantIds);

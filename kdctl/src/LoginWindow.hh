@@ -3,6 +3,7 @@
 #include <QDialog>
 #include <QString>
 #include <kd/LocalKeyStore.hpp>
+#include <kd/MessageStore.hpp>
 #include <optional>
 #include <string>
 
@@ -21,15 +22,17 @@ class LoginWindow : public QDialog {
     std::string username;
     std::string token;
     kd::LocalIdentityKey identityKey;
+    kd::MessageStore messageStore;
     std::string serverUrl;
   };
 
-  [[nodiscard]] std::optional<LoginResult> result() const { return result_; }
+  [[nodiscard]] std::optional<LoginResult> takeResult() { return std::move(result_); }
 
  private slots:
   void onLogin();
   void onSignup();
 
+  // NOLINTNEXTLINE(readability-redundant-access-specifiers)
  private:
   void performAuth(bool isSignup);
   void showError(const QString& msg);

@@ -19,7 +19,6 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
-class QTextEdit;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -30,7 +29,9 @@ class MainWindow : public QMainWindow {
     std::string username;
     std::string token;
     kd::LocalIdentityKey identityKey;
+    kd::MessageStore messageStore;
     std::string serverUrl;
+    std::string caCertPath;
   };
 
   explicit MainWindow(Session session, QWidget* parent = nullptr);
@@ -43,18 +44,40 @@ class MainWindow : public QMainWindow {
   void onConversationSelected(QListWidgetItem* item);
   void onNewConversation();
   void onSend();
+  void onForward();
+  void onMessageSelectionChanged();
   void onLogout();
   void pollMessages();
 
+  // NOLINTNEXTLINE(readability-redundant-access-specifiers)
  private:
+  struct DisplayedMessage {
+    kd::Message message;
+    std::string plaintext;
+    bool forwardable;
+  };
+
+  struct ForwardTarget {
+    uint64_t userId;
+    uint64_t conversationId;
+    std::string username;
+    std::string publicKey;
+  };
+
   void loadConversations();
   void loadMessages(uint64_t conversationId);
   void loadUserCache();
-  void appendMessageToView(const std::string& sender, const std::string& text,
-                           uint64_t timestamp);
-  std::string decryptOrPlaceholder(const kd::Message& msg, uint64_t recipientId);
-  QString formatTimestamp(uint64_t milliseconds);
-  std::string usernameFor(uint64_t userId) const;
+  void appendMessageToView(const kd::Message& message, const std::string& sender,
+                           const std::string& text, bool forwardable);
+  std::optional<std::string> decryptPlaintext(const kd::Message& msg, uint64_t recipientId);
+  std::optional<ForwardTarget> chooseForwardTarget();
+  [[nodiscard]] std::optional<uint64_t> findConversationWithUser(uint64_t userId) const;
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+  bool confirmRecipientIdentity(uint64_t userId, const std::string& username,
+                                const std::string& publicKey);
+  [[nodiscard]] static QString formatTimestamp(uint64_t milliseconds);
+  [[nodiscard]] static QString fingerprintForPublicKey(const std::string& publicKey);
+  [[nodiscard]] std::string usernameFor(uint64_t userId) const;
 
   // Session state
   Session session_;
@@ -64,6 +87,7 @@ class MainWindow : public QMainWindow {
   std::optional<uint64_t> activeConversationId_;
   std::optional<uint64_t> activeRecipientId_;
   std::map<uint64_t, std::string> userCache_;
+  std::vector<DisplayedMessage> visibleMessages_;
 
   // Left panel
   QListWidget* conversationList_;
@@ -72,9 +96,10 @@ class MainWindow : public QMainWindow {
   QPushButton* logoutButton_;
 
   // Right panel
-  QTextEdit* messageView_;
+  QListWidget* messageList_;
   QLineEdit* messageInput_;
   QPushButton* sendButton_;
+  QPushButton* forwardButton_;
   QLabel* conversationLabel_;
 
   // Polling

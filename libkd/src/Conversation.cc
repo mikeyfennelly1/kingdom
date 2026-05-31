@@ -5,7 +5,7 @@
 namespace kd {
 
 bool Conversation::hasParticipant(uint64_t userId) const {
-    return std::find(participantIds.begin(), participantIds.end(), userId) != participantIds.end();
+  return std::ranges::find(participantIds, userId) != participantIds.end();
 }
 
-}
+}  // namespace kd

@@ -11,7 +11,7 @@ if (!SEPOLIA_RPC_URL || !PRIVATE_KEY || !CONTRACT_ADDRESS) {
 
 // Minimal ABI — only the function we call
 const ABI = [
-  "function recordHash(uint256 conversationId, bytes32 hash) external",
+  "function recordHash(uint256 conversationId, uint256 msgId, bytes32 hash) external",
 ];
 
 const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
@@ -27,25 +27,25 @@ app.use(express.json());
  * Called by the kds server when a new message is added to a conversation.
  * Computes keccak256 of the ciphertext and records it on-chain.
  *
- * Body: { conversationId: number, ciphertext: string }
+ * Body: { conversationId: number, msgId: number, ciphertext: string }
  * Response: { txHash: string }
  */
 app.post("/record", async (req, res) => {
-  const { conversationId, ciphertext } = req.body;
+  const { conversationId, msgId, ciphertext } = req.body;
 
-  if (conversationId === undefined || !ciphertext) {
-    return res.status(400).json({ error: "conversationId and ciphertext are required" });
+  if (conversationId === undefined || msgId === undefined || !ciphertext) {
+    return res.status(400).json({ error: "conversationId, msgId and ciphertext are required" });
   }
 
   const hash = ethers.keccak256(ethers.toUtf8Bytes(ciphertext));
 
   try {
-    const tx = await contract.recordHash(conversationId, hash);
+    const tx = await contract.recordHash(conversationId, msgId, hash);
     // Respond immediately with the tx hash — do not block on mining confirmation.
     res.json({ txHash: tx.hash });
     // Confirm mining in the background.
     tx.wait()
-      .then(() => console.log(`Confirmed on-chain: conversation ${conversationId} hash ${hash} (tx: ${tx.hash})`))
+      .then(() => console.log(`Confirmed on-chain: conversation ${conversationId} msg ${msgId} hash ${hash} (tx: ${tx.hash})`))
       .catch((err) => console.error(`Mining failed for tx ${tx.hash}:`, err.message));
   } catch (err) {
     console.error(`Failed to record hash for conversation ${conversationId}:`, err.message);

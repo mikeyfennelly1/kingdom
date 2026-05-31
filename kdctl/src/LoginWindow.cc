@@ -1,11 +1,14 @@
 #include "LoginWindow.hh"
 
+#include <sodium.h>
+
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <cctype>
 #include <cstdlib>
 #include <exception>
 #include <kd/Client.hpp>
@@ -55,15 +58,41 @@ static const char* kSecondaryButtonStyle =
     "QPushButton:pressed { background-color: #dbeafe; }"
     "QPushButton:disabled { color: #93c5fd; border-color: #93c5fd; }";
 
+static constexpr int kMinPasswordLen = 12;
+static constexpr int kMaxPasswordLen = 72;
+static constexpr int kLoginWindowWidth = 420;
+static constexpr int kLogoSize = 56;
+static constexpr int kCardMargin = 28;
+static constexpr int kRootMargin = 32;
+static constexpr int kRootSpacing = 16;
+static constexpr int kRootSpacer = 8;
+static constexpr int kCardSpacing = 12;
+
+static bool isValidSignupPassword(const std::string& password) {
+  if (password.size() < static_cast<std::size_t>(kMinPasswordLen) ||
+      password.size() > static_cast<std::size_t>(kMaxPasswordLen)) {
+    return false;
+  }
+
+  bool hasUppercase = false;
+  bool hasNumber = false;
+  for (unsigned char chr : password) {
+    hasUppercase = hasUppercase || std::isupper(chr) != 0;
+    hasNumber = hasNumber || std::isdigit(chr) != 0;
+  }
+
+  return hasUppercase && hasNumber;
+}
+
 LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
   setWindowTitle("Kingdom");
-  setFixedWidth(420);
+  setFixedWidth(kLoginWindowWidth);
   setStyleSheet("background-color: #f8fafc;");
 
   // ---- Header ----
   auto* logo = new QLabel("K", this);
   logo->setAlignment(Qt::AlignCenter);
-  logo->setFixedSize(56, 56);
+  logo->setFixedSize(kLogoSize, kLogoSize);
   logo->setStyleSheet(
       "background-color: #2563eb;"
       "color: white;"
@@ -116,8 +145,8 @@ LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
   errorLabel_->hide();
 
   auto* cardLayout = new QVBoxLayout(card);
-  cardLayout->setContentsMargins(28, 28, 28, 28);
-  cardLayout->setSpacing(12);
+  cardLayout->setContentsMargins(kCardMargin, kCardMargin, kCardMargin, kCardMargin);
+  cardLayout->setSpacing(kCardSpacing);
   cardLayout->addWidget(serverUrlEdit_);
   cardLayout->addWidget(usernameEdit_);
   cardLayout->addWidget(passwordEdit_);
@@ -128,12 +157,12 @@ LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
 
   // ---- Root layout ----
   auto* root = new QVBoxLayout(this);
-  root->setContentsMargins(32, 32, 32, 32);
-  root->setSpacing(16);
+  root->setContentsMargins(kRootMargin, kRootMargin, kRootMargin, kRootMargin);
+  root->setSpacing(kRootSpacing);
   root->addWidget(logo, 0, Qt::AlignHCenter);
   root->addWidget(title);
   root->addWidget(subtitle);
-  root->addSpacing(8);
+  root->addSpacing(kRootSpacer);
   root->addWidget(card);
 
   connect(loginButton_, &QPushButton::clicked, this, &LoginWindow::onLogin);
@@ -146,16 +175,20 @@ void LoginWindow::showError(const QString& msg) {
   errorLabel_->show();
 }
 
-void LoginWindow::onLogin() { performAuth(false); }
+void LoginWindow::onLogin() {
+  performAuth(false);
+}
 
-void LoginWindow::onSignup() { performAuth(true); }
+void LoginWindow::onSignup() {
+  performAuth(true);
+}
 
 void LoginWindow::performAuth(bool isSignup) {
   errorLabel_->hide();
 
   const std::string serverUrl{serverUrlEdit_->text().trimmed().toUtf8().constData()};
   const std::string username{usernameEdit_->text().trimmed().toUtf8().constData()};
-  const std::string password{passwordEdit_->text().toUtf8().constData()};
+  std::string password{passwordEdit_->text().toUtf8().constData()};
 
   if (serverUrl.empty()) {
     showError("Server URL is required.");
@@ -167,6 +200,12 @@ void LoginWindow::performAuth(bool isSignup) {
   }
   if (password.empty()) {
     showError("Password is required.");
+    return;
+  }
+  if (isSignup && !isValidSignupPassword(password)) {
+    showError(
+        "Password must be 12-72 characters and include at least one uppercase letter and one "
+        "number.");
     return;
   }
 
@@ -198,18 +237,24 @@ void LoginWindow::performAuth(bool isSignup) {
     client.setAuthToken(token);
 
     kd::LocalIdentityKey identityKey = kd::LocalKeyStore::loadForLogin(username, password);
+    kd::MessageStore messageStore = kd::MessageStore::encryptedForUser(username, password);
+    sodium_memzero(password.data(), password.size());
 
     LoginResult res;
     res.userId = userJson["id"].get<uint64_t>();
     res.username = userJson["username"].get<std::string>();
     res.token = token;
     res.identityKey = std::move(identityKey);
+    res.messageStore = std::move(messageStore);
     res.serverUrl = serverUrl;
 
     result_ = std::move(res);
     accept();
 
   } catch (const std::exception& e) {
+    if (!password.empty()) {
+      sodium_memzero(password.data(), password.size());
+    }
     showError(QString::fromUtf8(e.what()));
     loginButton_->setEnabled(true);
     signupButton_->setEnabled(true);
