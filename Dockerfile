@@ -10,14 +10,14 @@ RUN apk add --no-cache bash curl tar xz && \
 ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
 
 WORKDIR /app
-COPY . .
 
 # Unpack the nix closure at the same /nix/store/... paths the binary references.
-# GNU tar is required: BusyBox tar does not support -P (preserve absolute paths).
-COPY scripts/unpack-store.sh /app/unpack-store.sh
-COPY scripts/unpack-closure.sh /app/unpack-closure.sh
-RUN --mount=type=bind,source=out,target=/mnt/out \
-    bash -o pipefail -c 'bash /app/unpack-store.sh 2>&1 | tee /app/unpack-store.log'
+# GNU tar is required: BusyBox tar does not support -P (preserve absolute paths)
+COPY ./out/kds-closure.tar.gz /app/out/kds-closure.tar.gz
+RUN bash -o pipefail -c 'bash /app/scripts/unpack-store.sh 2>&1 | tee /app/unpack-store.log'
+
+COPY ./scripts/build.sh ./scripts/build.sh
+
 
 RUN nix develop .#kds --command bash ./scripts/build.sh
 
