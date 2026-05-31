@@ -299,9 +299,11 @@ std::string MainWindow::usernameFor(uint64_t userId) const {
 
 void MainWindow::loadConversations() {
   try {
+    const auto selectedConversationId = activeConversationId_;
     auto json = client_->getConversations(session_.userId);
     conversations_.clear();
     conversationList_->clear();
+    QListWidgetItem* selectedItem = nullptr;
 
     for (const auto& item : json) {
       auto conv = item.get<kd::Conversation>();
@@ -309,6 +311,23 @@ void MainWindow::loadConversations() {
 
       auto* listItem = new QListWidgetItem(QString::fromUtf8(conv.name.c_str()), conversationList_);
       listItem->setData(Qt::UserRole, static_cast<qulonglong>(conv.id));
+      if (selectedConversationId.has_value() && conv.id == *selectedConversationId) {
+        selectedItem = listItem;
+      }
+    }
+
+    if (selectedConversationId.has_value()) {
+      if (selectedItem != nullptr) {
+        conversationList_->setCurrentItem(selectedItem);
+      } else {
+        activeConversationId_ = std::nullopt;
+        activeRecipientId_ = std::nullopt;
+        conversationLabel_->setText("Select a conversation");
+        messageList_->clear();
+        messageInput_->setEnabled(false);
+        sendButton_->setEnabled(false);
+        forwardButton_->setEnabled(false);
+      }
     }
   } catch (const std::exception& e) {
     spdlog::warn("Failed to load conversations: {}", e.what());
@@ -809,6 +828,7 @@ void MainWindow::onLogout() {
 }
 
 void MainWindow::pollMessages() {
+  loadConversations();
   if (!activeConversationId_.has_value()) {
     return;
   }
