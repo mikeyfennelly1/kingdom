@@ -205,7 +205,7 @@ function wait_for_health() {
 
 function install_test_dependencies() {
     cd "${SCRIPT_DIR}/../tests"
-    npm install --prefer-offline --silent
+    npm ci
     return 0
 }
 
