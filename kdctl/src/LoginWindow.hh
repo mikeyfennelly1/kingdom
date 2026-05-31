@@ -24,6 +24,7 @@ class LoginWindow : public QDialog {
     kd::LocalIdentityKey identityKey;
     kd::MessageStore messageStore;
     std::string serverUrl;
+    std::string caCertPath;
   };
 
   [[nodiscard]] std::optional<LoginResult> takeResult() { return std::move(result_); }

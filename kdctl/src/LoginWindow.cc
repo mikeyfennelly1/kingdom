@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <kd/Client.hpp>
 #include <kd/LocalKeyStore.hpp>
 #include <nlohmann/json.hpp>
@@ -71,6 +72,24 @@ static bool isValidSignupPassword(const std::string& password) {
   }
 
   return hasUppercase && hasNumber;
+}
+
+static bool isLocalHttpsUrl(const std::string& serverUrl) {
+  return serverUrl.rfind("https://localhost", 0) == 0 ||
+         serverUrl.rfind("https://127.0.0.1", 0) == 0;
+}
+
+static std::string resolveCaCertPath(const std::string& serverUrl) {
+  const char* caCertEnv = std::getenv("KD_CA_CERT");
+  if (caCertEnv != nullptr && std::string(caCertEnv).size() > 0) {
+    return caCertEnv;
+  }
+
+  if (isLocalHttpsUrl(serverUrl) && std::filesystem::exists("certs/server.crt")) {
+    return "certs/server.crt";
+  }
+
+  return "";
 }
 
 LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
@@ -203,8 +222,7 @@ void LoginWindow::performAuth(bool isSignup) {
   loginButton_->setText(isSignup ? "Signing up..." : "Logging in...");
 
   try {
-    const char* caCertEnv = std::getenv("KD_CA_CERT");
-    std::string caCertPath = (caCertEnv != nullptr) ? caCertEnv : "";
+    std::string caCertPath = resolveCaCertPath(serverUrl);
     kd::Client client(serverUrl, caCertPath);
 
     nlohmann::json userJson;
@@ -236,6 +254,7 @@ void LoginWindow::performAuth(bool isSignup) {
     res.identityKey = std::move(identityKey);
     res.messageStore = std::move(messageStore);
     res.serverUrl = serverUrl;
+    res.caCertPath = caCertPath;
 
     result_ = std::move(res);
     accept();

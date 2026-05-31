@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
       session.identityKey = std::move(res->identityKey);
       session.messageStore = std::move(res->messageStore);
       session.serverUrl = res->serverUrl;
+      session.caCertPath = res->caCertPath;
 
       auto* mainWin = new MainWindow(std::move(session));
       mainWin->setAttribute(Qt::WA_DeleteOnClose);

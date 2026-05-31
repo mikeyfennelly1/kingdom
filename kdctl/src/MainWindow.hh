@@ -32,6 +32,7 @@ class MainWindow : public QMainWindow {
     kd::LocalIdentityKey identityKey;
     kd::MessageStore messageStore;
     std::string serverUrl;
+    std::string caCertPath;
   };
 
   explicit MainWindow(Session session, QWidget* parent = nullptr);
