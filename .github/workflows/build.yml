@@ -4,12 +4,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'kds/**'
-      - 'kdctl/**'
-      - 'libkd/**'
-      - 'cmake/**'
-      - 'CMakeLists.txt'
 
 jobs:
   build:

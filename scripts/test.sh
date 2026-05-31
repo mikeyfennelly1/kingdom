@@ -77,6 +77,9 @@ main() {
     echo "--- waiting for dependent services to be healthy..."
     wait_for_health # times out after given timeframe
 
+    echo "--- Installing test dependencies ---"
+    install_test_dependencies
+
     echo "--- Running tests against target on ${KD_BASE_URL}"
     run_tests
     if [[ $? -ne 0 ]]; then
@@ -199,12 +202,13 @@ function wait_for_health() {
 }
 
 function install_test_dependencies() {
-    cd tests
+    cd "${SCRIPT_DIR}/../tests"
     npm install --prefer-offline --silent
     return 0
 }
 
 function run_tests() {
+    cd "${SCRIPT_DIR}/../tests"
     npm test
     return 0
 }
