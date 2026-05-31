@@ -31,33 +31,33 @@ function assemble_toolchain_closure() {
     local out="$1"
     local fetch_log="$2"
 
-    export _KD_OUT="${out}"
-    local closure_log
-    closure_log=$(mktemp)
-    nix develop "${PROJ_ROOT}#kds" --command bash -c '
-        set -euo pipefail
+    local fetch_log_tmp
+    fetch_log_tmp=$(mktemp)
 
-        printf "DEBUG: resolving nativeBuildInputs store paths via which\n" >&2
-        tool_roots=$(for tool in cmake ninja gcc pkg-config; do
-            tool_path=$(which "$tool" 2>/dev/null || true)
-            if [[ -n "$tool_path" ]]; then
-                echo "$tool_path" | grep -o '"'"'/nix/store/[^/]*'"'"'
-            fi
-        done | sort -u)
-        printf "DEBUG: tool roots:\n%s\n" "${tool_roots}" >&2
+    printf "DEBUG: printing dev env for devShells.kds\n" >&2
+    local env_paths
+    env_paths=$(nix develop "${PROJ_ROOT}#kds" --print-dev-env 2>"${fetch_log_tmp}" \
+        | grep -o '/nix/store/[^[:space:]:\"'"'"']*' \
+        | sort -u)
+    cat "${fetch_log_tmp}" >&2
+    grep 'cache\.nixos\.org' "${fetch_log_tmp}" >> "${fetch_log}" || true
 
-        printf "DEBUG: computing full requisite closure via nix-store\n" >&2
-        closure=$(echo "${tool_roots}" | xargs nix-store --query --requisites | sort -u)
-        closure_count=$(echo "${closure}" | wc -l)
-        printf "DEBUG: toolchain closure contains %s store paths\n" "${closure_count}" >&2
+    printf "DEBUG: direct dev env store paths:\n%s\n" "${env_paths}" >&2
 
-        printf "DEBUG: writing toolchain closure to %s\n" "${_KD_OUT}" >&2
-        echo "${closure}" | tar -czPf "${_KD_OUT}" --files-from=-
-        printf "DEBUG: toolchain closure tarball written successfully\n" >&2
-    ' 2>"${closure_log}"
-    cat "${closure_log}" >&2
-    grep 'cache\.nixos\.org' "${closure_log}" >> "${fetch_log}" || true
-    rm -f "${closure_log}"
+    printf "DEBUG: computing full requisite closure via nix-store\n" >&2
+    local closure
+    closure=$(echo "${env_paths}" | xargs nix-store --query --requisites 2>"${fetch_log_tmp}" | sort -u)
+    cat "${fetch_log_tmp}" >&2
+    grep 'cache\.nixos\.org' "${fetch_log_tmp}" >> "${fetch_log}" || true
+    rm -f "${fetch_log_tmp}"
+
+    local closure_count
+    closure_count=$(echo "${closure}" | wc -l)
+    printf "DEBUG: toolchain closure contains %s store paths\n" "${closure_count}" >&2
+
+    printf "DEBUG: writing toolchain closure to %s\n" "${out}" >&2
+    echo "${closure}" | tar -czPf "${out}" --files-from=-
+    printf "DEBUG: toolchain closure tarball written successfully\n" >&2
 }
 
 main "$@"

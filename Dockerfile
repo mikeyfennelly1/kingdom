@@ -13,15 +13,10 @@ WORKDIR /app
 
 # Unpack the nix closure at the same /nix/store/... paths the binary references.
 # GNU tar is required: BusyBox tar does not support -P (preserve absolute paths)
-COPY ./out/kds-closure.tar.gz /app/out/kds-closure.tar.gz
-COPY ./out/kds-toolchain.tar.gz /app/out/kds-toolchain.tar.gz
-COPY ./scripts/unpack-store.sh /app/scripts/unpack-store.sh
-COPY ./scripts/move-store.sh ./scripts/move-store.sh
-COPY ./scripts/build.sh ./scripts/build.sh
+COPY . .
 
-RUN bash -o pipefail -c 'bash /app/scripts/unpack-store.sh 2>&1'
-RUN tar -xf /app/out/kds-toolchain.tar.gz -C /app/unpacked-store
-RUN bash -o pipefail -c 'bash /app/scripts/move-store.sh 2>&1'
+RUN bash /app/scripts/unpack-store.sh /app/out/kds-closure.tar.gz /app/out/kds-toolchain.tar.gz
+# RUN bash -o pipefail -c 'bash /app/scripts/move-store.sh 2>&1'
 
 
 ENTRYPOINT ["/bin/bash"]
