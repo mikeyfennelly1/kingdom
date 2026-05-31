@@ -96,6 +96,32 @@ static const char* kSendButtonStyle =
     "QPushButton:hover { background-color: #1d4ed8; }"
     "QPushButton:disabled { background-color: #94a3b8; }";
 
+static const char* kDangerButtonStyle =
+    "QPushButton {"
+    "  background-color: #dc2626;"
+    "  color: white;"
+    "  border: none;"
+    "  border-radius: 20px;"
+    "  padding: 8px 22px;"
+    "  font-size: 13px;"
+    "  font-weight: bold;"
+    "}"
+    "QPushButton:hover { background-color: #b91c1c; }"
+    "QPushButton:disabled { background-color: #94a3b8; }";
+
+static const char* kWarnButtonStyle =
+    "QPushButton {"
+    "  background-color: #d97706;"
+    "  color: white;"
+    "  border: none;"
+    "  border-radius: 20px;"
+    "  padding: 8px 22px;"
+    "  font-size: 13px;"
+    "  font-weight: bold;"
+    "}"
+    "QPushButton:hover { background-color: #b45309; }"
+    "QPushButton:disabled { background-color: #94a3b8; }";
+
 static const char* kInputStyle =
     "QLineEdit {"
     "  border: 1px solid #e2e8f0;"
@@ -220,10 +246,22 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   forwardButton_->setStyleSheet(kSendButtonStyle);
   forwardButton_->setCursor(Qt::PointingHandCursor);
 
+  deleteButton_ = new QPushButton("Delete", this);
+  deleteButton_->setEnabled(false);
+  deleteButton_->setStyleSheet(kDangerButtonStyle);
+  deleteButton_->setCursor(Qt::PointingHandCursor);
+
+  revokeButton_ = new QPushButton("Revoke", this);
+  revokeButton_->setEnabled(false);
+  revokeButton_->setStyleSheet(kWarnButtonStyle);
+  revokeButton_->setCursor(Qt::PointingHandCursor);
+
   auto* inputRow = new QHBoxLayout();
   inputRow->setContentsMargins(12, 8, 12, 12);  // NOLINT(readability-magic-numbers)
   inputRow->setSpacing(8);                      // NOLINT(readability-magic-numbers)
   inputRow->addWidget(messageInput_);
+  inputRow->addWidget(deleteButton_);
+  inputRow->addWidget(revokeButton_);
   inputRow->addWidget(forwardButton_);
   inputRow->addWidget(sendButton_);
 
@@ -252,6 +290,8 @@ MainWindow::MainWindow(Session session, QWidget* parent)
   connect(newConvButton_, &QPushButton::clicked, this, &MainWindow::onNewConversation);
   connect(sendButton_, &QPushButton::clicked, this, &MainWindow::onSend);
   connect(forwardButton_, &QPushButton::clicked, this, &MainWindow::onForward);
+  connect(deleteButton_, &QPushButton::clicked, this, &MainWindow::onDelete);
+  connect(revokeButton_, &QPushButton::clicked, this, &MainWindow::onRevoke);
   connect(logoutButton_, &QPushButton::clicked, this, &MainWindow::onLogout);
   connect(messageInput_, &QLineEdit::returnPressed, this, &MainWindow::onSend);
   connect(messageList_, &QListWidget::currentItemChanged, this,
@@ -723,8 +763,20 @@ bool MainWindow::confirmRecipientIdentity(uint64_t userId, const std::string& us
 }
 
 void MainWindow::onMessageSelectionChanged() {
-  forwardButton_->setEnabled(messageList_->currentItem() != nullptr &&
-                             activeConversationId_.has_value());
+  auto* item = messageList_->currentItem();
+  const bool selected = (item != nullptr) && activeConversationId_.has_value();
+  forwardButton_->setEnabled(selected);
+
+  bool ownMessage = false;
+  if (selected) {
+    const uint64_t messageId = item->data(Qt::UserRole).toULongLong();
+    auto iter = std::ranges::find_if(visibleMessages_, [messageId](const DisplayedMessage& d) {
+      return d.message.id == messageId;
+    });
+    ownMessage = (iter != visibleMessages_.end() && iter->message.senderId == session_.userId);
+  }
+  deleteButton_->setEnabled(ownMessage);
+  revokeButton_->setEnabled(ownMessage && activeRecipientId_.has_value());
 }
 
 void MainWindow::onForward() {
@@ -763,6 +815,68 @@ void MainWindow::onForward() {
         QString("Forwarded to %1.").arg(QString::fromUtf8(target->username.c_str())));
   } catch (const std::exception& e) {
     QMessageBox::critical(this, "Forward Failed", QString::fromUtf8(e.what()));
+  }
+}
+
+void MainWindow::onDelete() {
+  auto* selectedItem = messageList_->currentItem();
+  if (selectedItem == nullptr) {
+    return;
+  }
+
+  const uint64_t messageId = selectedItem->data(Qt::UserRole).toULongLong();
+  auto iter = std::ranges::find_if(visibleMessages_, [messageId](const DisplayedMessage& d) {
+    return d.message.id == messageId;
+  });
+  if (iter == visibleMessages_.end()) {
+    return;
+  }
+
+  const auto answer =
+      QMessageBox::question(this, "Delete Message", "Delete this message? This cannot be undone.",
+                            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  if (answer != QMessageBox::Yes) {
+    return;
+  }
+
+  try {
+    client_->deleteMessage(iter->message.conversationId, messageId);
+    loadMessages(*activeConversationId_);
+  } catch (const std::exception& e) {
+    QMessageBox::critical(this, "Delete Failed", QString::fromUtf8(e.what()));
+  }
+}
+
+void MainWindow::onRevoke() {
+  auto* selectedItem = messageList_->currentItem();
+  if (selectedItem == nullptr) {
+    return;
+  }
+
+  const uint64_t messageId = selectedItem->data(Qt::UserRole).toULongLong();
+  auto iter = std::ranges::find_if(visibleMessages_, [messageId](const DisplayedMessage& d) {
+    return d.message.id == messageId;
+  });
+  if (iter == visibleMessages_.end() || !activeRecipientId_.has_value()) {
+    return;
+  }
+
+  const std::string recipientName = usernameFor(*activeRecipientId_);
+  const auto answer = QMessageBox::question(
+      this, "Revoke Access",
+      QString("Revoke %1's access to this message?").arg(QString::fromUtf8(recipientName.c_str())),
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  if (answer != QMessageBox::Yes) {
+    return;
+  }
+
+  try {
+    client_->revokeMessageAccess(iter->message.conversationId, messageId, *activeRecipientId_);
+    QMessageBox::information(
+        this, "Access Revoked",
+        QString("%1 can no longer access this message.").arg(QString::fromUtf8(recipientName.c_str())));
+  } catch (const std::exception& e) {
+    QMessageBox::critical(this, "Revoke Failed", QString::fromUtf8(e.what()));
   }
 }
 
