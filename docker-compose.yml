@@ -2,7 +2,7 @@ services:
   app:
     build: .
     image: mikeyfennelly/kds:latest
-    container_name: kingdom-app
+    container_name: kds
     restart: unless-stopped
     ports:
       - "${KD_PORT:-8080}:${KD_PORT:-8080}"
@@ -27,7 +27,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: kingdom-db
+    container_name: kdb
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}

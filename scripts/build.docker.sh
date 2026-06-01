@@ -50,7 +50,10 @@ function load_env() {
 }
 
 function package_runtime_docker_img() {
-    printf "Packaging runtime Docker image...\n"
+    local commit_hash="$(git rev-parse --short HEAD)"
+    local image_namespace="mikeyfennelly/kds"
+    local image_name_git_sha="${image_namespace}:${commit_hash}"
+    printf "DEBUG: packaging runtime Docker image as: ${image_name_git_sha}\n"
     docker build "${PROJ_ROOT}" \
         --build-arg POSTGRES_USER="${POSTGRES_USER}" \
         --build-arg POSTGRES_DB="${POSTGRES_DB}" \
@@ -60,8 +63,15 @@ function package_runtime_docker_img() {
         --build-arg KD_JWT_TTL_SECONDS="${KD_JWT_TTL_SECONDS}" \
         --build-arg KD_LOG_LEVEL="${KD_LOG_LEVEL:-info}" \
         --build-arg KD_PORT="${KD_PORT:-8080}" \
-        --tag kds:latest \
+        --tag "${image_name_git_sha}" \
         "$@"
+    local latest_img_name="${image_namespace}:latest"
+    docker tag "${image_name_git_sha}" "${latest_img_name}"
+
+    printf "INFO: images tagged at...\n" >&2
+    printf "\t -> ${image_name_git_sha}\n" >&2
+    printf "\t -> ${latest_img_name}\n" >&2
+
     return 0
 }
 
