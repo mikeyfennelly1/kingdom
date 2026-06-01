@@ -104,12 +104,13 @@ function init_test_vars() {
     : "${KD_JWT_SECRET:=test-jwt-secret-must-be-at-least-32-characters!!}"
     : "${KD_JWT_TTL_SECONDS:=3600}"
     : "${KD_LOG_LEVEL:=warn}"
+    : "${KD_RATE_LIMIT_MAX_REQUESTS:=50}"
     return 0
 }
 
 function export_necessary_vars() {
     export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT
-    export KD_PORT KD_JWT_SECRET KD_JWT_TTL_SECONDS KD_LOG_LEVEL
+    export KD_PORT KD_JWT_SECRET KD_JWT_TTL_SECONDS KD_LOG_LEVEL KD_RATE_LIMIT_MAX_REQUESTS
     
     # The app container reaches Postgres over the docker compose internal network
     export KD_DB_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"

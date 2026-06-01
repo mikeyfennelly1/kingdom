@@ -97,14 +97,16 @@ bool isValidSignupPassword(const std::string& password) {
 Controller::Controller(std::string host, int port, const std::string& dbConnectionString,
                        std::string sidecarUrl, const std::string& certPath,
                        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-                       const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds)
+                       const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds,
+                       int rateLimitMaxRequests)
     : host_(std::move(host))
     , port_(port)
     , sidecarUrl_(std::move(sidecarUrl))
     , svr_(certPath.c_str(), keyPath.c_str())
     , db_(dbConnectionString)
     , jwtSecret_(std::move(jwtSecret))
-    , jwtTtlSeconds_(jwtTtlSeconds) {
+    , jwtTtlSeconds_(jwtTtlSeconds)
+    , rateLimitMaxRequests_(rateLimitMaxRequests) {
   if (sodium_init() < 0) {
     throw std::runtime_error("Failed to initialize libsodium");
   }
@@ -178,7 +180,6 @@ std::optional<uint64_t> Controller::authenticatedUserId_(const httplib::Request&
 }
 
 bool Controller::isRateLimited_(const std::string& ipAddr) {
-  constexpr int kMaxAttempts = 10;
   constexpr auto kWindow = std::chrono::seconds(timeouts::kRateLimitWindowSec);
 
   std::scoped_lock lock(rateLimitMutex_);
@@ -191,7 +192,7 @@ bool Controller::isRateLimited_(const std::string& ipAddr) {
   }
 
   ++entry.count;
-  return entry.count > kMaxAttempts;
+  return entry.count > rateLimitMaxRequests_;
 }
 
 void Controller::registerAuthRoutes_() {
