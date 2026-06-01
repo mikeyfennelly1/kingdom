@@ -15,7 +15,7 @@ Install the following before cloning:
 2. Downloads nix.
 3. Installs all dependencies.
 4. Bootstraps environments for build and dev.
-5. Build and install for application server (`kds`) and command line tool (`kdctl`)
+5. Builds the server (`kds`) and the Qt6 GUI client (`kdctl`).
 6. Generates TLS certificates to run on the server.
 
 [source, bash]
@@ -48,49 +48,43 @@ curl --cacert certs/server.crt https://localhost:8080/health
 
 Expected: `{"status":"ok"}`
 
-== Using the CLI (kdctl)
+== Using the GUI (kdctl)
 
-All `kdctl` commands require `--protocol https` and `--ca-cert certs/server.crt` since the server uses TLS with a self-signed certificate. Set these as environment variables to avoid repeating them:
-
-[source,bash]
-----
-export KD_PROTOCOL=https
-export KD_CA_CERT=certs/server.crt
-----
-
-=== Interactive shell
+`kdctl` is a Qt6 desktop application. Launch it with:
 
 [source,bash]
 ----
 ./build/kdctl/kdctl
 ----
 
-Available shell commands:
+=== Login screen
 
-----
-signup              Create a new account
-login               Log in
-logout              Log out
-health              Check server health
-info                Server info
-conversations       List your conversations
-create-conversation Create a new conversation
-send                Send a message
-messages            List messages in a conversation
-help                Show this list
-exit                Quit
-----
+On startup you will see a login screen with three fields:
 
-=== Subcommands
+* **Server URL** — the address of the `kds` server, e.g. `https://localhost:8080`
+* **Username**
+* **Password**
 
-[source,bash]
-----
-./build/kdctl/kdctl health
-./build/kdctl/kdctl info
-----
+Use **Sign Up** to register a new account or **Log In** to authenticate with an existing one. On first signup the client generates your X25519 and Ed25519 keypairs and uploads the public key bundle to the server. Your private keys are encrypted at rest under a key derived from your password.
 
-Authenticated messaging commands are available in the interactive shell, where the CLI can keep
-session state and unlock the local private key needed for end-to-end encryption.
+=== Messaging
+
+After login you will see the main window:
+
+* **Left panel** — your conversation list. Click **New Conversation** to start one with another user.
+* **Right panel** — messages in the selected conversation. Type in the box at the bottom and click **Send**.
+
+All messages are end-to-end encrypted (X3DH + XChaCha20-Poly1305) before being sent to the server. The server never sees plaintext.
+
+=== Additional actions
+
+Select a message in the list to enable:
+
+* **Forward** — re-encrypts and sends the message to another user or conversation
+* **Delete** — removes the message from the server (sender only)
+* **Revoke** — revokes another participant's access to the message
+
+The conversation list and messages refresh automatically on a timer.
 
 == Blockchain Sidecar
 
@@ -135,17 +129,7 @@ Paste a transaction hash from a sent message and the message payload to verify o
 | `KD_PORT` | `8080` | Port to listen on
 | `KD_LOG_LEVEL` | `info` | Log level (debug, info, warn, error)
 | `KD_BLOCKCHAIN_SIDECAR_URL` | `http://localhost:3001` | Blockchain sidecar URL
-|===
-
-=== Client (`kdctl`)
-
-[cols="1,1,2", options="header"]
-|===
-| Variable | Default | Description
-| `KD_HOST` | `localhost` | Server host
-| `KD_PORT` | `8080` | Server port
-| `KD_PROTOCOL` | `http` | Protocol (`http` or `https`)
-| `KD_CA_CERT` | — | Path to CA certificate for TLS verification
+| `KD_RATE_LIMIT_MAX` | `10` | Max auth attempts per IP per 60-second window
 |===
 
 == Task Reference
