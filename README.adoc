@@ -23,6 +23,15 @@ Install the following before cloning:
 wget -qO- https://raw.githubusercontent.com/mikeyfennelly1/kingdom/main/scripts/install.sh | bash
 ----
 
+== Generating TLS Certificates
+
+[source,bash]
+----
+./scripts/init-certs.sh
+----
+
+This generates `certs/server.key` and `certs/server.crt` (self-signed, valid for `localhost`, `updakingdom.theburkenator.com`, `127.0.0.1`, and `200.69.13.70`).
+
 == Running the Server
 
 [source,bash]
@@ -43,10 +52,15 @@ To verify the server is running:
 
 [source,bash]
 ----
-curl --cacert certs/server.crt https://localhost:8080/health
+./scripts/health-check.sh
 ----
 
-Expected: `{"status":"ok"}`
+Pass a custom base URL as the first argument if the server is not at the default (`https://updakingdom.theburkenator.com`):
+
+[source,bash]
+----
+./scripts/health-check.sh https://localhost:8080
+----
 
 == Using the GUI (kdctl)
 

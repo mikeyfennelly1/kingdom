@@ -16,7 +16,7 @@ function generate_tls_certs() {
       -keyout certs/server.key \
       -out certs/server.crt \
       -subj "/CN=localhost" \
-      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+      -addext "subjectAltName=DNS:localhost,DNS:updakingdom.theburkenator.com,IP:127.0.0.1,IP:200.69.13.70"
     return 0
 }
 
