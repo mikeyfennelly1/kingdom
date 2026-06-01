@@ -36,7 +36,6 @@
           pkgs.brotli
           pkgs.krb5
           pkgs.gcc14
-          pkgs.keyutils
           pkgs.libssh2
           pkgs.libpq
           # NOTE: glibc intentionally omitted — the GCC wrapper owns its own glibc include
@@ -48,6 +47,9 @@
           pkgs.zlib
           pkgs.zstd
           pkgs.curl
+        ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+          # Linux-only transitive deps (not available on macOS/Darwin)
+          pkgs.keyutils
         ];
 
         baseShellHook = ''
@@ -76,7 +78,7 @@
         assert pkgs.brotli.version == "1.1.0";
         assert pkgs.krb5.version == "1.22.1";
         assert pkgs.gcc14.version == "14.3.0";
-        assert pkgs.keyutils.version == "1.6.3";
+        assert !pkgs.stdenv.isLinux || pkgs.keyutils.version == "1.6.3";
         assert pkgs.libssh2.version == "1.11.1";
         assert pkgs.libpq.version == "18.1";
         assert pkgs.ngtcp2.version == "1.17.0";
