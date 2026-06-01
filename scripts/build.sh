@@ -65,6 +65,11 @@ function build_project() {
         # --debug-find-pkg is ignored when --debug-find is already set
         CMAKE_EXTRA_FLAGS+=(--debug-find-pkg="${CMAKE_DEBUG_FIND_PKG}")
     fi
+    # KD_BUILD_KDCTL=OFF is exported by devShells.kds (the slim CI/Docker shell).
+    # Skips the kdctl Qt6 GUI client, which is not needed for server-only builds.
+    if [[ "${KD_BUILD_KDCTL:-ON}" == "OFF" ]]; then
+        CMAKE_EXTRA_FLAGS+=(-DBUILD_KDCTL=OFF)
+    fi
 
     printf "DEBUG: outputting build artifacts to ${BUILD_DIRECTORY}\n" >&2
     cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \

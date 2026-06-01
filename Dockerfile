@@ -1,30 +1,18 @@
-# Stage 1: Build
-# Runs inside a Nix-enabled image. Delegates entirely to the project build
-# scripts — no inline cmake/nix commands here.
-FROM nixos/nix:2.34.7 AS builder
+# Expects build artifacts to be present in the build context, produced by
+# scripts/build.docker.sh (which builds via docker run with host /nix mounted):
+#   out/kds-closure.tar.gz  — runtime Nix closure
+#   out/kds                 — compiled server binary
 
-WORKDIR /app
-COPY . .
-
-# Configure nix.conf (enables flakes, disables sandbox for Docker).
-RUN bash ./scripts/configure-nix-host.sh
-
-# Build the binary and assemble the nix store closure.
-# create-closure.sh calls build.sh internally, then tars the closure to
-# out/kds-closure.tar.gz.
-RUN bash ./scripts/create-closure.sh
-
-# Stage 2: Minimal Alpine runtime
 FROM alpine:3.20
 
 WORKDIR /app
 
 # Unpack the nix closure at the same /nix/store/... paths the binary references.
 # GNU tar is required: BusyBox tar does not support -P (preserve absolute paths).
-COPY --from=builder /app/out/kds-closure.tar.gz /tmp/
+COPY out/kds-closure.tar.gz /tmp/
 RUN apk add --no-cache tar && tar -xzPf /tmp/kds-closure.tar.gz && rm /tmp/kds-closure.tar.gz
 
-COPY --from=builder /app/build/kds/kds /app/kds
+COPY out/kds /app/kds
 
 EXPOSE 8080
 
