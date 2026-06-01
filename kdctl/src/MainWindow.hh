@@ -80,6 +80,8 @@ class MainWindow : public QMainWindow {
   [[nodiscard]] static QString formatTimestamp(uint64_t milliseconds);
   [[nodiscard]] static QString fingerprintForPublicKey(const std::string& publicKey);
   [[nodiscard]] std::string usernameFor(uint64_t userId) const;
+  [[nodiscard]] std::string displayNameForConversation(
+      const kd::Conversation& conversation) const;
 
   // Session state
   Session session_;

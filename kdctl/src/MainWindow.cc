@@ -333,6 +333,20 @@ std::string MainWindow::usernameFor(uint64_t userId) const {
   return "User " + std::to_string(userId);
 }
 
+std::string MainWindow::displayNameForConversation(const kd::Conversation& conversation) const {
+  if (conversation.participantIds.size() != 2) {
+    return conversation.name;
+  }
+
+  for (uint64_t participantId : conversation.participantIds) {
+    if (participantId != session_.userId) {
+      return "Chat with " + usernameFor(participantId);
+    }
+  }
+
+  return conversation.name;
+}
+
 // ---------------------------------------------------------------------------
 // Conversations
 // ---------------------------------------------------------------------------
@@ -349,7 +363,8 @@ void MainWindow::loadConversations() {
       auto conv = item.get<kd::Conversation>();
       conversations_.push_back(conv);
 
-      auto* listItem = new QListWidgetItem(QString::fromUtf8(conv.name.c_str()), conversationList_);
+      auto* listItem = new QListWidgetItem(
+          QString::fromUtf8(displayNameForConversation(conv).c_str()), conversationList_);
       listItem->setData(Qt::UserRole, static_cast<qulonglong>(conv.id));
       if (selectedConversationId.has_value() && conv.id == *selectedConversationId) {
         selectedItem = listItem;
@@ -391,7 +406,7 @@ void MainWindow::onConversationSelected(QListWidgetItem* item) {
           break;
         }
       }
-      conversationLabel_->setText(QString::fromUtf8(conv.name.c_str()));
+      conversationLabel_->setText(QString::fromUtf8(displayNameForConversation(conv).c_str()));
       break;
     }
   }
