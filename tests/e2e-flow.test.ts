@@ -573,9 +573,10 @@ describe('Malicious paths', () => {
 
   it('Excessive signup attempts trigger rate limiting (brute-force protection)', async () => {
     // ATTACK: Rapid-fire signups from the same IP to enumerate or flood.
-    // The server applies a sliding-window rate limit of 10 req/60 s per IP.
+    // The server applies a sliding-window rate limit per IP. In the test
+    // environment KD_RATE_LIMIT_MAX_REQUESTS=50; fire 55 to guarantee throttling.
     const results: number[] = []
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 55; i++) {
       const res = await api('POST', '/signup', {
         username: `ratelimit_${run}_${i}`,
         password: 'ValidPass123',
@@ -583,7 +584,7 @@ describe('Malicious paths', () => {
       })
       results.push(res.status)
     }
-    // At least one of the 15 requests must have been throttled
+    // At least one of the 55 requests must have been throttled
     expect(results).toContain(429)
   })
 })

@@ -23,7 +23,8 @@ class Controller {
   Controller(std::string host, int port, const std::string& dbConnectionString,
              std::string sidecarUrl, const std::string& certPath,
              // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-             const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds);
+             const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds,
+             int rateLimitMaxRequests);
 
   void start();
 
@@ -65,6 +66,7 @@ class Controller {
   };
   std::unordered_map<std::string, RateLimitEntry> rateLimitMap_;
   std::mutex rateLimitMutex_;
+  int rateLimitMaxRequests_;
 };
 
 auto configure() -> kd::Controller;
