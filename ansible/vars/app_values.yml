@@ -5,5 +5,5 @@ repo_pull_dest: /home/deployment/kingdom
 
 # Port Forwarding Configuration
 target_port: 4000
-destination_port: 8080
+destination_port: 80
 protocol: tcp
