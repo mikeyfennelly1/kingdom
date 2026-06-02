@@ -9,41 +9,18 @@ KD_PORT="${KD_PORT:-8080}"
 POSTGRES_PORT="${POSTGRES_PORT:-5433}"
 
 main() {
-    echo "=== Kingdom CI ==="
-    echo ""
-
-    echo "--- Tearing down existing resources ---"
-    teardown
-    trap teardown EXIT
-
-    echo ""
-    echo "--- Building Docker image ---"
-    build_image
-    if [[ $? -ne 0 ]]; then
-        echo "Error: Docker image build failed." >&2
-        exit 1
-    fi
-
-    echo ""
-    echo "--- Running test suite ---"
+    bash -c "${SCRIPT_DIR}/test.sh --rebuild"
     run_tests
     if [[ $? -ne 0 ]]; then
         echo "Error: test suite failed." >&2
         exit 1
     fi
-
-    echo ""
-    echo "=== CI passed ==="
-}
-
-function build_image() {
-    "${SCRIPT_DIR}/build.docker.sh"
-    return $?
-}
-
-function run_tests() {
-    "${SCRIPT_DIR}/test.sh" --rebuild
-    return $?
+    bash -c "${SCRIPT_DIR}/build.docker.sh"
+    local commit_hash="$(git rev-parse --short HEAD)"
+    bash -c "docker push mikeyfennelly/kds:${commit_hash}"
+    bash -c "docker push mikeyfennelly/kds:latest"
+    export REPO_VERSION="$(commit_hash)"
+    bash -c "deploy.sh"
 }
 
 main "$@"
