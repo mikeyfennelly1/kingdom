@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    image: mikeyfennelly/kds:latest
+    image: mikeyfennelly/kds:0.5.14
     container_name: kds
     restart: unless-stopped
     ports:
