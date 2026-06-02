@@ -8,9 +8,19 @@ RAW_HOST="${KD_RAW_HOST:-200.69.13.70}"
 RAW_PORT="${KD_RAW_PORT:-80}"
 DNS_HOST="${KD_DNS_HOST:-updakingdom.theburkenator.com}"
 CA_CERT="${PROJ_ROOT}/certs/server.crt"
+[[ -f "${PROJ_ROOT}/certs/ca.crt" ]] && CA_CERT="${PROJ_ROOT}/certs/ca.crt"
 
 RAW_URL="https://${RAW_HOST}:${RAW_PORT}"
 DNS_URL="https://${DNS_HOST}"
+
+OPT_LOCAL=false
+OPT_SECURE=false
+for arg in "$@"; do
+    case "${arg}" in
+        --local)  OPT_LOCAL=true ;;
+        --secure) OPT_SECURE=true ;;
+    esac
+done
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -65,6 +75,18 @@ probe_health() {
     local status
     status=$(curl -s -o /tmp/kd_probe -w "%{http_code}" --max-time 10 "$@" "${url}/health" 2>/dev/null || echo "000")
     [[ "$status" == "200" ]] && grep -q '"ok"' /tmp/kd_probe 2>/dev/null
+}
+
+select_local_target() {
+    local port="${KD_PORT:-8080}"
+    BASE_URL="https://localhost:${port}"
+    if [[ "${OPT_SECURE}" == true ]]; then
+        CURL_OPTS=(--cacert "${CA_CERT}")
+        info "Running suite against local target: ${BASE_URL} (cacert: ${CA_CERT})"
+    else
+        CURL_OPTS=(-k)
+        info "Running suite against local target: ${BASE_URL} (TLS verification disabled)"
+    fi
 }
 
 select_target() {
@@ -229,7 +251,11 @@ print_summary() {
 }
 
 main() {
-    select_target
+    if [[ "${OPT_LOCAL}" == true ]]; then
+        select_local_target
+    else
+        select_target
+    fi
     run_suite
     print_summary
 }
