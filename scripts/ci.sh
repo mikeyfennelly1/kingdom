@@ -9,13 +9,12 @@ KD_PORT="${KD_PORT:-8080}"
 POSTGRES_PORT="${POSTGRES_PORT:-5433}"
 
 main() {
+    bash -c "${SCRIPT_DIR}/build.docker.sh"
     bash -c "${SCRIPT_DIR}/test.sh --rebuild"
     run_tests
     if [[ $? -ne 0 ]]; then
-        echo "Error: test suite failed." >&2
-        exit 1
+        printf "ERROR: test suite failed." >&2
     fi
-    bash -c "${SCRIPT_DIR}/build.docker.sh"
     local commit_hash="$(git rev-parse --short HEAD)"
     bash -c "docker push mikeyfennelly/kds:${commit_hash}"
     bash -c "docker push mikeyfennelly/kds:latest"
