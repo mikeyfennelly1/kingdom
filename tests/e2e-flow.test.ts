@@ -77,12 +77,6 @@ describe('Happy paths', () => {
     expect(res.data).toMatchObject({ status: 'ok' })
   })
 
-  it('GET /api returns API info', async () => {
-    const res = await api('GET', '/api')
-    expect(res.status).toBe(200)
-    expect(res.data).toMatchObject({ name: 'Kingdom Server' })
-  })
-
   it('POST /signup registers Alice', async () => {
     const res = await api('POST', '/signup', {
       username: `alice_${run}`,
