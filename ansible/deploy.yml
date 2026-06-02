@@ -8,6 +8,7 @@
 
 - name: kds and postgres deployments
   hosts: deployment_vm
+  gather_facts: false
   vars_files:
     - vars/app_values.yml
     - vars/secrets.yml
