@@ -10,11 +10,11 @@ POSTGRES_PORT="${POSTGRES_PORT:-5433}"
 
 main() {
     bash -c "${SCRIPT_DIR}/build.docker.sh"
-    bash -c "${SCRIPT_DIR}/test.sh --rebuild" || printf "ERROR: test suite failed.\n" >&2
+    bash -c "${SCRIPT_DIR}/test.sh" || printf "ERROR: test suite failed.\n" >&2
     local commit_hash="$(git rev-parse --short HEAD)"
     bash -c "docker push mikeyfennelly/kds:${commit_hash}"
     bash -c "docker push mikeyfennelly/kds:latest"
-    export REPO_VERSION="$(commit_hash)"
+    export REPO_VERSION="${commit_hash}"
     bash -c "deploy.sh"
 }
 
