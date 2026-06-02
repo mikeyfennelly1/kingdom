@@ -54,6 +54,11 @@
         chdir: "{{ repo_pull_dest }}"
         creates: "{{ repo_pull_dest }}/certs/server.key"
 
+    - name: Remove existing .env file
+      ansible.builtin.file:
+        path: "{{ repo_pull_dest }}/.env"
+        state: absent
+
     - name: Write .env file
       ansible.builtin.copy:
         dest: "{{ repo_pull_dest }}/.env"
@@ -72,8 +77,8 @@
           POSTGRES_PORT={{ postgres_port | default(5432) }}
           POSTGRES_HOST=db
           
-          # App Database URL
-          KD_DB_URL=postgres://{{ postgres_user }}:{{ postgres_password }}@db:5432/{{ postgres_db }}
+          # App Database URL (key=value format avoids @ in password breaking URL parsing)
+          KD_DB_URL=host=db port=5432 user={{ postgres_user }} password={{ postgres_password }} dbname={{ postgres_db }}
 
     - name: Stop old containers
       community.docker.docker_compose_v2:
