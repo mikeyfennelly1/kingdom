@@ -2,27 +2,36 @@
 pragma solidity ^0.8.20;
 
 /// @title MessageIntegrity
-/// @notice Records keccak256 hashes of message conversation payloads on-chain
+/// @notice Records Merkle roots of batched message ciphertext hashes on-chain
 ///         to provide tamper-evident integrity verification.
 contract MessageIntegrity {
     address public owner;
 
-    /// @notice Emitted when a message hash is recorded
-    /// @param conversationId The ID of the conversation
-    /// @param msgId          The ID of the message
-    /// @param hash           keccak256 hash of the message payload
-    /// @param timestamp      Block timestamp at time of recording
-    event HashRecorded(
-        uint256 indexed conversationId,
-        uint256 indexed msgId,
-        bytes32 hash,
-        uint256 timestamp
+    struct Batch {
+        bytes32 root;
+        uint256 timestamp;
+        uint256 messageCount;
+    }
+
+    /// @notice Emitted when a batch of message hashes is recorded.
+    /// @param batchId       Auto-incrementing batch identifier
+    /// @param root          Merkle root of all leaf hashes in this batch
+    /// @param timestamp     Block timestamp at time of recording
+    /// @param messageCount  Number of messages in the batch
+    /// @param leaves        Individual keccak256 leaf hashes (one per message)
+    event BatchRecorded(
+        uint256 indexed batchId,
+        bytes32 root,
+        uint256 timestamp,
+        uint256 messageCount,
+        bytes32[] leaves
     );
 
     error Unauthorized();
+    error EmptyBatch();
 
-    mapping(uint256 => mapping(uint256 => bytes32)) public hashes;
-    mapping(uint256 => mapping(uint256 => uint256)) public timestamps;
+    mapping(uint256 => Batch) public batches;
+    uint256 public nextBatchId;
 
     constructor() {
         owner = msg.sender;
@@ -33,13 +42,21 @@ contract MessageIntegrity {
         _;
     }
 
-    /// @notice Record a per-message payload hash on-chain
-    /// @param conversationId The ID of the conversation
-    /// @param msgId          The ID of the message within that conversation
-    /// @param hash           keccak256 hash of the ciphertext payload
-    function recordHash(uint256 conversationId, uint256 msgId, bytes32 hash) external onlyOwner {
-        hashes[conversationId][msgId] = hash;
-        timestamps[conversationId][msgId] = block.timestamp;
-        emit HashRecorded(conversationId, msgId, hash, block.timestamp);
+    /// @notice Record a Merkle root for a batch of message ciphertext hashes.
+    /// @param root   Merkle root computed from the leaf hashes off-chain
+    /// @param leaves Individual keccak256(ciphertext) hashes — emitted for
+    ///               independent verification without a server
+    /// @return batchId The ID assigned to this batch
+    function recordBatch(bytes32 root, bytes32[] calldata leaves)
+        external
+        onlyOwner
+        returns (uint256)
+    {
+        if (leaves.length == 0) revert EmptyBatch();
+
+        uint256 batchId = nextBatchId++;
+        batches[batchId] = Batch(root, block.timestamp, leaves.length);
+        emit BatchRecorded(batchId, root, block.timestamp, leaves.length, leaves);
+        return batchId;
     }
 }

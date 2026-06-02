@@ -2,12 +2,14 @@
 #include <httplib.h>
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 #include "../db/Database.hh"
@@ -25,6 +27,8 @@ class Controller {
              // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
              const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds,
              int rateLimitMaxRequests);
+
+  ~Controller();
 
   void start();
 
@@ -60,6 +64,8 @@ class Controller {
   std::optional<uint64_t> authenticatedUserId_(const httplib::Request& req);
   bool isRateLimited_(const std::string& ipAddr);
 
+  void startBlockchainResolver_();
+
   struct RateLimitEntry {
     int count;
     std::chrono::steady_clock::time_point windowStart;
@@ -67,6 +73,9 @@ class Controller {
   std::unordered_map<std::string, RateLimitEntry> rateLimitMap_;
   std::mutex rateLimitMutex_;
   int rateLimitMaxRequests_;
+
+  std::atomic<bool> stopBlockchainResolver_{false};
+  std::thread blockchainResolverThread_;
 };
 
 auto configure() -> kd::Controller;

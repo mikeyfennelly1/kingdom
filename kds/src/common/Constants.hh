@@ -59,6 +59,12 @@ inline constexpr int kSidecarConnectionTimeoutSec = 30;
 inline constexpr int kSidecarReadTimeoutSec = 60;
 inline constexpr int kMessageReadTimeoutSec = 120;
 inline constexpr int kRateLimitWindowSec = 60;
+inline constexpr int kBlockchainResolverIntervalSec = 60;
 }  // namespace timeouts
+
+namespace blockchain {
+inline constexpr const char* kPendingPrefix = "pending:";
+inline constexpr size_t kPendingPrefixLen = 8;  // strlen("pending:")
+}  // namespace blockchain
 
 }  // namespace kd

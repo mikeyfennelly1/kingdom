@@ -57,6 +57,9 @@ class Database {
   // Update the blockchain_digest field of a message after on-chain recording.
   void updateMessageBlockchainDigest(uint64_t msgId, const std::string& digest);
 
+  // Return (msgId, pendingId) pairs for messages whose blockchain_digest starts with "pending:".
+  std::vector<std::pair<uint64_t, std::string>> getPendingBlockchainMessages();
+
   // Returns true if userId is a participant in conversationId.
   bool isParticipant(uint64_t conversationId, uint64_t userId);
 
