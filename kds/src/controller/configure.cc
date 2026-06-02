@@ -11,6 +11,7 @@ namespace kd {
 
 namespace {
 constexpr std::size_t kMinJwtSecretLen = 32;
+constexpr std::size_t kMinSidecarSecretLen = 32;
 constexpr uint64_t kDefaultJwtTtlSeconds = 3600;
 constexpr int kDefaultRateLimitMaxRequests = 10;
 }  // namespace
@@ -36,6 +37,10 @@ auto configure() -> kd::Controller {
 
   const char* sidecarEnv = std::getenv("KD_BLOCKCHAIN_SIDECAR_URL");
   std::string sidecarUrl = (sidecarEnv != nullptr) ? sidecarEnv : "http://localhost:3001";
+  const char* sidecarSecret = std::getenv("KD_BLOCKCHAIN_SIDECAR_SECRET");
+  if (sidecarSecret == nullptr || std::string(sidecarSecret).size() < kMinSidecarSecretLen) {
+    throw std::runtime_error("KD_BLOCKCHAIN_SIDECAR_SECRET must be set to at least 32 characters");
+  }
 
   const char* certPath = std::getenv("KD_TLS_CERT");
   const char* keyPath = std::getenv("KD_TLS_KEY");
@@ -60,7 +65,7 @@ auto configure() -> kd::Controller {
   int rateLimitMaxRequests = (rateLimitEnv != nullptr) ? std::stoi(rateLimitEnv)
                                                        : kDefaultRateLimitMaxRequests;
 
-  return {"0.0.0.0",   port,       dbUrl,      sidecarUrl,          certPath,
-          keyPath,     jwtSecret,  jwtTtlSeconds, rateLimitMaxRequests};
+  return {"0.0.0.0", port,          dbUrl,         sidecarUrl, sidecarSecret,
+          certPath,  keyPath,       jwtSecret,     jwtTtlSeconds, rateLimitMaxRequests};
 }
 }  // namespace kd

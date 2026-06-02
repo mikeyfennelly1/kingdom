@@ -7,12 +7,20 @@ const {
   SEPOLIA_RPC_URL,
   PRIVATE_KEY,
   CONTRACT_ADDRESS,
+  BLOCKCHAIN_SIDECAR_SECRET,
   PORT = 3001,
   BATCH_INTERVAL_MS = 5 * 60 * 1000, // 5 minutes
 } = process.env;
 
-if (!SEPOLIA_RPC_URL || !PRIVATE_KEY || !CONTRACT_ADDRESS) {
-  console.error("Missing required env vars: SEPOLIA_RPC_URL, PRIVATE_KEY, CONTRACT_ADDRESS");
+if (!SEPOLIA_RPC_URL || !PRIVATE_KEY || !CONTRACT_ADDRESS || !BLOCKCHAIN_SIDECAR_SECRET) {
+  console.error(
+    "Missing required env vars: SEPOLIA_RPC_URL, PRIVATE_KEY, CONTRACT_ADDRESS, BLOCKCHAIN_SIDECAR_SECRET",
+  );
+  process.exit(1);
+}
+
+if (BLOCKCHAIN_SIDECAR_SECRET.length < 32) {
+  console.error("BLOCKCHAIN_SIDECAR_SECRET must be at least 32 characters");
   process.exit(1);
 }
 
@@ -119,6 +127,22 @@ console.log(`Batch interval: ${Number(BATCH_INTERVAL_MS) / 1000}s`);
 const app = express();
 app.use(express.json());
 
+function hasValidSidecarSecret(req) {
+  const provided = req.get("X-Kingdom-Sidecar-Secret");
+  if (!provided) return false;
+
+  const expected = Buffer.from(BLOCKCHAIN_SIDECAR_SECRET, "utf8");
+  const actual = Buffer.from(provided, "utf8");
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function requireSidecarSecret(req, res, next) {
+  if (!hasValidSidecarSecret(req)) {
+    return res.status(401).json({ error: "sidecar authentication required" });
+  }
+  next();
+}
+
 /**
  * POST /record
  *
@@ -128,7 +152,7 @@ app.use(express.json());
  * Body:     { conversationId: number, msgId: number, ciphertext: string }
  * Response: { pendingId: string }
  */
-app.post("/record", (req, res) => {
+app.post("/record", requireSidecarSecret, (req, res) => {
   const { conversationId, msgId, ciphertext } = req.body;
 
   if (conversationId === undefined || msgId === undefined || !ciphertext) {
@@ -154,7 +178,7 @@ app.post("/record", (req, res) => {
  *        or { status: "confirmed", txHash: string, batchId: string }
  *        or { status: "failed", error: string }
  */
-app.get("/pending/:id", (req, res) => {
+app.get("/pending/:id", requireSidecarSecret, (req, res) => {
   const result = pendingResults.get(req.params.id);
   if (!result) {
     return res.status(404).json({ error: "unknown pendingId" });

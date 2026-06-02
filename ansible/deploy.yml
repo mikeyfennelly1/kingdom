@@ -87,6 +87,7 @@
           KD_DB_URL=host=db port=5432 user={{ postgres_user }} password={{ postgres_password }} dbname={{ postgres_db }}
 
           # Blockchain Sidecar
+          KD_BLOCKCHAIN_SIDECAR_SECRET={{ blockchain_sidecar_secret | default(kd_blockchain_sidecar_secret | default('change_me_to_a_secure_random_sidecar_secret_32_chars')) }}
           SEPOLIA_RPC_URL={{ sepolia_rpc_url }}
           PRIVATE_KEY={{ blockchain_private_key }}
           CONTRACT_ADDRESS={{ contract_address }}

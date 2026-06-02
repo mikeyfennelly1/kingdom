@@ -115,6 +115,7 @@ When a recipient's public key bundle is fetched from the server, `Client::getPub
 | `KD_JWT_TTL_SECONDS` | JWT lifetime in seconds | `3600` |
 | `KD_RATE_LIMIT_MAX_REQUESTS` | Maximum requests per IP per 60-second window | `10` |
 | `KD_BLOCKCHAIN_SIDECAR_URL` | Sidecar base URL | `http://localhost:3001` |
+| `KD_BLOCKCHAIN_SIDECAR_SECRET` | Shared secret for authenticated sidecar requests | required |
 | `KD_LOG_LEVEL` | spdlog log level | `info` |
 
 **Transport:** `httplib::SSLServer` loaded with the PEM certificate and key at construction time. All API traffic is HTTPS only; no plaintext HTTP fallback is offered.
@@ -245,7 +246,7 @@ All authenticated endpoints validate the JWT on every request via the `ValidateA
 | kds | 8080 | HTTPS (TLS 1.2+) | Inbound from kdctl | Configurable via `KD_PORT`. Docker publishes this port. |
 | VM public port | 4000 | TCP (port-forward → 8080) | Inbound from internet | Ansible `port-forward.yml` configures the forward on the VM. Clients connect to `200.69.13.70:4000`. |
 | PostgreSQL | 5432 | TCP (libpqxx) | kds → db | Internal Docker network only. Not publicly routable. |
-| Blockchain sidecar | 3001 | HTTP (plaintext) | kds → sidecar | Localhost / internal only. Configurable via `KD_BLOCKCHAIN_SIDECAR_URL`. |
+| Blockchain sidecar | 3001 | HTTP with shared-secret header | kds → sidecar | Localhost / internal only. Configurable via `KD_BLOCKCHAIN_SIDECAR_URL`; `/record` and `/pending/:id` require `X-Kingdom-Sidecar-Secret`. |
 | Ethereum Sepolia RPC | 443 | HTTPS (JSON-RPC over TLS) | sidecar → Sepolia | Outbound only. Public Sepolia testnet endpoint. |
 | Ethereum Sepolia RPC | 443 | HTTPS (JSON-RPC over TLS) | browser → Sepolia | Verification page only. Connects directly from the user's browser; no Kingdom server involved. |
 
@@ -375,6 +376,7 @@ docker-compose.yml
 │   ├── volumes: ./certs:/app/certs:ro
 │   ├── environment: KD_PORT, KD_DB_URL, KD_TLS_CERT, KD_TLS_KEY,
 │   │               KD_JWT_SECRET, KD_JWT_TTL_SECONDS,
+│   │               KD_BLOCKCHAIN_SIDECAR_SECRET,
 │   │               KD_RATE_LIMIT_MAX_REQUESTS, POSTGRES_*
 │   └── depends_on: db (healthy — pg_isready check)
 └── db (PostgreSQL 16)

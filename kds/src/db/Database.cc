@@ -133,6 +133,15 @@ std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
   return result[0][0].as<std::string>();
 }
 
+bool Database::userExists(uint64_t userId) {
+  std::scoped_lock lock(mutex_);
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(userId)};
+  auto result = txn.exec("SELECT 1 FROM users WHERE id = $1", params);
+  txn.commit();
+  return !result.empty();
+}
+
 namespace {
 
 constexpr std::size_t kBlockchainDigestColIdx = 5;

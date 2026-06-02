@@ -29,6 +29,9 @@ class Database {
   // Fetch a user's published public key. Returns std::nullopt if the user does not exist.
   std::optional<std::string> getUserPublicKey(uint64_t userId);
 
+  // Returns true if a user exists.
+  bool userExists(uint64_t userId);
+
   // Create a conversation and add participants. Returns conversation id.
   uint64_t createConversation(const std::string& name, const std::vector<uint64_t>& participantIds);
 

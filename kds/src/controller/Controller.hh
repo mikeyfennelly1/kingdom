@@ -23,7 +23,7 @@ const std::string defaultListenHost = "0.0.0.0";
 class Controller {
  public:
   Controller(std::string host, int port, const std::string& dbConnectionString,
-             std::string sidecarUrl, const std::string& certPath,
+             std::string sidecarUrl, std::string sidecarSecret, const std::string& certPath,
              // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
              const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds,
              int rateLimitMaxRequests);
@@ -36,6 +36,7 @@ class Controller {
   std::string host_;
   int port_;
   std::string sidecarUrl_;
+  std::string sidecarSecret_;
   httplib::SSLServer svr_;
   std::unique_ptr<SecurityFilterChain> securityFilterChain_;
   Database db_;

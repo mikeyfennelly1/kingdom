@@ -110,12 +110,12 @@ The sidecar records message hashes on the Ethereum Sepolia testnet. It runs as a
 ----
 cd blockchain/sidecar
 cp ../.env.example .env
-# Edit .env with SEPOLIA_RPC_URL, PRIVATE_KEY, CONTRACT_ADDRESS
+# Edit .env with SEPOLIA_RPC_URL, PRIVATE_KEY, CONTRACT_ADDRESS, BLOCKCHAIN_SIDECAR_SECRET
 npm install
 npm start
 ----
 
-The sidecar runs on port 3001 by default. The server (`kds`) calls it automatically when messages are sent via `KD_BLOCKCHAIN_SIDECAR_URL` (defaults to `http://localhost:3001`).
+The sidecar runs on port 3001 by default. The server (`kds`) calls it automatically when messages are sent via `KD_BLOCKCHAIN_SIDECAR_URL` (defaults to `http://localhost:3001`). Requests from `kds` to the sidecar are authenticated with `KD_BLOCKCHAIN_SIDECAR_SECRET`, which must match `BLOCKCHAIN_SIDECAR_SECRET` in the sidecar environment.
 
 === Verification page
 
@@ -139,11 +139,23 @@ Paste a transaction hash from a sent message and the message payload to verify o
 | `KD_TLS_CERT` | — | Path to TLS certificate file (required)
 | `KD_TLS_KEY` | — | Path to TLS private key file (required)
 | `KD_JWT_SECRET` | — | Secret used to sign HS256 authentication tokens (required, at least 32 chars)
+| `KD_BLOCKCHAIN_SIDECAR_SECRET` | — | Shared secret sent to the blockchain sidecar (required, at least 32 chars)
 | `KD_JWT_TTL_SECONDS` | `3600` | Authentication token lifetime in seconds
 | `KD_PORT` | `8080` | Port to listen on
 | `KD_LOG_LEVEL` | `info` | Log level (debug, info, warn, error)
 | `KD_BLOCKCHAIN_SIDECAR_URL` | `http://localhost:3001` | Blockchain sidecar URL
 | `KD_RATE_LIMIT_MAX` | `10` | Max auth attempts per IP per 60-second window
+|===
+
+=== Blockchain sidecar
+
+[cols="1,1,2", options="header"]
+|===
+| Variable | Default | Description
+| `SEPOLIA_RPC_URL` | — | Sepolia RPC endpoint (required)
+| `PRIVATE_KEY` | — | Ethereum private key used to submit batch transactions (required)
+| `CONTRACT_ADDRESS` | — | Deployed Sepolia contract address (required)
+| `BLOCKCHAIN_SIDECAR_SECRET` | — | Shared secret required on `/record` and `/pending/:id` (required, at least 32 chars)
 |===
 
 == Task Reference

@@ -14,6 +14,7 @@ inline constexpr const char* ContentType = "Content-Type";
 inline constexpr const char* StrictTransportSecurity = "Strict-Transport-Security";
 inline constexpr const char* XContentTypeOptions = "X-Content-Type-Options";
 inline constexpr const char* XFrameOptions = "X-Frame-Options";
+inline constexpr const char* SidecarSecret = "X-Kingdom-Sidecar-Secret";
 
 inline constexpr const char* HstsMaxAgeIncludeSubDomains = "max-age=31536000; includeSubDomains";
 inline constexpr const char* NoSniff = "nosniff";
@@ -50,6 +51,7 @@ inline constexpr size_t kMinPasswordLen = 12;
 inline constexpr size_t kMaxPasswordLen = 72;
 inline constexpr size_t kMaxUsernameLen = 64;
 inline constexpr size_t kMaxConversationNameLen = 128;
+inline constexpr size_t kMaxConversationParticipants = 2;
 inline constexpr size_t kMaxPayloadLen = 65536;
 inline constexpr size_t kMaxPublicKeyLen = 8192;
 }  // namespace domain

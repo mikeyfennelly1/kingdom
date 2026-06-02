@@ -12,6 +12,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "../common/Constants.hh"
@@ -93,17 +94,47 @@ bool isValidSignupPassword(const std::string& password) {
   return hasUppercase && hasNumber;
 }
 
+std::string sanitizeForLog(std::string_view value) {
+  std::string sanitized;
+  sanitized.reserve(value.size());
+
+  for (unsigned char chr : value) {
+    switch (chr) {
+      case '\n':
+        sanitized += "\\n";
+        break;
+      case '\r':
+        sanitized += "\\r";
+        break;
+      case '\t':
+        sanitized += "\\t";
+        break;
+      default:
+        if (chr < 0x20 || chr == 0x7f) {
+          sanitized += '?';
+        } else {
+          sanitized.push_back(static_cast<char>(chr));
+        }
+        break;
+    }
+  }
+
+  return sanitized;
+}
+
 }  // namespace
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Controller::Controller(std::string host, int port, const std::string& dbConnectionString,
-                       std::string sidecarUrl, const std::string& certPath,
+                       std::string sidecarUrl, std::string sidecarSecret,
+                       const std::string& certPath,
                        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                        const std::string& keyPath, std::string jwtSecret, uint64_t jwtTtlSeconds,
                        int rateLimitMaxRequests)
     : host_(std::move(host))
     , port_(port)
     , sidecarUrl_(std::move(sidecarUrl))
+    , sidecarSecret_(std::move(sidecarSecret))
     , svr_(certPath.c_str(), keyPath.c_str())
     , db_(dbConnectionString)
     , jwtSecret_(std::move(jwtSecret))
@@ -264,7 +295,7 @@ void Controller::handleSignup_(const httplib::Request& req, httplib::Response& r
     auto passwordHash = User::hashPassword(password);
     auto newUserId = db_.createUser(username, passwordHash, publicKey);
     auto sessionToken = createSession_(newUserId, username);
-    spdlog::info("Created user '{}' with id {}", username, newUserId);
+    spdlog::info("Created user '{}' with id {}", sanitizeForLog(username), newUserId);
     res.status = httplib::Created_201;
     res.set_content(nlohmann::json{{json_fields::EntityId, newUserId},
                                    {json_fields::Username, username},
@@ -375,7 +406,8 @@ void Controller::startBlockchainResolver_() {
 
       for (const auto& [msgId, pendingId] : pending) {
         try {
-          auto sidecarRes = sidecar.Get("/pending/" + pendingId);
+          httplib::Headers headers{{http_headers::SidecarSecret, sidecarSecret_}};
+          auto sidecarRes = sidecar.Get("/pending/" + pendingId, headers);
           if (!sidecarRes || sidecarRes->status != httplib::OK_200) {
             continue;
           }
@@ -494,7 +526,36 @@ void Controller::handleCreateConversation_(const httplib::Request& req, httplib:
     return;
   }
 
-  auto participantIds = body[json_fields::ParticipantIds].get<std::vector<uint64_t>>();
+  if (!body[json_fields::ParticipantIds].is_array()) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "participantIds must be an array"}}.dump(),
+                    content_types::Json);
+    return;
+  }
+
+  auto participantIdsJson = body[json_fields::ParticipantIds];
+  if (participantIdsJson.empty() ||
+      participantIdsJson.size() > domain::kMaxConversationParticipants) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(
+        nlohmann::json{{json_fields::Error, "participantIds must contain 1–2 users"}}.dump(),
+        content_types::Json);
+    return;
+  }
+
+  std::vector<uint64_t> participantIds;
+  participantIds.reserve(participantIdsJson.size());
+  for (const auto& participantId : participantIdsJson) {
+    if (!participantId.is_number_unsigned()) {
+      res.status = httplib::BadRequest_400;
+      res.set_content(
+          nlohmann::json{{json_fields::Error, "participantIds must contain unsigned integers"}}
+              .dump(),
+          content_types::Json);
+      return;
+    }
+    participantIds.push_back(participantId.get<uint64_t>());
+  }
 
   std::set<uint64_t> seen(participantIds.begin(), participantIds.end());
   if (seen.size() != participantIds.size()) {
@@ -505,8 +566,28 @@ void Controller::handleCreateConversation_(const httplib::Request& req, httplib:
     return;
   }
 
+  if (!seen.contains(*authenticatedUserId)) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(nlohmann::json{{json_fields::Error,
+                                    "conversation creator must be a participant"}}
+                        .dump(),
+                    content_types::Json);
+    return;
+  }
+
+  for (const auto participantId : participantIds) {
+    if (!db_.userExists(participantId)) {
+      res.status = httplib::BadRequest_400;
+      res.set_content(
+          nlohmann::json{{json_fields::Error, "participantIds must reference existing users"}}
+              .dump(),
+          content_types::Json);
+      return;
+    }
+  }
+
   auto newConvId = db_.createConversation(name, participantIds);
-  spdlog::info("Created conversation '{}' with id {}", name, newConvId);
+  spdlog::info("Created conversation '{}' with id {}", sanitizeForLog(name), newConvId);
   res.status = httplib::Created_201;
   res.set_content(
       nlohmann::json{{json_fields::EntityId, newConvId}, {json_fields::Name, name}}.dump(),
@@ -645,7 +726,9 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
     nlohmann::json sidecarBody = {{json_fields::ConversationId, *convId},
                                   {json_fields::MsgId, msgId},
                                   {json_fields::Ciphertext, payload}};
-    auto sidecarRes = sidecar.Post(routes::SidecarRecord, sidecarBody.dump(), content_types::Json);
+    httplib::Headers headers{{http_headers::SidecarSecret, sidecarSecret_}};
+    auto sidecarRes =
+        sidecar.Post(routes::SidecarRecord, headers, sidecarBody.dump(), content_types::Json);
     if (sidecarRes && sidecarRes->status == httplib::OK_200) {
       auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
       auto pendingId = sidecarJson[json_fields::PendingId].get<std::string>();

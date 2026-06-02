@@ -352,6 +352,54 @@ describe('Unhappy paths', () => {
     expect(res.status).toBe(400)
   })
 
+  it('POST /conversations rejects participantIds that exclude the creator', async () => {
+    const login = await api('POST', '/login', {
+      username: `alice_${run}`,
+      password: 'AlicePass123!',
+    })
+    const tok = login.data['token'] as string
+    const res = await api(
+      'POST',
+      '/conversations',
+      { name: 'missing-creator-test', participantIds: [state.bobId] },
+      tok,
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it('POST /conversations rejects too many participantIds', async () => {
+    const login = await api('POST', '/login', {
+      username: `alice_${run}`,
+      password: 'AlicePass123!',
+    })
+    const tok = login.data['token'] as string
+    const res = await api(
+      'POST',
+      '/conversations',
+      {
+        name: 'too-many-participants-test',
+        participantIds: [state.aliceId, state.bobId, state.aliceId + 1000],
+      },
+      tok,
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('POST /conversations rejects nonexistent participantIds cleanly', async () => {
+    const login = await api('POST', '/login', {
+      username: `alice_${run}`,
+      password: 'AlicePass123!',
+    })
+    const tok = login.data['token'] as string
+    const res = await api(
+      'POST',
+      '/conversations',
+      { name: 'missing-user-test', participantIds: [state.aliceId, 999999999] },
+      tok,
+    )
+    expect(res.status).toBe(400)
+  })
+
   it('POST /conversations/:id/messages returns 401 without auth', async () => {
     const res = await api('POST', `/conversations/${state.convId}/messages`, {
       senderId: state.aliceId,
