@@ -14,8 +14,7 @@ main() {
     local commit_hash="$(git rev-parse --short HEAD)"
     bash -c "docker push mikeyfennelly/kds:${commit_hash}"
     bash -c "docker push mikeyfennelly/kds:latest"
-    export REPO_VERSION="${commit_hash}"
-    bash -c "deploy.sh"
+    bash "${SCRIPT_DIR}/deploy.sh" "${commit_hash}"
 }
 
 main "$@"
