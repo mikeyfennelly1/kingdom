@@ -9,6 +9,11 @@ KD_PORT="${KD_PORT:-8080}"
 POSTGRES_PORT="${POSTGRES_PORT:-5433}"
 
 main() {
+    bash -c "${SCRIPT_DIR}/create-closure.sh"
+    if [[ $? -ne 0 ]]; then
+        printf "ERROR: create-closure script failed\n" >&2
+        exit 1
+    fi
     bash -c "${SCRIPT_DIR}/build.docker.sh"
     bash -c "${SCRIPT_DIR}/test.sh" || printf "ERROR: test suite failed.\n" >&2
     local commit_hash="$(git rev-parse --short HEAD)"

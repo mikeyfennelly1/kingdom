@@ -9,14 +9,6 @@ main() {
     pushd "${PROJ_ROOT}"
     trap popd EXIT
 
-    printf "DEBUG: executing create-closure script\n" >&2
-    bash -c "${SCRIPT_DIR}/create-closure.sh"
-    if [[ $? -ne 0 ]]; then
-        printf "ERROR: create-closure script failed\n" >&2
-        exit 1
-    fi
-    printf "DEBUG: closure creation script executed successfully\n" >&2
-
     load_env
     if [[ $? -ne 0 ]]; then
         printf "ERROR: failed to load environment\n" >&2

@@ -401,6 +401,12 @@ void Controller::startBlockchainResolver_() {
 void Controller::start() {
   spdlog::info("Starting Kingdom Server on {}:{}", host_, port_);
 
+  if (!svr_.is_valid()) {
+    spdlog::error("SSL context is invalid — check that KD_TLS_CERT and KD_TLS_KEY point to "
+                  "readable, valid PEM files");
+    return;
+  }
+
   if (!svr_.listen(host_, port_)) {
     spdlog::error("Failed to start server on {}:{}", host_, port_);
     return;
