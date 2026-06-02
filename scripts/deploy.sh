@@ -2,9 +2,10 @@
 
 source .env
 
-REPO_VERSION=${1:-"main"}
+REPO_VERSION=${1:-"$(git rev-parse --short HEAD)"}
 
-echo "Deploying version: $REPO_VERSION"
+echo "deploying version: $REPO_VERSION"
+echo "using key at: $ANSIBLE_VAULT_KEY_FILE"
 
 ansible-playbook ansible/deploy.yml \
   -i ansible/inventory.ini \

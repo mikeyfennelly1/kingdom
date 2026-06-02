@@ -43,16 +43,22 @@
         group: deployment
         mode: '0755'
 
-    - name: Generate self-signed certificate if missing
-      ansible.builtin.shell: |
-        openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
-          -keyout certs/server.key \
-          -out certs/server.crt \
-          -subj "/CN=localhost" \
-          -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-      args:
-        chdir: "{{ repo_pull_dest }}"
-        creates: "{{ repo_pull_dest }}/certs/server.key"
+    - name: Copy TLS certificate
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../certs/server.crt"
+        dest: "{{ repo_pull_dest }}/certs/server.crt"
+        owner: deployment
+        group: deployment
+        mode: '0644'
+
+    - name: Copy TLS private key
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../certs/server.key"
+        dest: "{{ repo_pull_dest }}/certs/server.key"
+        owner: deployment
+        group: deployment
+        mode: '0600'
+      become: yes
 
     - name: Remove existing .env file
       ansible.builtin.file:
@@ -87,6 +93,11 @@
       become: yes
       ignore_errors: yes
 
+    - name: Remove old kds images
+      ansible.builtin.shell: docker images mikeyfennelly/kds -q | xargs -r docker rmi -f
+      become: yes
+      ignore_errors: yes
+
     - name: Pull latest images
       community.docker.docker_compose_v2:
         project_src: "{{ repo_pull_dest }}"
@@ -98,3 +109,27 @@
         project_src: "{{ repo_pull_dest }}"
         state: present
       become: yes
+
+    - name: Wait for kds to attempt startup
+      ansible.builtin.pause:
+        seconds: 8
+
+    - name: Fetch kds container logs
+      ansible.builtin.command: docker logs --tail 50 kds
+      register: kds_logs
+      become: yes
+
+    - name: Print kds startup logs
+      ansible.builtin.debug:
+        msg: "{{ kds_logs.stdout_lines + kds_logs.stderr_lines }}"
+
+    - name: Get kds container state
+      community.docker.docker_container_info:
+        name: kds
+      register: kds_info
+      become: yes
+
+    - name: Fail if kds is not running
+      ansible.builtin.fail:
+        msg: "kds failed to start — see logs above"
+      when: not kds_info.container.State.Running

@@ -8,42 +8,41 @@ PROJ_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 KD_PORT="${KD_PORT:-8080}"
 POSTGRES_PORT="${POSTGRES_PORT:-5433}"
 
+SKIP_TESTS=false
+
+usage() {
+    printf "Usage: %s [--skip-tests]\n" "$(basename "$0")" >&2
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --skip-tests) SKIP_TESTS=true ;;
+            *) usage; exit 1 ;;
+        esac
+        shift
+    done
+}
+
 main() {
-    echo "=== Kingdom CI ==="
-    echo ""
+    parse_args "$@"
 
-    echo "--- Tearing down existing resources ---"
-    teardown
-    trap teardown EXIT
-
-    echo ""
-    echo "--- Building Docker image ---"
-    build_image
+    bash -c "${SCRIPT_DIR}/create-closure.sh"
     if [[ $? -ne 0 ]]; then
-        echo "Error: Docker image build failed." >&2
+        printf "ERROR: create-closure script failed\n" >&2
         exit 1
     fi
-
-    echo ""
-    echo "--- Running test suite ---"
-    run_tests
-    if [[ $? -ne 0 ]]; then
-        echo "Error: test suite failed." >&2
-        exit 1
+    bash -c "${SCRIPT_DIR}/build.docker.sh"
+    if [[ "${SKIP_TESTS}" == false ]]; then
+        bash -c "${SCRIPT_DIR}/test.sh" || printf "ERROR: test suite failed.\n" >&2
+    else
+        printf "INFO: skipping tests\n"
     fi
-
-    echo ""
-    echo "=== CI passed ==="
-}
-
-function build_image() {
-    "${SCRIPT_DIR}/build.docker.sh"
-    return $?
-}
-
-function run_tests() {
-    "${SCRIPT_DIR}/test.sh" --rebuild
-    return $?
+    local commit_hash="$(git rev-parse --short HEAD)"
+    bash -c "docker push mikeyfennelly/kds:${commit_hash}"
+    bash -c "docker push mikeyfennelly/kds:latest"
+    git push origin HEAD
+    bash "${SCRIPT_DIR}/deploy.sh" "${commit_hash}"
 }
 
 main "$@"

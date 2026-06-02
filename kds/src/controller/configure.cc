@@ -42,6 +42,8 @@ auto configure() -> kd::Controller {
   if (certPath == nullptr || keyPath == nullptr) {
     throw std::runtime_error("KD_TLS_CERT and KD_TLS_KEY environment variables must be set");
   }
+  spdlog::info("TLS cert: {}", certPath);
+  spdlog::info("TLS key:  {}", keyPath);
 
   const char* jwtSecret = std::getenv("KD_JWT_SECRET");
   if (jwtSecret == nullptr || std::string(jwtSecret).size() < kMinJwtSecretLen) {

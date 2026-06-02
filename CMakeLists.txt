@@ -1,6 +1,21 @@
 cmake_minimum_required(VERSION 3.10)
 project(kingdom VERSION 1.0 LANGUAGES CXX)
 
+find_package(Git QUIET)
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE KD_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+endif()
+if(NOT KD_VERSION OR KD_VERSION STREQUAL "")
+    set(KD_VERSION "unknown")
+endif()
+message(STATUS "Kingdom version: ${KD_VERSION}")
+
 # HARD RULE: never search system paths
 set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH FALSE)
 set(CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY FALSE)

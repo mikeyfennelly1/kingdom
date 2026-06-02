@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "../common/Constants.hh"
+#include "version.h"
 #include "../security/JwtUtils.hh"
 #include "../security/SecurityPredicates.hh"
 
@@ -55,7 +56,7 @@ constexpr const char* Version = "version";
 
 namespace api_info {
 constexpr const char* Name = "Kingdom Server";
-constexpr const char* Version = "1.0";
+constexpr const char* Version = kVersion;
 }  // namespace api_info
 
 std::optional<uint64_t> parseId(std::string_view s) noexcept {
@@ -399,6 +400,12 @@ void Controller::startBlockchainResolver_() {
 
 void Controller::start() {
   spdlog::info("Starting Kingdom Server on {}:{}", host_, port_);
+
+  if (!svr_.is_valid()) {
+    spdlog::error("SSL context is invalid — check that KD_TLS_CERT and KD_TLS_KEY point to "
+                  "readable, valid PEM files");
+    return;
+  }
 
   if (!svr_.listen(host_, port_)) {
     spdlog::error("Failed to start server on {}:{}", host_, port_);
