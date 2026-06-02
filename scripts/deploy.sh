@@ -2,7 +2,7 @@
 
 source .env
 
-REPO_VERSION=${1:-"$(git rev-parse --short HEAD)"}
+REPO_VERSION=${1:-"$(gh release view --json tagName -q .tagName)"}
 
 echo "deploying version: $REPO_VERSION"
 echo "using key at: $ANSIBLE_VAULT_KEY_FILE"

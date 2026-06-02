@@ -29,6 +29,9 @@ class Database {
   // Fetch a user's published public key. Returns std::nullopt if the user does not exist.
   std::optional<std::string> getUserPublicKey(uint64_t userId);
 
+  // Returns true when every supplied user id exists.
+  bool usersExist(const std::vector<uint64_t>& userIds);
+
   // Create a conversation and add participants. Returns conversation id.
   uint64_t createConversation(const std::string& name, const std::vector<uint64_t>& participantIds);
 
@@ -62,6 +65,9 @@ class Database {
 
   // Returns true if userId is a participant in conversationId.
   bool isParticipant(uint64_t conversationId, uint64_t userId);
+
+  // Returns true if messageId belongs to conversationId and was sent by senderId.
+  bool isMessageSender(uint64_t conversationId, uint64_t messageId, uint64_t senderId);
 
  private:
   void initSchema_();
