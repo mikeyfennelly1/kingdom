@@ -5,7 +5,7 @@ services:
     container_name: kds
     restart: unless-stopped
     ports:
-      - "${KD_PORT:-8080}:${KD_PORT:-8080}"
+      - "${KD_PORT:-80}:${KD_PORT:-8080}"
     volumes:
       - ./certs:/app/certs:ro
     environment:
