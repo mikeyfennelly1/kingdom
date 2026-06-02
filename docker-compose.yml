@@ -21,9 +21,25 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
+      - KD_BLOCKCHAIN_SIDECAR_URL=${KD_BLOCKCHAIN_SIDECAR_URL:-http://sidecar:3001}
     depends_on:
       db:
         condition: service_healthy
+      sidecar:
+        condition: service_started
+
+  sidecar:
+    image: node:lts-alpine
+    container_name: kd-sidecar
+    working_dir: /app
+    volumes:
+      - ./blockchain/sidecar:/app
+    command: sh -c "npm install && node index.js"
+    environment:
+      - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - CONTRACT_ADDRESS=${CONTRACT_ADDRESS}
+    restart: unless-stopped
 
   db:
     image: postgres:16
