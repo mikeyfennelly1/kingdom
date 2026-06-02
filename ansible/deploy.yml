@@ -76,6 +76,11 @@
       become: yes
       ignore_errors: yes
 
+    - name: Remove old kds images
+      ansible.builtin.shell: docker images mikeyfennelly/kds -q | xargs -r docker rmi -f
+      become: yes
+      ignore_errors: yes
+
     - name: Pull latest images
       community.docker.docker_compose_v2:
         project_src: "{{ repo_pull_dest }}"
@@ -87,3 +92,27 @@
         project_src: "{{ repo_pull_dest }}"
         state: present
       become: yes
+
+    - name: Wait for kds to attempt startup
+      ansible.builtin.pause:
+        seconds: 8
+
+    - name: Fetch kds container logs
+      ansible.builtin.command: docker logs --tail 50 kds
+      register: kds_logs
+      become: yes
+
+    - name: Print kds startup logs
+      ansible.builtin.debug:
+        msg: "{{ kds_logs.stdout_lines + kds_logs.stderr_lines }}"
+
+    - name: Get kds container state
+      community.docker.docker_container_info:
+        name: kds
+      register: kds_info
+      become: yes
+
+    - name: Fail if kds is not running
+      ansible.builtin.fail:
+        msg: "kds failed to start — see logs above"
+      when: not kds_info.container.State.Running
