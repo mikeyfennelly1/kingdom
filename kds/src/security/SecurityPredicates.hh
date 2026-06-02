@@ -6,7 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <regex>
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 #include "../common/Constants.hh"
@@ -21,16 +21,49 @@ class TokenBlacklist {
  public:
   static void revoke(const std::string& token) {
     std::scoped_lock lock(mutex_);
-    tokens_.insert(token);
+    pruneExpired_();
+    tokens_[token] = expiryFromToken_(token).value_or(epochSeconds());
   }
 
   static bool isRevoked(const std::string& token) {
     std::scoped_lock lock(mutex_);
+    pruneExpired_();
     return tokens_.contains(token);
   }
 
  private:
-  inline static std::unordered_set<std::string> tokens_;
+  static std::optional<uint64_t> expiryFromToken_(const std::string& token) {
+    const auto firstDot = token.find('.');
+    if (firstDot == std::string::npos) {
+      return std::nullopt;
+    }
+    const auto secondDot = token.find('.', firstDot + 1);
+    if (secondDot == std::string::npos) {
+      return std::nullopt;
+    }
+    const auto payloadBody = base64UrlDecode(token.substr(firstDot + 1, secondDot - firstDot - 1));
+    if (!payloadBody.has_value()) {
+      return std::nullopt;
+    }
+    auto payload = nlohmann::json::parse(*payloadBody, nullptr, false);
+    if (payload.is_discarded() || !payload.contains("exp") || !payload["exp"].is_number_unsigned()) {
+      return std::nullopt;
+    }
+    return payload["exp"].get<uint64_t>();
+  }
+
+  static void pruneExpired_() {
+    const auto now = epochSeconds();
+    for (auto it = tokens_.begin(); it != tokens_.end();) {
+      if (it->second <= now) {
+        it = tokens_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  inline static std::unordered_map<std::string, uint64_t> tokens_;
   inline static std::mutex mutex_;
 };
 

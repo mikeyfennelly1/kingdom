@@ -50,6 +50,7 @@ inline constexpr size_t kMinPasswordLen = 12;
 inline constexpr size_t kMaxPasswordLen = 72;
 inline constexpr size_t kMaxUsernameLen = 64;
 inline constexpr size_t kMaxConversationNameLen = 128;
+inline constexpr size_t kMaxConversationParticipants = 50;
 inline constexpr size_t kMaxPayloadLen = 65536;
 inline constexpr size_t kMaxPublicKeyLen = 8192;
 }  // namespace domain
@@ -60,6 +61,7 @@ inline constexpr int kSidecarReadTimeoutSec = 60;
 inline constexpr int kMessageReadTimeoutSec = 120;
 inline constexpr int kRateLimitWindowSec = 60;
 inline constexpr int kBlockchainResolverIntervalSec = 60;
+inline constexpr int kRateLimitStaleEntryTtlSec = 300;
 }  // namespace timeouts
 
 namespace blockchain {
