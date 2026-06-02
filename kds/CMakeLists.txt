@@ -1,5 +1,10 @@
 set(PKG_CONFIG_EXECUTABLE $ENV{PKG_CONFIG})
 
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common/version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/version.h
+)
+
 file(GLOB_RECURSE KD_SERVER_SOURCES src/*.cc)
 
 add_executable(kds
@@ -29,6 +34,7 @@ target_include_directories(kds
         ../libkd/include
         ${LIBPQXX_INCLUDE_DIRS}
         ${LIBSODIUM_INCLUDE_DIRS}
+        ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
 # Testing

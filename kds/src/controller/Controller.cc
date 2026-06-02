@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "../common/Constants.hh"
+#include "version.h"
 #include "../security/JwtUtils.hh"
 #include "../security/SecurityPredicates.hh"
 
@@ -55,7 +56,7 @@ constexpr const char* Version = "version";
 
 namespace api_info {
 constexpr const char* Name = "Kingdom Server";
-constexpr const char* Version = "1.0";
+constexpr const char* Version = kVersion;
 }  // namespace api_info
 
 std::optional<uint64_t> parseId(std::string_view s) noexcept {
