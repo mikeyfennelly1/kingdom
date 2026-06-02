@@ -86,6 +86,7 @@
           SEPOLIA_RPC_URL={{ sepolia_rpc_url }}
           PRIVATE_KEY={{ blockchain_private_key }}
           CONTRACT_ADDRESS={{ contract_address }}
+          KD_RATE_LIMIT_MAX_REQUESTS=10
 
     - name: Stop old containers
       community.docker.docker_compose_v2:
