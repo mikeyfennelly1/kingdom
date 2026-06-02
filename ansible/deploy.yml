@@ -86,6 +86,11 @@
           # App Database URL (key=value format avoids @ in password breaking URL parsing)
           KD_DB_URL=host=db port=5432 user={{ postgres_user }} password={{ postgres_password }} dbname={{ postgres_db }}
 
+          # Blockchain Sidecar
+          SEPOLIA_RPC_URL={{ sepolia_rpc_url }}
+          PRIVATE_KEY={{ blockchain_private_key }}
+          CONTRACT_ADDRESS={{ contract_address }}
+
     - name: Stop old containers
       community.docker.docker_compose_v2:
         project_src: "{{ repo_pull_dest }}"
