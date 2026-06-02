@@ -6,6 +6,11 @@
   },
   {
     "inputs": [],
+    "name": "EmptyBatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "Unauthorized",
     "type": "error"
   },
@@ -15,19 +20,13 @@
       {
         "indexed": true,
         "internalType": "uint256",
-        "name": "conversationId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "msgId",
+        "name": "batchId",
         "type": "uint256"
       },
       {
         "indexed": false,
         "internalType": "bytes32",
-        "name": "hash",
+        "name": "root",
         "type": "bytes32"
       },
       {
@@ -35,9 +34,21 @@
         "internalType": "uint256",
         "name": "timestamp",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "messageCount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32[]",
+        "name": "leaves",
+        "type": "bytes32[]"
       }
     ],
-    "name": "HashRecorded",
+    "name": "BatchRecorded",
     "type": "event"
   },
   {
@@ -46,19 +57,37 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "name": "batches",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "root",
+        "type": "bytes32"
       },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "messageCount",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "nextBatchId",
+    "outputs": [
       {
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
-      }
-    ],
-    "name": "hashes",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -80,40 +109,17 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "conversationId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "msgId",
-        "type": "uint256"
-      },
-      {
         "internalType": "bytes32",
-        "name": "hash",
+        "name": "root",
         "type": "bytes32"
-      }
-    ],
-    "name": "recordHash",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       },
       {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
+        "internalType": "bytes32[]",
+        "name": "leaves",
+        "type": "bytes32[]"
       }
     ],
-    "name": "timestamps",
+    "name": "recordBatch",
     "outputs": [
       {
         "internalType": "uint256",
@@ -121,7 +127,7 @@
         "type": "uint256"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ]
