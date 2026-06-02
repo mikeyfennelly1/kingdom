@@ -137,7 +137,8 @@ class ValidateAuthenticated : public SecurityPredicate {
 
     // Public routes that do not require authentication
     static const std::vector<std::string> kPublicPaths = {routes::Login, routes::Signup,
-                                                          routes::Health, routes::Root};
+                                                          routes::Health, routes::Root,
+                                                          routes::Api};
     for (const auto& path : kPublicPaths) {
       if (req.path == path) {
         return std::nullopt;

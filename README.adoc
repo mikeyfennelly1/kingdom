@@ -2,6 +2,9 @@
 :toc: left
 :toclevels: 2
 
+image:https://img.shields.io/website?label=production&url=https%3A%2F%2Fupdakingdom.theburkenator.com%2Fhealth[Production Health,link=https://updakingdom.theburkenator.com/health]
+image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fupdakingdom.theburkenator.com%2Fapi&query=%24.version&label=version[Version,link=https://updakingdom.theburkenator.com/api]
+
 == Building and Running
 
 === Host Machine
