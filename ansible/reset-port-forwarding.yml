@@ -1,0 +1,42 @@
+---
+- name: Reset Port Forwarding
+  hosts: "{{ target_hosts | default('configure_vm') }}"
+  become: yes
+  vars_files:
+    - vars/app_values.yml
+
+  tasks:
+    - name: Disable IPv4 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '0'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    - name: Remove PREROUTING redirect rule
+      ansible.builtin.iptables:
+        table: nat
+        chain: PREROUTING
+        protocol: "{{ protocol }}"
+        destination_port: "{{ target_port }}"
+        jump: REDIRECT
+        to_ports: "{{ destination_port }}"
+        comment: "Forward {{ target_port }} to {{ destination_port }}"
+        state: absent
+
+    - name: Remove OUTPUT redirect rule
+      ansible.builtin.iptables:
+        table: nat
+        chain: OUTPUT
+        protocol: "{{ protocol }}"
+        destination: 127.0.0.1
+        destination_port: "{{ target_port }}"
+        jump: REDIRECT
+        to_ports: "{{ destination_port }}"
+        comment: "Local Forward {{ target_port }} to {{ destination_port }}"
+        state: absent
+
+    - name: Save iptables rules
+      shell: netfilter-persistent save
+      changed_when: false

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="${SCRIPT_DIR}/.."
 
 RAW_HOST="${KD_RAW_HOST:-200.69.13.70}"
-RAW_PORT="${KD_RAW_PORT:-4000}"
+RAW_PORT="${KD_RAW_PORT:-80}"
 DNS_HOST="${KD_DNS_HOST:-updakingdom.theburkenator.com}"
 CA_CERT="${PROJ_ROOT}/certs/server.crt"
 
