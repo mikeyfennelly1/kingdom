@@ -6,25 +6,25 @@ INSTALL_DIR="${HOME}/kingdom"
 
 main() {
     echo "-> ensuring users on Debian & macOS have git, wget, and curl via brew & apt"
-    ensure_dependencies
+    ensure_dependencies > /dev/null
 
     echo "-> cloning repository"
-    clone_repo
+    clone_repo > /dev/null
 
     echo "-> installing nix"
-    install_nix
+    install_nix > /dev/null
 
     echo "-> running build script for server..."
-    run_build
+    run_build > /dev/null
 
     echo "-> running install script for kdctl..."
-    run_kdctl_install
+    run_kdctl_install > /dev/null
 
     echo "-> copying .env.example to .env"
-    copy_env
+    copy_env > /dev/null
 
     echo "-> verifying environment via script"
-    run_verify_env
+    run_verify_env > /dev/null
 }
 
 # ─── helpers ────────────────────────────────────────────────
@@ -111,7 +111,7 @@ function install_nix() {
 }
 
 function run_build() {
-    bash "${INSTALL_DIR}/scripts/build.sh"
+    bash "${INSTALL_DIR}/scripts/build/build.sh"
     if [[ $? -ne 0 ]]; then
         echo "ERROR: build script failed." >&2
         exit 1
@@ -119,7 +119,7 @@ function run_build() {
 }
 
 function run_kdctl_install() {
-    bash "${INSTALL_DIR}/scripts/kdctl-install.sh"
+    bash "${INSTALL_DIR}/scripts/init/kdctl-install.sh"
     if [[ $? -ne 0 ]]; then
         echo "ERROR: kdctl install script failed." >&2
         exit 1
@@ -139,7 +139,7 @@ function copy_env() {
 }
 
 function run_verify_env() {
-    bash "${INSTALL_DIR}/scripts/verify-env.sh"
+    bash "${INSTALL_DIR}/scripts/init/verify-env.sh"
     if [[ $? -ne 0 ]]; then
         echo "ERROR: environment verification failed. Edit ${INSTALL_DIR}/.env and re-run verify-env.sh." >&2
         exit 1
