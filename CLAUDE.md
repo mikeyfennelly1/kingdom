@@ -31,7 +31,6 @@ kingdom/
 │   └── report.adoc # Communal project report
 ├── CMakeLists.txt
 ├── Taskfile.yml
-├── devbox.json
 └── docker-compose.yml
 ```
 
@@ -44,7 +43,7 @@ kingdom/
 
 ## Build & Dev Commands
 
-Always run inside `devbox shell`.
+Always run inside `nix develop`.
 
 | Command | What it does |
 |---|---|
@@ -103,7 +102,7 @@ To use a library in a target, add it to `target_link_libraries` in the relevant 
 ## Infrastructure
 
 - **PostgreSQL 16** via Docker Compose — run with `docker compose up -d`
-- **Devbox** — reproducible dev environment, run `devbox shell` to enter it
+- **Nix** — reproducible dev environment, run `nix develop` to enter it
 - **PlantUML** — architecture diagrams, source goes in `docs/arch.puml`
 
 ---

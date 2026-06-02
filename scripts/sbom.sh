@@ -11,7 +11,7 @@
 # Defaults:
 #   output -> ./out/sbom.md
 #
-# Must be run inside 'nix develop' (or 'devbox shell') — requires $buildInputs
+# Must be run inside 'nix develop' — requires $buildInputs
 # and $nativeBuildInputs to be set by the Nix devShell environment.
 
 set -euo pipefail
@@ -26,7 +26,7 @@ mkdir -p "${OUT_DIR}"
 # ─── sanity checks ────────────────────────────────────────────
 
 if ! command -v nix-store &>/dev/null; then
-    printf "ERROR: nix-store not found — run inside 'nix develop' or 'devbox shell'\n" >&2
+    printf "ERROR: nix-store not found — run inside 'nix develop'\n" >&2
     exit 1
 fi
 

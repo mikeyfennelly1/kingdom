@@ -32,7 +32,7 @@ if [[ ! -f "${BINARY}" ]]; then
 fi
 
 if ! command -v nix-store &>/dev/null; then
-    printf "ERROR: nix-store not found — run this inside 'devbox shell'\n" >&2
+    printf "ERROR: nix-store not found — run this inside 'nix develop'\n" >&2
     exit 1
 fi
 

@@ -68,7 +68,7 @@
 - Security filter chain architecture (chain of responsibility pattern) with `SecurityPredicateFactory`; unit tests for the filter chain
 - TLS via `httplib::SSLServer` with configurable certificate and key paths; enforced on all endpoints
 - CI/CD pipeline: GitHub Actions workflows (build, test, docker-release with semver tagging), multi-stage Dockerfile for `kds`, Ansible playbooks for VM configuration and deployment to the project virtual host
-- Nix-based reproducible build environment: migration from devbox to a strict Nix shell, `check-nix-linkage.sh` asserting all linked libraries resolve to `/nix/store`
+- Nix-based reproducible build environment: strict Nix shell, `check-nix-linkage.sh` asserting all linked libraries resolve to `/nix/store`
 - Clang-tidy and clang-format configuration; build hardening flags
 - Initial `MessageIntegrity.sol` smart contract skeleton and ethers.js sidecar scaffolding
 

@@ -105,9 +105,9 @@ Stops the poll timer, calls `POST /logout` on the server, clears the auth token,
 - Requires `Qt6::Core` and `Qt6::Widgets`
 - Enables `AUTOMOC`, `AUTOUIC`, `AUTORCC` (needed for Qt's signal/slot meta-object system and `.hh` headers)
 - Uses `file(GLOB KD_CTL_SOURCES src/*.cc)` so new `.cc` files in `src/` are picked up automatically
-- Handles Qt6 location for both devbox/Nix (`Qt6_DIR` / `Qt6_PREFIX` env vars) and macOS Homebrew (`/opt/homebrew/opt/qt`)
+- Handles Qt6 location for both Nix (`Qt6_DIR` / `Qt6_PREFIX` env vars) and macOS Homebrew (`/opt/homebrew/opt/qt`)
 
-**To build:** the same `task build` as always. Qt6 must be available — inside devbox it should be on the path. On macOS, install with `brew install qt`.
+**To build:** the same `task build` as always. Qt6 must be available — inside `nix develop` it should be on the path. On macOS, install with `brew install qt`.
 
 ---
 

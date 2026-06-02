@@ -2,16 +2,12 @@
 
 You are doing a thorough critique of the Kingdom codebase against
 the project specification.
-
 First, read `docs/spec.adoc` in full to understand all four subject
 requirements and their rubrics.
-
 Then explore the entire codebase — read all source files in `kds/`, `kdctl/`,
 `libkd/`, `blockchain/`, and any other relevant directories.
-
 Then write a critique to `docs/critique.md` (overwrite if it exists). Structure
 it as follows:
-
 For each of the four subjects, use this structure:
 
 ## [Subject Name] — [Marks] — Current Grade Estimate: [Excellent/Very Good/Good/Acceptable/Poor]

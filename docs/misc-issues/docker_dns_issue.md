@@ -1,10 +1,10 @@
 # Technical Report: Docker Networking & DNS Resolution Issues
 **Project:** Kingdom (C++20 Secure Messaging)
-**Status:** Debugging Build Failures (`devbox install`)
+**Status:** Debugging Docker Build Failures
 **Date:** Monday, May 25, 2026
 
 ## 1. Problem Statement
-During the Docker build process, the `devbox install` command consistently fails with a `context deadline exceeded` error. This occurs when the tool attempts to reach `https://cache.nixos.org` to verify package integrity.
+During the Docker build process, the `nix develop` setup consistently fails with a `context deadline exceeded` error. This occurs when the tool attempts to reach `https://cache.nixos.org` to verify package integrity.
 
 ### Symptoms:
 *   **Timeout Window:** Failures occur exactly ~5 seconds after the network request initiates.
@@ -26,10 +26,10 @@ During the Docker build process, the `devbox install` command consistently fails
 ### Attempt 3: Retry with Plain Progress
 *   **Action:** `docker build --progress=plain ...`
 *   **Result:** Confirmed the 5-second timeout pattern.
-*   **Discovery:** The error is bubbling up from the Go `http` client used by Devbox.
+*   **Discovery:** The error is bubbling up from the Go `http` client used by the Nix fetcher.
 
 ### Attempt 4: Verbose Debugging & Nix Config
-*   **Action:** Modified Dockerfile to use `DEVBOX_DEBUG=1` and `NIX_CONFIG="connect-timeout = 30"`.
+*   **Action:** Modified Dockerfile to use `NIX_CONFIG="connect-timeout = 30"`.
 *   **Result:** Same 5-second failure.
 *   **Log Insight:** 
     ```text
@@ -39,11 +39,11 @@ During the Docker build process, the `devbox install` command consistently fails
     ...
     Error: Head "https://cache.nixos.org/...": context deadline exceeded
     ```
-*   **Conclusion:** The `nix` configuration change didn't help because Devbox's internal HTTP client is enforcing its own timeout before the underlying Nix process can finish its check.
+*   **Conclusion:** The `nix` configuration change didn't help because Nix's internal HTTP client is enforcing its own timeout before the process can finish its check.
 
 ## 3. DNS Resolution in Docker: A Deep Dive
 
-When a command inside a Docker container (like `devbox`) attempts to resolve `cache.nixos.org`, it follows a specific path that is often the source of "deadline exceeded" errors.
+When a command inside a Docker container (like `nix`) attempts to resolve `cache.nixos.org`, it follows a specific path that is often the source of "deadline exceeded" errors.
 
 ### A. The Embedded DNS Server
 Docker runs an internal DNS server at **`127.0.0.11`**. 
@@ -58,11 +58,11 @@ Docker runs an internal DNS server at **`127.0.0.11`**.
 4.  **MTU (Maximum Transmission Unit):** In some virtualized networks, the packet size allowed is smaller than the standard 1500 bytes. DNS responses (especially over UDP) that exceed the MTU will be silently dropped, causing the request to "hang" until the timeout.
 
 ## 4. Current Hypotheses
-*   **Hypothesis A:** The 5-second timeout is a hardcoded limit in the specific version of `devbox` (0.17.0) for its initial "pre-flight" network checks.
+*   **Hypothesis A:** The 5-second timeout is a hardcoded limit in the Nix HTTP client for its initial "pre-flight" network checks.
 *   **Hypothesis B:** DNS resolution is taking ~4.5 seconds due to `ndots` or IPv6 timeouts, leaving only 0.5 seconds for the actual HTTPS handshake, which then fails.
 
 ## 6. Advanced Network Diagnostics
-To gain visibility into where packets are being dropped or delayed, the following tools can be used from within a Docker container to simulate the `devbox` traffic.
+To gain visibility into where packets are being dropped or delayed, the following tools can be used from within a Docker container to simulate the Nix fetcher traffic.
 
 ### A. Using `mtr` (My Traceroute)
 `mtr` combines ping and traceroute to provide a per-hop analysis. Crucially, it should be run using TCP on port 443 to match HTTPS traffic patterns.
