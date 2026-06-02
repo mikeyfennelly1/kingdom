@@ -2,64 +2,34 @@
 :toc: left
 :toclevels: 2
 
-== Prerequisites
+== Building and Running
 
-Install the following before cloning:
-
-* https://www.jetpack.io/devbox/docs/installing_devbox/[Devbox] — reproducible dev environment
-* https://docs.docker.com/get-docker/[Docker] — runs the PostgreSQL database
-
-== Setup
+=== Host Machine
 
 1. Clones this repo.
-2. Downloads nix.
-3. Installs all dependencies.
-4. Bootstraps environments for build and dev.
+2. Downloads nix 2.34.7.
+3. Installs all link:flake.nix[dependencies defined in nix flake specs].
 5. Builds the server (`kds`) and the Qt6 GUI client (`kdctl`).
-6. Generates TLS certificates to run on the server.
 
 [source, bash]
 ----
-wget -qO- https://raw.githubusercontent.com/mikeyfennelly1/kingdom/main/scripts/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/mikeyfennelly1/kingdom/main/scripts/init.sh | bash
 ----
 
-== Generating TLS Certificates
+== Running the application stack locally
+
+Run the app.
+
+[source, bash]
+----
+./scripts/start.sh
+----
+
+Run a health check.
 
 [source,bash]
 ----
-./scripts/init-certs.sh
-----
-
-This generates `certs/server.key` and `certs/server.crt` (self-signed, valid for `localhost`, `updakingdom.theburkenator.com`, `127.0.0.1`, and `200.69.13.70`).
-
-== Running the Server
-
-[source,bash]
-----
-task run
-----
-
-This loads environment variables from `.env` and starts `kds` on port 8080 over HTTPS. You should see:
-
-----
-[info] Initializing Kingdom Server...
-[info] Connected to database
-[info] Database schema initialized
-[info] Starting Kingdom Server on 0.0.0.0:8080
-----
-
-To verify the server is running:
-
-[source,bash]
-----
-./scripts/health-check.sh
-----
-
-Pass a custom base URL as the first argument if the server is not at the default (`https://updakingdom.theburkenator.com`):
-
-[source,bash]
-----
-./scripts/health-check.sh https://localhost:8080
+./scripts/health-check.sh --local --secure
 ----
 
 == Using the GUI (kdctl)
@@ -68,7 +38,7 @@ Pass a custom base URL as the first argument if the server is not at the default
 
 [source,bash]
 ----
-./build/kdctl/kdctl
+kdctl
 ----
 
 === Login screen
@@ -128,42 +98,3 @@ open blockchain/verification/index.html
 
 Paste a transaction hash from a sent message and the message payload to verify on-chain integrity.
 
-== Environment Variables
-
-=== Server (`kds`)
-
-[cols="1,1,2", options="header"]
-|===
-| Variable | Default | Description
-| `KD_DB_URL` | — | PostgreSQL connection string (required)
-| `KD_TLS_CERT` | — | Path to TLS certificate file (required)
-| `KD_TLS_KEY` | — | Path to TLS private key file (required)
-| `KD_JWT_SECRET` | — | Secret used to sign HS256 authentication tokens (required, at least 32 chars)
-| `KD_JWT_TTL_SECONDS` | `3600` | Authentication token lifetime in seconds
-| `KD_PORT` | `8080` | Port to listen on
-| `KD_LOG_LEVEL` | `info` | Log level (debug, info, warn, error)
-| `KD_BLOCKCHAIN_SIDECAR_URL` | `http://localhost:3001` | Blockchain sidecar URL
-| `KD_RATE_LIMIT_MAX` | `10` | Max auth attempts per IP per 60-second window
-|===
-
-== Task Reference
-
-[cols="1,2", options="header"]
-|===
-| Command | Description
-| `task build` | Configure with CMake + Ninja and compile
-| `task run` | Build and run `kds` with env vars from `.env`
-| `task test` | Run all tests
-| `task clean` | Delete the `build` directory
-| `task format` | Auto-format all source files with clang-format
-| `task uml` | Generate SVG from `docs/arch.puml`
-|===
-
-== Quick Start (tmux)
-
-Alternatively, use the provided `run.sh` script which sets up a tmux session with the database and server running side by side:
-
-[source,bash]
-----
-./run.sh
-----
