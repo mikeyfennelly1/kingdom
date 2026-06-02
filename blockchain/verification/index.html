@@ -162,22 +162,40 @@
     import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.min.js";
 
     // -- Configuration --
-    const CONTRACT_ADDRESS = "0xBa51AE9df049f60D6c679Caf1f77c5e61f026B00";
+    const CONTRACT_ADDRESS = "0x8955A2361A978A41F721e58B2766b614768Db596";
     const RPC_URLS = [
       "https://ethereum-sepolia-rpc.publicnode.com",
       "https://rpc.sepolia.org",
     ];
 
     const EVENT_ABI = [
-      "event HashRecorded(uint256 indexed conversationId, uint256 indexed msgId, bytes32 hash, uint256 timestamp)"
+      "event BatchRecorded(uint256 indexed batchId, bytes32 root, uint256 timestamp, uint256 messageCount, bytes32[] leaves)"
     ];
+
+    // Build a Merkle root from an array of bytes32 leaf hashes.
+    // Must match the sidecar implementation exactly — pairs are sorted before
+    // hashing, odd-length levels duplicate the last leaf.
+    function buildMerkleRoot(leaves) {
+      let level = [...leaves];
+      if (level.length === 1) return level[0];
+      while (level.length > 1) {
+        if (level.length % 2 !== 0) level.push(level[level.length - 1]);
+        const next = [];
+        for (let i = 0; i < level.length; i += 2) {
+          const [a, b] = [level[i], level[i + 1]].sort();
+          next.push(ethers.keccak256(ethers.concat([a, b])));
+        }
+        level = next;
+      }
+      return level[0];
+    }
 
     window.verify = async function () {
       const ciphertext = document.getElementById("ciphertext").value.trim();
-      const txHash = document.getElementById("txHash").value.trim();
-      const resultEl = document.getElementById("result");
-      const spinner = document.getElementById("spinner");
-      const btn = document.getElementById("verifyBtn");
+      const txHash    = document.getElementById("txHash").value.trim();
+      const resultEl  = document.getElementById("result");
+      const spinner   = document.getElementById("spinner");
+      const btn       = document.getElementById("verifyBtn");
 
       resultEl.style.display = "none";
       resultEl.className = "";
@@ -191,56 +209,71 @@
       spinner.style.display = "block";
 
       try {
+        // 1. Fetch the transaction receipt from Sepolia.
         let provider = null;
-        let receipt = null;
+        let receipt  = null;
         for (const url of RPC_URLS) {
           try {
             provider = new ethers.JsonRpcProvider(url);
-            receipt = await provider.getTransactionReceipt(txHash);
+            receipt  = await provider.getTransactionReceipt(txHash);
             if (receipt) break;
           } catch (_) {
             // try next RPC
           }
         }
 
-        const computedHash = ethers.keccak256(ethers.toUtf8Bytes(ciphertext));
-
         if (!receipt) {
           showError("Transaction not found on Sepolia. Check the hash and try again.");
           return;
         }
 
+        // 2. Parse the BatchRecorded event to get the root and all leaves.
         const iface = new ethers.Interface(EVENT_ABI);
-        let onChainHash = null;
+        let onChainRoot  = null;
         let onChainTimestamp = null;
-        let conversationId = null;
-        let msgId = null;
+        let batchId      = null;
+        let messageCount = null;
+        let emittedLeaves = null;
 
         for (const log of receipt.logs) {
           if (log.address.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) continue;
           try {
             const parsed = iface.parseLog(log);
-            if (parsed && parsed.name === "HashRecorded") {
-              onChainHash = parsed.args.hash;
+            if (parsed && parsed.name === "BatchRecorded") {
+              onChainRoot      = parsed.args.root;
               onChainTimestamp = parsed.args.timestamp;
-              conversationId = parsed.args.conversationId.toString();
-              msgId = parsed.args.msgId.toString();
+              batchId          = parsed.args.batchId.toString();
+              messageCount     = parsed.args.messageCount.toString();
+              emittedLeaves    = [...parsed.args.leaves];
               break;
             }
           } catch {
-            // not a HashRecorded log, skip
+            // not a BatchRecorded log, skip
           }
         }
 
-        if (!onChainHash) {
-          showError("No HashRecorded event found in this transaction.");
+        if (!onChainRoot) {
+          showError("No BatchRecorded event found in this transaction. Make sure the transaction hash comes from a Kingdom batch.");
           return;
         }
 
-        const ts = new Date(Number(onChainTimestamp) * 1000).toUTCString();
-        const match = computedHash.toLowerCase() === onChainHash.toLowerCase();
+        // 3. Compute this ciphertext's leaf hash.
+        const computedLeaf = ethers.keccak256(ethers.toUtf8Bytes(ciphertext));
 
-        showResult(match, computedHash, onChainHash, ts, receipt.blockNumber, conversationId, msgId);
+        // 4. Check the leaf is in the emitted leaves array.
+        const leafFound = emittedLeaves.some(
+          l => l.toLowerCase() === computedLeaf.toLowerCase()
+        );
+
+        // 5. Independently rebuild the Merkle root from the emitted leaves and
+        //    confirm it matches what is stored on-chain.
+        const recomputedRoot = buildMerkleRoot(emittedLeaves);
+        const rootMatch = recomputedRoot.toLowerCase() === onChainRoot.toLowerCase();
+
+        const pass = leafFound && rootMatch;
+        const ts = new Date(Number(onChainTimestamp) * 1000).toUTCString();
+
+        showResult(pass, leafFound, rootMatch, computedLeaf, onChainRoot, recomputedRoot, ts, receipt.blockNumber, batchId, messageCount);
 
       } catch (err) {
         showError("Error: " + err.message);
@@ -250,32 +283,37 @@
       }
     };
 
-    function showResult(pass, computedHash, onChainHash, timestamp, blockNumber, conversationId, msgId) {
+    function showResult(pass, leafFound, rootMatch, computedLeaf, onChainRoot, recomputedRoot, timestamp, blockNumber, batchId, messageCount) {
       const resultEl = document.getElementById("result");
-      const badge = document.getElementById("resultBadge");
-      const detail = document.getElementById("resultDetail");
+      const badge    = document.getElementById("resultBadge");
+      const detail   = document.getElementById("resultDetail");
 
       resultEl.className = pass ? "pass" : "fail";
-      badge.textContent = pass ? "PASS — Message is unmodified" : "FAIL — Message has been tampered with";
+      badge.textContent  = pass
+        ? "VERIFIED — Message is unmodified"
+        : "TAMPERED — Message does not match on-chain record";
+
       detail.innerHTML = `
-        <div>Conversation ID: <span>${conversationId}</span></div>
-        <div>Message ID: <span>${msgId}</span></div>
-        <div>Recorded at: <span>${timestamp}</span></div>
-        <div>Block: <span>${blockNumber}</span></div>
-        <div>On-chain hash: <span>${onChainHash}</span></div>
-        <div>Computed hash: <span>${computedHash}</span></div>
+        <div>Recorded at:       <span>${timestamp}</span></div>
+        <div>Block:             <span>${blockNumber}</span></div>
+        <div>Batch ID:          <span>${batchId}</span></div>
+        <div>Messages in batch: <span>${messageCount}</span></div>
+        <div>Leaf in batch:     <span>${leafFound ? "yes" : "NO — ciphertext not found in this batch"}</span></div>
+        <div>Root match:        <span>${rootMatch ? "yes" : "NO — recomputed root differs from on-chain root"}</span></div>
+        <div>Your leaf hash:    <span>${computedLeaf}</span></div>
+        <div>On-chain root:     <span>${onChainRoot}</span></div>
       `;
       resultEl.style.display = "block";
     }
 
     function showError(msg) {
       const resultEl = document.getElementById("result");
-      const badge = document.getElementById("resultBadge");
-      const detail = document.getElementById("resultDetail");
+      const badge    = document.getElementById("resultBadge");
+      const detail   = document.getElementById("resultDetail");
 
       resultEl.className = "error";
-      badge.textContent = "Error";
-      detail.innerHTML = `<span>${msg}</span>`;
+      badge.textContent  = "Error";
+      detail.innerHTML   = `<span>${msg}</span>`;
       resultEl.style.display = "block";
     }
   </script>

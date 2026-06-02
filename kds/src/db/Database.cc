@@ -2,6 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include "../common/Constants.hh"
+
 #include <algorithm>
 #include <charconv>
 #include <chrono>
@@ -376,6 +378,23 @@ void Database::updateMessageBlockchainDigest(uint64_t msgId, const std::string& 
   pqxx::params params{digest, static_cast<int64_t>(msgId)};
   txn.exec("UPDATE messages SET blockchain_digest = $1 WHERE id = $2", params);
   txn.commit();
+}
+
+std::vector<std::pair<uint64_t, std::string>> Database::getPendingBlockchainMessages() {
+  std::scoped_lock lock(mutex_);
+  pqxx::work txn(conn_);
+  auto rows =
+      txn.exec("SELECT id, blockchain_digest FROM messages WHERE blockchain_digest LIKE 'pending:%'");
+  std::vector<std::pair<uint64_t, std::string>> result;
+  result.reserve(rows.size());
+  for (const auto& row : rows) {
+    auto msgId = static_cast<uint64_t>(row[0].as<int64_t>());
+    std::string digest = row[1].as<std::string>();
+    std::string pendingId = digest.substr(blockchain::kPendingPrefixLen);
+    result.emplace_back(msgId, std::move(pendingId));
+  }
+  txn.commit();
+  return result;
 }
 
 bool Database::isParticipant(uint64_t conversationId, uint64_t userId) {

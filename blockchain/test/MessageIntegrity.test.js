@@ -2,6 +2,24 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
+// Build a Merkle root from an array of bytes32 leaf hashes.
+// Leaves are sorted pairwise before hashing so order within a pair doesn't matter.
+// Odd-length levels duplicate the last leaf.
+function buildMerkleRoot(leaves) {
+  if (leaves.length === 0) throw new Error("empty leaves");
+  let level = [...leaves];
+  while (level.length > 1) {
+    if (level.length % 2 !== 0) level.push(level[level.length - 1]);
+    const next = [];
+    for (let i = 0; i < level.length; i += 2) {
+      const [a, b] = [level[i], level[i + 1]].sort();
+      next.push(ethers.keccak256(ethers.concat([a, b])));
+    }
+    level = next;
+  }
+  return level[0];
+}
+
 describe("MessageIntegrity", function () {
   let contract;
   let owner;
@@ -13,55 +31,71 @@ describe("MessageIntegrity", function () {
     await contract.waitForDeployment();
   });
 
-  it("emits HashRecorded event with correct conversationId, msgId and hash", async function () {
-    const conversationId = 1;
-    const msgId = 10;
-    const hash = ethers.keccak256(ethers.toUtf8Bytes("test ciphertext"));
+  it("emits BatchRecorded event with correct root, messageCount and leaves", async function () {
+    const leaves = [
+      ethers.keccak256(ethers.toUtf8Bytes("msg 1")),
+      ethers.keccak256(ethers.toUtf8Bytes("msg 2")),
+    ];
+    const root = buildMerkleRoot(leaves);
 
-    await expect(contract.recordHash(conversationId, msgId, hash))
-      .to.emit(contract, "HashRecorded")
-      .withArgs(conversationId, msgId, hash, anyValue);
+    await expect(contract.recordBatch(root, leaves))
+      .to.emit(contract, "BatchRecorded")
+      .withArgs(0, root, anyValue, leaves.length, leaves);
   });
 
-  it("stores hash in nested mapping after recordHash", async function () {
-    const conversationId = 42;
-    const msgId = 7;
-    const hash = ethers.keccak256(ethers.toUtf8Bytes("hello world"));
+  it("stores batch root and timestamp after recordBatch", async function () {
+    const leaves = [ethers.keccak256(ethers.toUtf8Bytes("hello"))];
+    const root = buildMerkleRoot(leaves);
 
-    await contract.recordHash(conversationId, msgId, hash);
+    await contract.recordBatch(root, leaves);
 
-    expect(await contract.hashes(conversationId, msgId)).to.equal(hash);
+    const batch = await contract.batches(0);
+    expect(batch.root).to.equal(root);
+    expect(batch.timestamp).to.be.greaterThan(0);
+    expect(batch.messageCount).to.equal(1);
   });
 
-  it("stores timestamp in nested mapping after recordHash", async function () {
-    const conversationId = 7;
-    const msgId = 3;
-    const hash = ethers.keccak256(ethers.toUtf8Bytes("some message"));
+  it("increments nextBatchId with each batch", async function () {
+    const leaf = ethers.keccak256(ethers.toUtf8Bytes("a"));
+    const root = buildMerkleRoot([leaf]);
 
-    await contract.recordHash(conversationId, msgId, hash);
+    await contract.recordBatch(root, [leaf]);
+    await contract.recordBatch(root, [leaf]);
 
-    const timestamp = await contract.timestamps(conversationId, msgId);
-    expect(timestamp).to.be.greaterThan(0);
+    expect(await contract.nextBatchId()).to.equal(2);
   });
 
-  it("stores multiple messages in the same conversation independently", async function () {
-    const conversationId = 1;
-    const hash1 = ethers.keccak256(ethers.toUtf8Bytes("first message"));
-    const hash2 = ethers.keccak256(ethers.toUtf8Bytes("second message"));
+  it("stores multiple batches independently", async function () {
+    const leaves1 = [ethers.keccak256(ethers.toUtf8Bytes("batch 1 msg"))];
+    const leaves2 = [
+      ethers.keccak256(ethers.toUtf8Bytes("batch 2 msg a")),
+      ethers.keccak256(ethers.toUtf8Bytes("batch 2 msg b")),
+    ];
+    const root1 = buildMerkleRoot(leaves1);
+    const root2 = buildMerkleRoot(leaves2);
 
-    await contract.recordHash(conversationId, 1, hash1);
-    await contract.recordHash(conversationId, 2, hash2);
+    await contract.recordBatch(root1, leaves1);
+    await contract.recordBatch(root2, leaves2);
 
-    expect(await contract.hashes(conversationId, 1)).to.equal(hash1);
-    expect(await contract.hashes(conversationId, 2)).to.equal(hash2);
+    expect((await contract.batches(0)).root).to.equal(root1);
+    expect((await contract.batches(1)).root).to.equal(root2);
+  });
+
+  it("reverts with EmptyBatch when no leaves provided", async function () {
+    const root = ethers.keccak256(ethers.toUtf8Bytes("anything"));
+
+    await expect(
+      contract.recordBatch(root, [])
+    ).to.be.revertedWithCustomError(contract, "EmptyBatch");
   });
 
   it("reverts when called by non-owner", async function () {
     const [, nonOwner] = await ethers.getSigners();
-    const hash = ethers.keccak256(ethers.toUtf8Bytes("test"));
+    const leaf = ethers.keccak256(ethers.toUtf8Bytes("test"));
+    const root = buildMerkleRoot([leaf]);
 
     await expect(
-      contract.connect(nonOwner).recordHash(1, 1, hash)
+      contract.connect(nonOwner).recordBatch(root, [leaf])
     ).to.be.revertedWithCustomError(contract, "Unauthorized");
   });
 });

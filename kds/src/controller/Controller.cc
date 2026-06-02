@@ -46,6 +46,7 @@ constexpr const char* Status = "status";
 constexpr const char* Sub = "sub";
 constexpr const char* Token = "token";
 constexpr const char* TxHash = "txHash";
+constexpr const char* PendingId = "pendingId";
 constexpr const char* Typ = "typ";
 constexpr const char* UserId = "userId";
 constexpr const char* Username = "username";
@@ -116,6 +117,7 @@ Controller::Controller(std::string host, int port, const std::string& dbConnecti
   securityFilterChain_ = std::make_unique<SecurityFilterChain>(securityPredicates);
 
   setupRoutes();
+  startBlockchainResolver_();
 }
 
 void Controller::setupRoutes() {
@@ -338,6 +340,61 @@ void Controller::handleLogout_(const httplib::Request& req, httplib::Response& r
   nlohmann::json response = {{json_fields::Status, "success"},
                              {json_fields::Message, "Logged out"}};
   res.set_content(response.dump(), content_types::Json);
+}
+
+Controller::~Controller() {
+  stopBlockchainResolver_ = true;
+  if (blockchainResolverThread_.joinable()) {
+    blockchainResolverThread_.join();
+  }
+}
+
+void Controller::startBlockchainResolver_() {
+  blockchainResolverThread_ = std::thread([this]() {
+    while (!stopBlockchainResolver_) {
+      // Sleep in 1-second increments so shutdown is prompt.
+      for (int i = 0; i < timeouts::kBlockchainResolverIntervalSec && !stopBlockchainResolver_;
+           ++i) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+      }
+      if (stopBlockchainResolver_) {
+        break;
+      }
+
+      auto pending = db_.getPendingBlockchainMessages();
+      if (pending.empty()) {
+        continue;
+      }
+
+      spdlog::info("Blockchain resolver: checking {} pending message(s)", pending.size());
+
+      httplib::Client sidecar(sidecarUrl_);
+      sidecar.set_connection_timeout(timeouts::kSidecarConnectionTimeoutSec);
+      sidecar.set_read_timeout(timeouts::kSidecarReadTimeoutSec);
+
+      for (const auto& [msgId, pendingId] : pending) {
+        try {
+          auto sidecarRes = sidecar.Get("/pending/" + pendingId);
+          if (!sidecarRes || sidecarRes->status != httplib::OK_200) {
+            continue;
+          }
+          auto json = nlohmann::json::parse(sidecarRes->body);
+          std::string resolvedStatus = json[json_fields::Status].get<std::string>();
+
+          if (resolvedStatus == "confirmed") {
+            auto txHash = json[json_fields::TxHash].get<std::string>();
+            db_.updateMessageBlockchainDigest(msgId, txHash);
+            spdlog::info("Blockchain confirmed for message {}: {}", msgId, txHash);
+          } else if (resolvedStatus == "failed") {
+            db_.updateMessageBlockchainDigest(msgId, "");
+            spdlog::warn("Blockchain batch failed for message {} — digest cleared", msgId);
+          }
+        } catch (const std::exception& e) {
+          spdlog::warn("Blockchain resolver error for message {}: {}", msgId, e.what());
+        }
+      }
+    }
+  });
 }
 
 void Controller::start() {
@@ -572,8 +629,8 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
   }
   spdlog::info("Created message {} in conversation {}", msgId, *convId);
 
-  // Record hash on-chain via the blockchain sidecar
-  std::string txHash;
+  // Queue message for the next blockchain batch via the sidecar.
+  std::string blockchainDigest;
   try {
     httplib::Client sidecar(sidecarUrl_);
     sidecar.set_connection_timeout(timeouts::kSidecarConnectionTimeoutSec);
@@ -584,9 +641,10 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
     auto sidecarRes = sidecar.Post(routes::SidecarRecord, sidecarBody.dump(), content_types::Json);
     if (sidecarRes && sidecarRes->status == httplib::OK_200) {
       auto sidecarJson = nlohmann::json::parse(sidecarRes->body);
-      txHash = sidecarJson[json_fields::TxHash].get<std::string>();
-      db_.updateMessageBlockchainDigest(msgId, txHash);
-      spdlog::info("Blockchain digest recorded for message {}: {}", msgId, txHash);
+      auto pendingId = sidecarJson[json_fields::PendingId].get<std::string>();
+      blockchainDigest = std::string(blockchain::kPendingPrefix) + pendingId;
+      db_.updateMessageBlockchainDigest(msgId, blockchainDigest);
+      spdlog::info("Message {} queued for blockchain batch. pendingId={}", msgId, pendingId);
     } else {
       spdlog::warn("Blockchain sidecar unavailable for message {}", msgId);
     }
@@ -599,7 +657,7 @@ void Controller::handleCreateMessage_(const httplib::Request& req, httplib::Resp
                   .conversationId = *convId,
                   .payload = payload,
                   .timestamp = now,
-                  .blockchainDigest = txHash};
+                  .blockchainDigest = blockchainDigest};
   nlohmann::json result = msg;
   res.status = httplib::Created_201;
   res.set_content(result.dump(), content_types::Json);
