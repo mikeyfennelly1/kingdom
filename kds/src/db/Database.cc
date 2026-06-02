@@ -133,6 +133,21 @@ std::optional<std::string> Database::getUserPublicKey(uint64_t userId) {
   return result[0][0].as<std::string>();
 }
 
+bool Database::usersExist(const std::vector<uint64_t>& userIds) {
+  std::scoped_lock lock(mutex_);
+  pqxx::work txn(conn_);
+  for (auto userId : userIds) {
+    pqxx::params params{static_cast<int64_t>(userId)};
+    auto result = txn.exec("SELECT 1 FROM users WHERE id = $1", params);
+    if (result.empty()) {
+      txn.commit();
+      return false;
+    }
+  }
+  txn.commit();
+  return true;
+}
+
 namespace {
 
 constexpr std::size_t kBlockchainDigestColIdx = 5;
@@ -403,6 +418,18 @@ bool Database::isParticipant(uint64_t conversationId, uint64_t userId) {
   pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(userId)};
   auto result = txn.exec(
       "SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2",
+      params);
+  txn.commit();
+  return !result.empty();
+}
+
+bool Database::isMessageSender(uint64_t conversationId, uint64_t messageId, uint64_t senderId) {
+  std::scoped_lock lock(mutex_);
+  pqxx::work txn(conn_);
+  pqxx::params params{static_cast<int64_t>(conversationId), static_cast<int64_t>(messageId),
+                      static_cast<int64_t>(senderId)};
+  auto result = txn.exec(
+      "SELECT 1 FROM messages WHERE conversation_id = $1 AND id = $2 AND sender_id = $3",
       params);
   txn.commit();
   return !result.empty();

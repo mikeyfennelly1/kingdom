@@ -12,6 +12,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "../common/Constants.hh"
@@ -91,6 +92,19 @@ bool isValidSignupPassword(const std::string& password) {
   }
 
   return hasUppercase && hasNumber;
+}
+
+std::string sanitiseForLog(std::string_view value) {
+  std::string sanitised;
+  sanitised.reserve(value.size());
+  for (unsigned char chr : value) {
+    if (chr == '\n' || chr == '\r' || chr == '\t' || chr < 0x20 || chr == 0x7F) {
+      sanitised.push_back(' ');
+    } else {
+      sanitised.push_back(static_cast<char>(chr));
+    }
+  }
+  return sanitised;
 }
 
 }  // namespace
@@ -184,9 +198,17 @@ std::optional<uint64_t> Controller::authenticatedUserId_(const httplib::Request&
 
 bool Controller::isRateLimited_(const std::string& ipAddr) {
   constexpr auto kWindow = std::chrono::seconds(timeouts::kRateLimitWindowSec);
+  constexpr auto kStaleEntryTtl = std::chrono::seconds(timeouts::kRateLimitStaleEntryTtlSec);
 
   std::scoped_lock lock(rateLimitMutex_);
   auto now = std::chrono::steady_clock::now();
+  for (auto it = rateLimitMap_.begin(); it != rateLimitMap_.end();) {
+    if (now - it->second.windowStart > kStaleEntryTtl) {
+      it = rateLimitMap_.erase(it);
+    } else {
+      ++it;
+    }
+  }
   auto& entry = rateLimitMap_[ipAddr];
 
   if (now - entry.windowStart >= kWindow) {
@@ -264,7 +286,7 @@ void Controller::handleSignup_(const httplib::Request& req, httplib::Response& r
     auto passwordHash = User::hashPassword(password);
     auto newUserId = db_.createUser(username, passwordHash, publicKey);
     auto sessionToken = createSession_(newUserId, username);
-    spdlog::info("Created user '{}' with id {}", username, newUserId);
+    spdlog::info("Created user '{}' with id {}", sanitiseForLog(username), newUserId);
     res.status = httplib::Created_201;
     res.set_content(nlohmann::json{{json_fields::EntityId, newUserId},
                                    {json_fields::Username, username},
@@ -497,6 +519,13 @@ void Controller::handleCreateConversation_(const httplib::Request& req, httplib:
   auto participantIds = body[json_fields::ParticipantIds].get<std::vector<uint64_t>>();
 
   std::set<uint64_t> seen(participantIds.begin(), participantIds.end());
+  if (participantIds.empty() || participantIds.size() > domain::kMaxConversationParticipants) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "participantIds must contain 1–50 users"}}
+                        .dump(),
+                    content_types::Json);
+    return;
+  }
   if (seen.size() != participantIds.size()) {
     res.status = httplib::BadRequest_400;
     res.set_content(
@@ -504,9 +533,24 @@ void Controller::handleCreateConversation_(const httplib::Request& req, httplib:
         content_types::Json);
     return;
   }
+  if (!seen.contains(*authenticatedUserId)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error,
+                                    "conversation creator must be a participant"}}
+                        .dump(),
+                    content_types::Json);
+    return;
+  }
+  if (!db_.usersExist(participantIds)) {
+    res.status = httplib::BadRequest_400;
+    res.set_content(nlohmann::json{{json_fields::Error, "participantIds must reference existing users"}}
+                        .dump(),
+                    content_types::Json);
+    return;
+  }
 
   auto newConvId = db_.createConversation(name, participantIds);
-  spdlog::info("Created conversation '{}' with id {}", name, newConvId);
+  spdlog::info("Created conversation '{}' with id {}", sanitiseForLog(name), newConvId);
   res.status = httplib::Created_201;
   res.set_content(
       nlohmann::json{{json_fields::EntityId, newConvId}, {json_fields::Name, name}}.dump(),
@@ -725,6 +769,13 @@ void Controller::handleRevokeMessageAccess_(const httplib::Request& req, httplib
       !db_.isParticipant(*convId, *targetUserId)) {
     res.status = httplib::Forbidden_403;
     res.set_content(nlohmann::json{{json_fields::Error, "forbidden"}}.dump(), content_types::Json);
+    return;
+  }
+  if (!db_.isMessageSender(*convId, *messageId, *authenticatedUserId)) {
+    res.status = httplib::Forbidden_403;
+    res.set_content(nlohmann::json{{json_fields::Error, "only the sender can revoke access"}}
+                        .dump(),
+                    content_types::Json);
     return;
   }
 
