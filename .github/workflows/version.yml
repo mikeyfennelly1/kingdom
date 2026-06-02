@@ -1,12 +1,16 @@
 name: version
 
 on:
-  push:
+  workflow_run:
+    workflows: ["tests"]
+    types:
+      - completed
     branches:
       - main
 
 jobs:
   tag:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

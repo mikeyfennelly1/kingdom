@@ -94,3 +94,40 @@ jobs:
         with:
           generate_release_notes: true
           tag_name: ${{ github.ref_name }}
+
+  deploy:
+    name: Deploy with Ansible
+    needs: publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible and community.docker collection
+        run: |
+          pip install ansible
+          ansible-galaxy collection install community.docker
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deployment_updakingdom
+          chmod 600 ~/.ssh/deployment_updakingdom
+
+      - name: Add deployment host to known_hosts
+        run: ssh-keyscan -p 2209 200.69.13.70 >> ~/.ssh/known_hosts
+
+      - name: Write vault password
+        run: echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/vault_pass
+
+      - name: Run deploy playbook
+        run: >
+          ansible-playbook
+          -i ansible/inventory.ini
+          ansible/deploy.yml
+          --vault-password-file /tmp/vault_pass
+
+      - name: Remove vault password file
+        if: always()
+        run: rm -f /tmp/vault_pass
