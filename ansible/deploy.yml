@@ -43,17 +43,6 @@
         group: deployment
         mode: '0755'
 
-    - name: Generate self-signed certificate if missing
-      ansible.builtin.shell: |
-        openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
-          -keyout certs/server.key \
-          -out certs/server.crt \
-          -subj "/CN=localhost" \
-          -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-      args:
-        chdir: "{{ repo_pull_dest }}"
-        creates: "{{ repo_pull_dest }}/certs/server.key"
-
     - name: Remove existing .env file
       ansible.builtin.file:
         path: "{{ repo_pull_dest }}/.env"
