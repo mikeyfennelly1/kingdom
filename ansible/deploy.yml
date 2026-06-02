@@ -1,9 +1,7 @@
 # Ansible Playbook for deploying microservices to coruscant VM.
 #
-# The purpose of this playbook is to enable us to do the equivalent of
-# a `helm apply` on our infrastructure, so that the version of application
-# images can develop asymmetrically, and application releases not be coupled
-# to deployments.
+# Fetches docker-compose.yml directly from mainline on GitHub and runs
+# docker compose up — no repo clone required.
 #
 # Note that you must have permissions to SSH into the VM to be able
 # to execute this playbook.
@@ -15,7 +13,7 @@
     - vars/secrets.yml
 
   tasks:
-    - name: Ensure pull destination exists
+    - name: Ensure deploy directory exists
       ansible.builtin.file:
         path: "{{ repo_pull_dest }}"
         state: directory
@@ -23,17 +21,14 @@
         group: deployment
         mode: '0755'
 
-    - name: Pull parent repo
-      tags: pull
-      ansible.builtin.git:
-        repo: "{{ repo_ssh_url }}"
-        dest: "{{ repo_pull_dest }}"
-        version: "{{ repo_version | default('main') }}"
-        accept_hostkey: yes
-        recursive: no
+    - name: Fetch docker-compose.yml from mainline
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/mikeyfennelly1/kingdom/main/docker-compose.yml"
+        dest: "{{ repo_pull_dest }}/docker-compose.yml"
+        owner: deployment
+        group: deployment
+        mode: '0644'
         force: yes
-      environment:
-        GIT_SSH_COMMAND: "ssh -i {{ gh_pull_key_file }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
     - name: Ensure certs directory exists
       ansible.builtin.file:
