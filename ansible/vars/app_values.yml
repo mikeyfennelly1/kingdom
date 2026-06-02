@@ -4,6 +4,6 @@ gh_pull_key_file: /home/deployment/.ssh/deployment_updakingdom
 repo_pull_dest: /home/deployment/kingdom
 
 # Port Forwarding Configuration
-target_port: 4000
-destination_port: 80
+target_port: 80
+destination_port: 8080
 protocol: tcp
