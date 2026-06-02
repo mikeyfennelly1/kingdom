@@ -41,6 +41,7 @@ main() {
     local commit_hash="$(git rev-parse --short HEAD)"
     bash -c "docker push mikeyfennelly/kds:${commit_hash}"
     bash -c "docker push mikeyfennelly/kds:latest"
+    git push origin HEAD
     bash "${SCRIPT_DIR}/deploy.sh" "${commit_hash}"
 }
 
