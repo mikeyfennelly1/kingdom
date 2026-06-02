@@ -43,6 +43,23 @@
         group: deployment
         mode: '0755'
 
+    - name: Copy TLS certificate
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../certs/server.crt"
+        dest: "{{ repo_pull_dest }}/certs/server.crt"
+        owner: deployment
+        group: deployment
+        mode: '0644'
+
+    - name: Copy TLS private key
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../certs/server.key"
+        dest: "{{ repo_pull_dest }}/certs/server.key"
+        owner: deployment
+        group: deployment
+        mode: '0600'
+      become: yes
+
     - name: Remove existing .env file
       ansible.builtin.file:
         path: "{{ repo_pull_dest }}/.env"
