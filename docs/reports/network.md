@@ -6,6 +6,108 @@ CS4455 Cybersecurity | Computer Networks & Cybersecurity (Mark Burkley) | 2026
 
 ## 1. System Architecture Diagram
 
+### Application
+
+1. Client app <- NGINX -> Server: HTTPS
+
+2. Client <-> Database: [PostgreSQL Wire Protocol](https://www.postgresql.org/docs/16/protocol.html) (TCP/IP)
+
+3. 
+
+### Environments
+
+vars:
+
+```
+KD_PORT
+POSTGRES_PORT
+
+```
+
+### Network devices
+
+```
+deployment@updakingdom:~$ ip link show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    link/ether bc:24:11:15:c9:59 brd ff:ff:ff:ff:ff:ff
+    altname enp0s18
+4: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default 
+    link/ether 56:43:88:d0:d6:3a brd ff:ff:ff:ff:ff:ff
+553: br-16c99a1591fe: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default 
+    link/ether 4e:ca:90:4e:b0:f8 brd ff:ff:ff:ff:ff:ff
+554: vethb7bb444@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-16c99a1591fe state UP mode DEFAULT group default 
+    link/ether de:67:35:11:ed:87 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+555: vethd546965@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-16c99a1591fe state UP mode DEFAULT group default 
+    link/ether 3a:e3:58:17:94:31 brd ff:ff:ff:ff:ff:ff link-netnsid 1
+556: vethed77c84@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-16c99a1591fe state UP mode DEFAULT group default 
+    link/ether 86:64:1f:bb:6f:93 brd ff:ff:ff:ff:ff:ff link-netnsid 2
+
+deployment@updakingdom:~$ ip addr show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host noprefixroute 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether bc:24:11:15:c9:59 brd ff:ff:ff:ff:ff:ff
+    altname enp0s18
+    inet 192.168.1.166/24 metric 100 brd 192.168.1.255 scope global dynamic eth0
+       valid_lft 60359sec preferred_lft 60359sec
+    inet6 fe80::be24:11ff:fe15:c959/64 scope link 
+       valid_lft forever preferred_lft forever
+4: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 56:43:88:d0:d6:3a brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+553: br-16c99a1591fe: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 4e:ca:90:4e:b0:f8 brd ff:ff:ff:ff:ff:ff
+    inet 172.18.0.1/16 brd 172.18.255.255 scope global br-16c99a1591fe
+       valid_lft forever preferred_lft forever
+    inet6 fe80::4cca:90ff:fe4e:b0f8/64 scope link 
+       valid_lft forever preferred_lft forever
+554: vethb7bb444@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-16c99a1591fe state UP group default 
+    link/ether de:67:35:11:ed:87 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::dc67:35ff:fe11:ed87/64 scope link 
+       valid_lft forever preferred_lft forever
+555: vethd546965@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-16c99a1591fe state UP group default 
+    link/ether 3a:e3:58:17:94:31 brd ff:ff:ff:ff:ff:ff link-netnsid 1
+    inet6 fe80::38e3:58ff:fe17:9431/64 scope link 
+       valid_lft forever preferred_lft forever
+556: vethed77c84@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-16c99a1591fe state UP group default 
+    link/ether 86:64:1f:bb:6f:93 brd ff:ff:ff:ff:ff:ff link-netnsid 2
+    inet6 fe80::8464:1fff:febb:6f93/64 scope link 
+       valid_lft forever preferred_lft forever
+
+```
+
+### docker
+
+
+bridge: 172.17.0.0/16
+host: 
+kingdom_default: 172.18.0.0/16
+none:
+
+deployment@updakingdom:~$ docker network ls
+NETWORK ID     NAME              DRIVER    SCOPE
+1744df379c63   bridge            bridge    local
+fe2993f87d57   host              host      local
+16c99a1591fe   kingdom_default   bridge    local
+e3f743fe246b   none              null      local
+
+DNS Query:
+
+libc checks 1. /etc/hosts, then 2. /etc/resolv.conf (recursive resolver IP). If cache miss in recursive resolver, goes to referral ()
+
+- see full DNS response with `dig`
+
+whois 200.69.13.70 -> whois.log Gives a record of Blacknight in [RIPE](https://en.wikipedia.org/wiki/RIPE_NCC) database service.
+
+traceroute to theburkenator.com -> traceroute.log
+
 ```
   User Machine
   ┌──────────────────────────────────────────────────────────────────────┐
