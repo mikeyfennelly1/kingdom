@@ -28,68 +28,62 @@
 #### Patrick O'Shea — approx. 33%
 
 **Client (kdctl)**
-- **Qt6 GUI client**: full implementation of the desktop application comprising `LoginWindow` (signup/login form with server URL field, inline error display) and `MainWindow` (conversation list, message list with decrypted plaintext display, compose field, send/forward/delete/revoke action buttons, per-conversation `QTimer`-driven polling)
-- `Client.cc` HTTP/HTTPS client wrapper: bearer token management, TLS certificate verification against a configurable CA certificate, TOFU key pinning via `known_keys.json`, key bundle fetch and fingerprint validation
-- `MessageStore` public-key cache with `std::map<uint64_t, std::string>`, `Message::formatted()` display helper, `findBySender` using `std::find_if`, `std::sort` for STL algorithm usage
-- Identity fingerprint confirmation dialog (`confirmRecipientIdentity`, `fingerprintForPublicKey`) and forward-target selection (`chooseForwardTarget`)
-- Unit tests for `LocalKeyStore`, `MessageStore`, and `Conversation`
+- Full Qt6 GUI desktop client: login/signup window and main messaging window with conversation list, message history, compose, send, forward, delete, and revoke actions
+- HTTPS client with bearer token management, TLS certificate verification, and TOFU public key pinning
+- Identity fingerprint confirmation dialog and forward-target selection
+- Local public key cache and message display helpers
+- Unit tests for key store, message store, and conversation logic
 
 **Server (kds)**
-- TLS: `httplib::SSLServer` with TLS 1.3 and CSPRNG session tokens; configurable certificate and key paths enforced on all endpoints
-- IP-based rate limiting: sliding window counter per IP stored in `std::unordered_map<std::string, RateLimitEntry>` protected by `std::mutex`; configurable threshold
-- PostgreSQL 16 database layer: parameterised queries via libpqxx, thread-safe access with `std::scoped_lock`, `blockchain_digest` column management (`updateMessageBlockchainDigest`, `getPendingBlockchainMessages`); initial user signup storage and `libpqxx` dependency
-- JWT revocation on logout: server-side token invalidation and `GET /users` endpoint
-- Security predicates: `ValidateAuthenticated` (reject requests with missing/invalid bearer tokens), `ValidateSenderAuthenticity` (verify `senderId` matches JWT claim), `ValidateUntampered` (reject requests with missing or invalid `Content-Type`)
-- `feat(libkd)`: `User` domain class with encapsulated auth logic; removal of dead `UserRow` struct
-- Input validation on all route handlers; auth and access-control enforcement on message, conversation, and user routes; participant access control (reject users not in a conversation); duplicate participant rejection via `std::set`
-- Web security response headers: HTTPS enforcement, Content-Security-Policy, X-Frame-Options
+- TLS 1.3 enforcement on all endpoints with CSPRNG session tokens
+- Per-IP rate limiting using a sliding window; configurable threshold
+- PostgreSQL database layer with parameterised queries, thread-safe access, and blockchain digest column management
+- JWT revocation on logout
+- Security predicate chain: authentication, sender authenticity, and content integrity checks on every request
+- Input validation and access control on all routes; web security response headers
 
 **Blockchain**
-- `MessageIntegrity.sol` smart contract, Node.js/Express sidecar, and standalone verification page (`blockchain/verification/index.html`)
-- Background blockchain resolver thread (`startBlockchainResolver_`) in `kds`: polls the database for `pending:<id>` digests, queries sidecar `/pending/:id`, writes confirmed tx hash on batch finalisation
-- Merkle batch design with auto-incrementing `batchId`; Hardhat deployment and test scripts; blockchain hash storage fix (key by `(conversationId, msgId)` to prevent overwrites); ABI update for `recordBatch` interface
-- Sidecar service in docker-compose; Ansible deployment vars for the sidecar; non-blocking sidecar with fallback RPC
+- Solidity smart contract, Node.js/Express sidecar, and standalone browser-based verification page
+- Background resolver thread in the server that polls for pending digests and writes confirmed transaction hashes to the database
+- Merkle batch design: messages accumulate in the sidecar and are flushed to the chain in a single transaction every five minutes
+- Sidecar service in Docker Compose and Ansible deployment configuration
 
 ---
 
 #### Fionn Ó Murchú — approx. 33%
 
 **Cryptography / E2EE**
-- X3DH key exchange (`LocalKeyStore.cc`): key bundle generation at registration (X25519 identity keypair, Ed25519 signing keypair, signed prekey with Ed25519 signature, 20 one-time prekeys), four-way DH computation on the sender side, HKDF-SHA256 key derivation, XChaCha20-Poly1305 AEAD encryption and decryption; associated data binds `conversationId`, `senderId`, `recipientId`, and the public keys used
-- HKDF derivation for local key encryption at rest; private key decryption at login
-- One-time prekey consumption access control: server-side enforcement preventing a prekey from being consumed more than once
-- Password hashing with libsodium Argon2id (`OPSLIMIT_INTERACTIVE` / `MEMLIMIT_INTERACTIVE`) at signup; password strength enforcement (minimum 12 characters, at least one uppercase letter, at least one digit)
-- Local private key encryption at rest: identity key file encrypted under a key derived from the user's password via Argon2id + HKDF-SHA256; decrypted only in memory at login
-- Encrypted local message store (v2): `MessageStore` upgraded to an envelope format using Argon2id + HKDF-SHA256 + XChaCha20-Poly1305; automatic migration of legacy plaintext v1 stores
-- TOFU public key pinning at the client: first-seen public key pinned per username; subsequent logins verify against the stored fingerprint
-- X3DH message setup flow; decrypted plaintext caching in `MessageStore`; MAC binding of messages to `(conversationId, senderId, recipientId)`
+- X3DH key exchange: key bundle generation at registration, four-way Diffie-Hellman on the sender side, HKDF-SHA256 key derivation, and XChaCha20-Poly1305 AEAD encryption/decryption
+- Local private key encryption at rest: key file encrypted under a password-derived key, decrypted in memory only at login
+- Encrypted local message store with automatic migration from the earlier plaintext format
+- Password hashing with Argon2id at signup; minimum strength requirements enforced
+- TOFU public key pinning: first-seen key fingerprint stored per user; user alerted on any change
+- One-time prekey consumption enforced server-side
 
 **Client (kdctl)**
-- Initial interactive `kdctl` shell with login sessions
-- JWT implementation: initial working HMAC-SHA256 token minting and verification
-- Server-side message deletion and access revocation endpoints
-- Message forwarding in the GUI client
-- Conversation polling refactor and cleanup
-- Controller refactor; cleanup of insecure kdctl subcommands
+- Initial interactive client shell with login sessions
+- JWT minting and verification
+- Server-side message deletion and access revocation
+- Message forwarding in the GUI
+- Conversation polling refactor and controller cleanup
 
 ---
 
 #### Mikey Fennelly — approx. 33%
 
 **C++ Architecture & OOP Design**
-- CMake multimodule project structure: `libkd` as a shared library (`.so`/`.dylib`) linked by both `kdctl` and `kds`, with a clean `include/kd/` public header boundary — the foundational C++ component design underpinning the entire project
-- Core domain classes: `User`, `Message`, `Conversation` PODs with constructors, private fields, and `nlohmann::json` `NLOHMANN_DEFINE_TYPE_INTRUSIVE` serialisation macros; `libkd` skeleton with `Conversation.cc` and `Message.cc` translation units
-- Security filter chain: `SecurityPredicate` abstract base class with pure virtual `Execute(const httplib::Request&)`, `SecurityFilterChain` owning a `std::vector<std::unique_ptr<SecurityPredicate>>`, `SecurityPredicateFactory` mapping predicate names to instances — a textbook chain of responsibility pattern demonstrating OOP inheritance, polymorphism, factory, and RAII via smart pointers
-- Unit tests for the security filter chain using GoogleTest; integrated via CMake `enable_testing()` and `add_test()`
-- `Controller.cc` initial implementation: `httplib` pre-routing handler applying the security filter chain to every request, `GET /health` endpoint, 404 error handler, `GET /users/:id/conversations` route; `configure.cc` loading all server parameters (host, port, DB connection string, TLS cert paths, JWT secret and TTL, rate limit threshold, sidecar URL) from environment variables
-- `kdctl` subcommand scaffolding: `login`/`logout` endpoint stubs, `Client::getConversations`, configurable host/port/protocol with environment variable fallbacks; `kds` port and log-level via environment variables
-- Clang-tidy and clang-format configuration; `compile_commands.json` export; build analysis scripts
+- CMake multimodule project structure with `libkd` as a shared library linked by both the client and server, establishing the core component boundary
+- Core domain classes: `User`, `Message`, `Conversation` with JSON serialisation
+- Security filter chain using a chain-of-responsibility pattern: abstract predicate base class, filter chain, and factory — demonstrating inheritance, polymorphism, and RAII via smart pointers
+- Initial server controller, route handlers, and environment-based configuration loading
+- Client subcommand scaffolding and environment variable fallbacks
+- Unit tests for the security filter chain; clang-tidy and clang-format configuration
 
 **CI/CD & Infrastructure**
-- GitHub Actions workflows: build, test, docker-release with semver tagging on merge to `main`; commit linting migration to commitlint; githooks; scoped workflow triggers
-- Multi-stage Dockerfile for `kds`; Nix closure pre-flight check; Docker image weight reduction via closure size analysis and SBOM script
-- Ansible playbooks: host configuration, port forwarding, app deployment to project virtual host (THEBURKENATOR.COM); deployment SANs for TLS cert
-- Nix-based reproducible build environment: migration from devbox to a strict Nix shell, `check-nix-linkage.sh` asserting all linked libraries resolve to `/nix/store`; Nix flake devShell; pinned `nixos-25.11` branch with version assertions
+- GitHub Actions workflows for build, test, and Docker image release with semver tagging
+- Multi-stage Dockerfile; Nix closure pre-flight check and image size reduction
+- Ansible playbooks for host configuration, port forwarding, and application deployment
+- Nix-based reproducible build environment with pinned nixpkgs and linkage verification
 
 ---
 
