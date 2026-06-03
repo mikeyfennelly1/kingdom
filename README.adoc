@@ -92,12 +92,9 @@ The sidecar runs on port 3001 by default. The server (`kds`) calls it automatica
 
 === Verification page
 
-Open `blockchain/verification/index.html` directly in a browser (no server needed):
+The verification page is hosted at:
 
-[source,bash]
-----
-open blockchain/verification/index.html
-----
+https://mikeyfennelly1.github.io/kingdom/
 
-Paste a transaction hash from a sent message and the message payload to verify on-chain integrity.
+Paste a transaction hash from a sent message and the message ciphertext to verify on-chain integrity. The page runs entirely in the browser — no Kingdom backend required.
 
