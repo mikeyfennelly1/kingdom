@@ -27,63 +27,28 @@
 
 #### Patrick O'Shea — approx. 33%
 
-**Client (kdctl)**
-- Full Qt6 GUI desktop client: login/signup window and main messaging window with conversation list, message history, compose, send, forward, delete, and revoke actions
-- HTTPS client with bearer token management, TLS certificate verification, and TOFU public key pinning
-- Identity fingerprint confirmation dialog and forward-target selection
-- Local public key cache and message display helpers
-- Unit tests for key store, message store, and conversation logic
-
-**Blockchain**
-- Solidity smart contract, Node.js/Express sidecar, and standalone browser-based verification page
-- Background resolver thread in the server that polls for pending digests and writes confirmed transaction hashes to the database
-- Merkle batch design: messages accumulate in the sidecar and are flushed to the chain in a single transaction every five minutes
-- Sidecar service in Docker Compose and Ansible deployment configuration
+- Qt6 GUI desktop client: login, conversation management, message send/receive, forwarding, deletion, and access revocation
+- HTTPS client with TLS certificate verification and TOFU public key pinning
+- Blockchain sidecar, smart contract, and standalone message integrity verification page
+- Unit tests for client-side components
 
 ---
 
 #### Fionn Ó Murchú — approx. 33%
 
-**Cryptography / E2EE**
-- X3DH key exchange: key bundle generation at registration, four-way Diffie-Hellman on the sender side, HKDF-SHA256 key derivation, and XChaCha20-Poly1305 AEAD encryption/decryption
-- Local private key encryption at rest: key file encrypted under a password-derived key, decrypted in memory only at login
-- Encrypted local message store with automatic migration from the earlier plaintext format
-- Password hashing with Argon2id at signup; minimum strength requirements enforced
-- TOFU public key pinning: first-seen key fingerprint stored per user; user alerted on any change
-- One-time prekey consumption enforced server-side
-
-**Client (kdctl)**
-- Initial interactive client shell with login sessions
-- JWT minting and verification
-- Server-side message deletion and access revocation
-- Message forwarding in the GUI
-- Conversation polling refactor and controller cleanup
+- End-to-end encryption: X3DH key exchange, XChaCha20-Poly1305 AEAD, and HKDF-SHA256 key derivation
+- Local private key and message store encryption at rest; password hashing with Argon2id
+- TOFU public key pinning and one-time prekey consumption enforcement
+- JWT implementation; message deletion, forwarding, and access revocation
 
 ---
 
 #### Mikey Fennelly — approx. 33%
 
-**Server (kds)**
-- TLS 1.3 enforcement on all endpoints with CSPRNG session tokens
-- Per-IP rate limiting using a sliding window; configurable threshold
-- PostgreSQL database layer with parameterised queries, thread-safe access, and blockchain digest column management
-- JWT revocation on logout
-- Security predicate chain: authentication, sender authenticity, and content integrity checks on every request
-- Input validation and access control on all routes; web security response headers
-
-**C++ Architecture & OOP Design**
-- CMake multimodule project structure with `libkd` as a shared library linked by both the client and server, establishing the core component boundary
-- Core domain classes: `User`, `Message`, `Conversation` with JSON serialisation
-- Security filter chain using a chain-of-responsibility pattern: abstract predicate base class, filter chain, and factory — demonstrating inheritance, polymorphism, and RAII via smart pointers
-- Initial server controller, route handlers, and environment-based configuration loading
-- Client subcommand scaffolding and environment variable fallbacks
-- Unit tests for the security filter chain; clang-tidy and clang-format configuration
-
-**CI/CD & Infrastructure**
-- GitHub Actions workflows for build, test, and Docker image release with semver tagging
-- Multi-stage Dockerfile; Nix closure pre-flight check and image size reduction
-- Ansible playbooks for host configuration, port forwarding, and application deployment
-- Nix-based reproducible build environment with pinned nixpkgs and linkage verification
+- HTTPS server: TLS 1.3, per-IP rate limiting, JWT authentication, security predicate chain, input validation, and access control
+- PostgreSQL database layer with parameterised queries and thread-safe access
+- C++ project architecture: shared `libkd` library, core domain classes, and security filter chain design pattern
+- CI/CD pipelines, Docker image release, Ansible deployment, and Nix-based reproducible build environment
 
 ---
 
