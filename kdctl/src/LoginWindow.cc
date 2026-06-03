@@ -115,7 +115,7 @@ LoginWindow::LoginWindow(QWidget* parent) : QDialog(parent) {
       "border-radius: 12px;"
       "border: 1px solid #e2e8f0;");
 
-  serverUrlEdit_ = new QLineEdit("https://localhost:8080", card);
+  serverUrlEdit_ = new QLineEdit("https://updakingdom.theburkenator.com", card);
   serverUrlEdit_->setStyleSheet(kFieldStyle);
   serverUrlEdit_->setPlaceholderText("Server URL");
 
