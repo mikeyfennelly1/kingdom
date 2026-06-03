@@ -34,14 +34,6 @@
 - Local public key cache and message display helpers
 - Unit tests for key store, message store, and conversation logic
 
-**Server (kds)**
-- TLS 1.3 enforcement on all endpoints with CSPRNG session tokens
-- Per-IP rate limiting using a sliding window; configurable threshold
-- PostgreSQL database layer with parameterised queries, thread-safe access, and blockchain digest column management
-- JWT revocation on logout
-- Security predicate chain: authentication, sender authenticity, and content integrity checks on every request
-- Input validation and access control on all routes; web security response headers
-
 **Blockchain**
 - Solidity smart contract, Node.js/Express sidecar, and standalone browser-based verification page
 - Background resolver thread in the server that polls for pending digests and writes confirmed transaction hashes to the database
@@ -70,6 +62,14 @@
 ---
 
 #### Mikey Fennelly — approx. 33%
+
+**Server (kds)**
+- TLS 1.3 enforcement on all endpoints with CSPRNG session tokens
+- Per-IP rate limiting using a sliding window; configurable threshold
+- PostgreSQL database layer with parameterised queries, thread-safe access, and blockchain digest column management
+- JWT revocation on logout
+- Security predicate chain: authentication, sender authenticity, and content integrity checks on every request
+- Input validation and access control on all routes; web security response headers
 
 **C++ Architecture & OOP Design**
 - CMake multimodule project structure with `libkd` as a shared library linked by both the client and server, establishing the core component boundary
