@@ -30,47 +30,66 @@
 **Client (kdctl)**
 - **Qt6 GUI client**: full implementation of the desktop application comprising `LoginWindow` (signup/login form with server URL field, inline error display) and `MainWindow` (conversation list, message list with decrypted plaintext display, compose field, send/forward/delete/revoke action buttons, per-conversation `QTimer`-driven polling)
 - `Client.cc` HTTP/HTTPS client wrapper: bearer token management, TLS certificate verification against a configurable CA certificate, TOFU key pinning via `known_keys.json`, key bundle fetch and fingerprint validation
-- `MessageStore` public-key cache with `std::map<uint64_t, std::string>`, `Message::formatted()` display helper, `findBySender` using `std::find_if`
+- `MessageStore` public-key cache with `std::map<uint64_t, std::string>`, `Message::formatted()` display helper, `findBySender` using `std::find_if`, `std::sort` for STL algorithm usage
 - Identity fingerprint confirmation dialog (`confirmRecipientIdentity`, `fingerprintForPublicKey`) and forward-target selection (`chooseForwardTarget`)
 - Unit tests for `LocalKeyStore`, `MessageStore`, and `Conversation`
 
+**Server (kds)**
+- TLS: `httplib::SSLServer` with TLS 1.3 and CSPRNG session tokens; configurable certificate and key paths enforced on all endpoints
+- IP-based rate limiting: sliding window counter per IP stored in `std::unordered_map<std::string, RateLimitEntry>` protected by `std::mutex`; configurable threshold
+- PostgreSQL 16 database layer: parameterised queries via libpqxx, thread-safe access with `std::scoped_lock`, `blockchain_digest` column management (`updateMessageBlockchainDigest`, `getPendingBlockchainMessages`); initial user signup storage and `libpqxx` dependency
+- JWT revocation on logout: server-side token invalidation and `GET /users` endpoint
+- Security predicates: `ValidateAuthenticated` (reject requests with missing/invalid bearer tokens), `ValidateSenderAuthenticity` (verify `senderId` matches JWT claim), `ValidateUntampered` (reject requests with missing or invalid `Content-Type`)
+- `feat(libkd)`: `User` domain class with encapsulated auth logic; removal of dead `UserRow` struct
+- Input validation on all route handlers; auth and access-control enforcement on message, conversation, and user routes; participant access control (reject users not in a conversation); duplicate participant rejection via `std::set`
+- Web security response headers: HTTPS enforcement, Content-Security-Policy, X-Frame-Options
+
 **Blockchain**
-- Background blockchain resolver thread (`startBlockchainResolver_`) running in `kds`: polls the database for messages whose `blockchain_digest` column contains a `pending:<id>` token, queries the sidecar `/pending/:id` endpoint, and writes the confirmed transaction hash back to the database once the on-chain batch is finalised
-- Wiring of sidecar HTTP calls into message creation in `Controller::handleCreateMessage_`: posts ciphertext to the sidecar `/record` endpoint and stores the returned `pendingId` as the initial digest value
-- Smart contract storage mapping fix: switched from per-conversation overwriting to a Merkle batch design with an auto-incrementing `batchId`; added Hardhat deployment and test scripts
-- Standalone blockchain verification web page (`blockchain/verification/index.html`)
+- `MessageIntegrity.sol` smart contract, Node.js/Express sidecar, and standalone verification page (`blockchain/verification/index.html`)
+- Background blockchain resolver thread (`startBlockchainResolver_`) in `kds`: polls the database for `pending:<id>` digests, queries sidecar `/pending/:id`, writes confirmed tx hash on batch finalisation
+- Merkle batch design with auto-incrementing `batchId`; Hardhat deployment and test scripts; blockchain hash storage fix (key by `(conversationId, msgId)` to prevent overwrites); ABI update for `recordBatch` interface
+- Sidecar service in docker-compose; Ansible deployment vars for the sidecar; non-blocking sidecar with fallback RPC
 
 ---
 
 #### Fionn Ó Murchú — approx. 33%
 
 **Cryptography / E2EE**
-- X3DH key exchange implementation (`LocalKeyStore.cc`): key bundle generation at registration (X25519 identity keypair, Ed25519 signing keypair, signed prekey with Ed25519 signature, 20 one-time prekeys), four-way DH computation on the sender side, HKDF-SHA256 key derivation, XChaCha20-Poly1305 AEAD encryption and decryption; associated data binds `conversationId`, `senderId`, `recipientId`, and the public keys used
-- One-time prekey tracking and access control: server-side enforcement preventing a prekey from being consumed more than once; `oneTimePreKeyIdFromPayload` helper for server-side prekey removal
-- Password hashing with libsodium Argon2id (`OPSLIMIT_INTERACTIVE` / `MEMLIMIT_INTERACTIVE`) at signup; server-side enforcement of password strength rules (minimum 12 characters, at least one uppercase letter, at least one digit)
+- X3DH key exchange (`LocalKeyStore.cc`): key bundle generation at registration (X25519 identity keypair, Ed25519 signing keypair, signed prekey with Ed25519 signature, 20 one-time prekeys), four-way DH computation on the sender side, HKDF-SHA256 key derivation, XChaCha20-Poly1305 AEAD encryption and decryption; associated data binds `conversationId`, `senderId`, `recipientId`, and the public keys used
+- HKDF derivation for local key encryption at rest; private key decryption at login
+- One-time prekey consumption access control: server-side enforcement preventing a prekey from being consumed more than once
+- Password hashing with libsodium Argon2id (`OPSLIMIT_INTERACTIVE` / `MEMLIMIT_INTERACTIVE`) at signup; password strength enforcement (minimum 12 characters, at least one uppercase letter, at least one digit)
 - Local private key encryption at rest: identity key file encrypted under a key derived from the user's password via Argon2id + HKDF-SHA256; decrypted only in memory at login
-- Encrypted local message store (v2): `MessageStore` upgraded to an envelope format using Argon2id + HKDF-SHA256 + XChaCha20-Poly1305; automatic migration of legacy plaintext v1 stores to the encrypted v2 format on first access
+- Encrypted local message store (v2): `MessageStore` upgraded to an envelope format using Argon2id + HKDF-SHA256 + XChaCha20-Poly1305; automatic migration of legacy plaintext v1 stores
 - TOFU public key pinning at the client: first-seen public key pinned per username; subsequent logins verify against the stored fingerprint
-- X3DH message setup flow and decrypted plaintext caching in `MessageStore`
-- Server-side message deletion and access revocation endpoints; message forwarding implementation in the GUI client; conversation polling via `QTimer`
+- X3DH message setup flow; decrypted plaintext caching in `MessageStore`; MAC binding of messages to `(conversationId, senderId, recipientId)`
+
+**Client (kdctl)**
+- Initial interactive `kdctl` shell with login sessions
+- JWT implementation: initial working HMAC-SHA256 token minting and verification
+- Server-side message deletion and access revocation endpoints
+- Message forwarding in the GUI client
+- Conversation polling refactor and cleanup
+- Controller refactor; cleanup of insecure kdctl subcommands
 
 ---
 
 #### Mikey Fennelly — approx. 33%
 
-**Server (kds)**
-- Project scaffolding: initial CMakeLists structure, `libkd` shared library skeleton, core data structures (`User`, `Message`, `Conversation` PODs with `nlohmann::json` serialisation macros), initial REST endpoint stubs
-- `Controller.cc` server implementation and `configure.cc` environment-variable loading (host, port, database connection string, TLS certificate paths, JWT secret, JWT TTL, rate limit threshold, sidecar URL)
-- Full REST API: auth routes (`POST /signup`, `POST /login`, `POST /logout`), user and public key routes, conversation routes (`POST /conversations`, `GET /users/:id/conversations`), message routes (`POST /conversations/:id/messages`, `GET /conversations/:id/messages`, `DELETE /conversations/:cid/messages/:mid`, `POST /conversations/:cid/messages/:mid/revoke`)
-- PostgreSQL 16 database layer (`Database.cc`): schema initialisation, parameterised queries via libpqxx, thread-safe access with `std::scoped_lock`, `blockchain_digest` column management (`updateMessageBlockchainDigest`, `getPendingBlockchainMessages`)
-- JWT authentication: token minting (`createSession_`) and verification (`authenticatedUserId_`) using HMAC-SHA256; configurable TTL
-- IP-based rate limiting: sliding window counter per IP address stored in `std::unordered_map<std::string, RateLimitEntry>` protected by `std::mutex`; configurable maximum request count
-- Security filter chain architecture (chain of responsibility pattern) with `SecurityPredicateFactory`; unit tests for the filter chain
-- TLS via `httplib::SSLServer` with configurable certificate and key paths; enforced on all endpoints
-- CI/CD pipeline: GitHub Actions workflows (build, test, docker-release with semver tagging), multi-stage Dockerfile for `kds`, Ansible playbooks for VM configuration and deployment to the project virtual host
-- Nix-based reproducible build environment: migration from devbox to a strict Nix shell, `check-nix-linkage.sh` asserting all linked libraries resolve to `/nix/store`
-- Clang-tidy and clang-format configuration; build hardening flags
-- Initial `MessageIntegrity.sol` smart contract skeleton and ethers.js sidecar scaffolding
+**C++ Architecture & OOP Design**
+- CMake multimodule project structure: `libkd` as a shared library (`.so`/`.dylib`) linked by both `kdctl` and `kds`, with a clean `include/kd/` public header boundary — the foundational C++ component design underpinning the entire project
+- Core domain classes: `User`, `Message`, `Conversation` PODs with constructors, private fields, and `nlohmann::json` `NLOHMANN_DEFINE_TYPE_INTRUSIVE` serialisation macros; `libkd` skeleton with `Conversation.cc` and `Message.cc` translation units
+- Security filter chain: `SecurityPredicate` abstract base class with pure virtual `Execute(const httplib::Request&)`, `SecurityFilterChain` owning a `std::vector<std::unique_ptr<SecurityPredicate>>`, `SecurityPredicateFactory` mapping predicate names to instances — a textbook chain of responsibility pattern demonstrating OOP inheritance, polymorphism, factory, and RAII via smart pointers
+- Unit tests for the security filter chain using GoogleTest; integrated via CMake `enable_testing()` and `add_test()`
+- `Controller.cc` initial implementation: `httplib` pre-routing handler applying the security filter chain to every request, `GET /health` endpoint, 404 error handler, `GET /users/:id/conversations` route; `configure.cc` loading all server parameters (host, port, DB connection string, TLS cert paths, JWT secret and TTL, rate limit threshold, sidecar URL) from environment variables
+- `kdctl` subcommand scaffolding: `login`/`logout` endpoint stubs, `Client::getConversations`, configurable host/port/protocol with environment variable fallbacks; `kds` port and log-level via environment variables
+- Clang-tidy and clang-format configuration; `compile_commands.json` export; build analysis scripts
+
+**CI/CD & Infrastructure**
+- GitHub Actions workflows: build, test, docker-release with semver tagging on merge to `main`; commit linting migration to commitlint; githooks; scoped workflow triggers
+- Multi-stage Dockerfile for `kds`; Nix closure pre-flight check; Docker image weight reduction via closure size analysis and SBOM script
+- Ansible playbooks: host configuration, port forwarding, app deployment to project virtual host (THEBURKENATOR.COM); deployment SANs for TLS cert
+- Nix-based reproducible build environment: migration from devbox to a strict Nix shell, `check-nix-linkage.sh` asserting all linked libraries resolve to `/nix/store`; Nix flake devShell; pinned `nixos-25.11` branch with version assertions
 
 ---
 

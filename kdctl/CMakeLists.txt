@@ -27,6 +27,14 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
 
+# macOS: the root CMakeLists disables CMAKE_FIND_USE_CMAKE_SYSTEM_PATH globally,
+# which prevents FindOpenGL from finding /System/Library/Frameworks.
+# Re-enable it here, scoped to this subdirectory.
+if(APPLE)
+    set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH TRUE)
+    list(APPEND CMAKE_FRAMEWORK_PATH "/System/Library/Frameworks")
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 file(GLOB KD_CTL_SOURCES src/*.cc)

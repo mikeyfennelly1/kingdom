@@ -1,10 +1,31 @@
 #!/usr/bin/env bash
 # build.sh - Build the project using the pinned Nix environment
+#
+# Usage:
+#   ./scripts/build.sh            — build everything (server + client) using root flake.nix
+#   ./scripts/build.sh --frontend — build kdctl only using flake.kdctl.nix (clang, macOS-safe)
 set -euo pipefail
+
+# Source nix profile so 'nix' is on PATH when running outside an interactive shell
+if [[ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
+    # shellcheck source=/dev/null
+    source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+elif [[ -e "${HOME}/.nix-profile/etc/profile.d/nix.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "${HOME}/.nix-profile/etc/profile.d/nix.sh"
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="${SCRIPT_DIR}/.."
 BUILD_DIRECTORY="${SCRIPT_DIR}/../build"
+
+# Parse --frontend flag
+FRONTEND_ONLY=false
+for arg in "$@"; do
+    if [[ "${arg}" == "--frontend" ]]; then
+        FRONTEND_ONLY=true
+    fi
+done
 
 main() {
     printf "DEBUG: entering build environment\n" >&2
@@ -18,8 +39,15 @@ main() {
         exit 1
     fi
 
-    printf "DEBUG: Building Kingdom with Pinned Nix Dependencies in nix shell\n" >&2
-    build_project
+    if [[ "${FRONTEND_ONLY}" == "true" ]]; then
+        printf "DEBUG: Building kdctl (frontend only) using flake-kdctl/flake.nix\n" >&2
+        nix develop "path:${PROJ_ROOT}/flake-kdctl" \
+            --command bash -c "$(declare -f build_project); BUILD_DIRECTORY='${BUILD_DIRECTORY}' CMAKE_BUILD_TYPE='${CMAKE_BUILD_TYPE:-Release}' CMAKE_LOG_LEVEL='${CMAKE_LOG_LEVEL:-STATUS}' KD_BUILD_KDCTL='ON' CMAKE_DEBUG_FIND='' CMAKE_DEBUG_FIND_PKG='' build_project"
+    else
+        printf "DEBUG: Building Kingdom with Pinned Nix Dependencies in nix shell\n" >&2
+        nix develop --command bash -c "$(declare -f build_project); BUILD_DIRECTORY='${BUILD_DIRECTORY}' CMAKE_BUILD_TYPE='${CMAKE_BUILD_TYPE:-Release}' CMAKE_LOG_LEVEL='${CMAKE_LOG_LEVEL:-STATUS}' KD_BUILD_KDCTL='${KD_BUILD_KDCTL:-ON}' CMAKE_DEBUG_FIND='${CMAKE_DEBUG_FIND:-}' CMAKE_DEBUG_FIND_PKG='${CMAKE_DEBUG_FIND_PKG:-}' build_project"
+    fi
+
     if [[ $? -ne 0 ]]; then
         printf "FATAL: BUILD FAILURE.. exiting" >&2
         exit 1
@@ -29,7 +57,7 @@ main() {
 
 # ─── helpers... ────────────────────────────────────────────────
 
-# ensures that nix package registry is reacheable 
+# ensures that nix package registry is reacheable
 # before script execution.
 function check_nixos_packages_connection() {
     local url="https://github.com"
@@ -72,10 +100,16 @@ function build_project() {
     fi
 
     printf "DEBUG: outputting build artifacts to ${BUILD_DIRECTORY}\n" >&2
-    cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
-        --log-level="${CMAKE_LOG_LEVEL}" \
-        "${CMAKE_EXTRA_FLAGS[@]}" \
-        && cmake --build ${BUILD_DIRECTORY}
+    if [[ ${#CMAKE_EXTRA_FLAGS[@]} -gt 0 ]]; then
+        cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            --log-level="${CMAKE_LOG_LEVEL}" \
+            "${CMAKE_EXTRA_FLAGS[@]}" \
+            && cmake --build ${BUILD_DIRECTORY}
+    else
+        cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            --log-level="${CMAKE_LOG_LEVEL}" \
+            && cmake --build ${BUILD_DIRECTORY}
+    fi
 
     if [ $? -eq 0 ]; then
         printf "DEBUG: -> artifacts outputted to '${BUILD_DIRECTORY}' directory..."

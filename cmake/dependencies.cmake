@@ -16,6 +16,16 @@ function(configure_third_party)
     )
     FetchContent_MakeAvailable(spdlog)
 
+    # spdlog 1.13.0 bundles fmtlib whose FMT_CONSTEVAL macro expands to
+    # `consteval` on C++20 compilers. Clang ≥19 rejects this in the
+    # basic_format_string constructor when called from a non-consteval context.
+    # Override FMT_CONSTEVAL to constexpr to fall back to runtime format
+    # checking — functionally identical for all uses in this codebase.
+    if(TARGET spdlog AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+       CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "19")
+        target_compile_definitions(spdlog PUBLIC "FMT_CONSTEVAL=constexpr")
+    endif()
+
     # OpenSSL: use pkg-config to locate the split nix store paths (dev headers separate from libs),
     # then seed CMake's FindOpenSSL variables so find_package works correctly.
     find_package(PkgConfig REQUIRED)
