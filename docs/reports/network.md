@@ -6,6 +6,8 @@ CS4455 Cybersecurity | Computer Networks & Cybersecurity (Mark Burkley) | 2026
 
 ## 1. System Architecture Diagram
 
+![Network Architecture](./network-diagram.png)
+
 ### Application
 
 1. Client app <- NGINX -> Server: HTTPS
@@ -511,6 +513,31 @@ A separate `port-forward.yml` playbook configures a TCP port forward from the pu
 GitHub Actions workflows automate build, test, and release:
 - Build and test workflow: runs `cmake -B build -GNinja && cmake --build build` and the GoogleTest suite on every push.
 - Docker release workflow: builds a multi-stage Docker image for `kds` and pushes it to Docker Hub (`mikeyfennelly/kds`) with a semantic version tag derived from git tags.
+
+### 7.4 Docker Networking
+
+In production all server-side containers run inside a single user-defined bridge network named `kingdom_default` (subnet `172.18.0.0/16`). This creates an isolated network namespace separate from the host and from the unused default `docker0` bridge (`172.17.0.0/16`).
+
+**Docker embedded DNS.** Containers in `kingdom_default` resolve each other by service name without hard-coded IPs. `kds` therefore uses `KD_DB_URL=host=db ...` rather than an IP address; Docker's embedded DNS resolver (always at `127.0.0.11` inside the container) translates `db` to the current container IP at query time.
+
+**Internal vs. external port namespaces.** Only the ports explicitly listed under `ports:` in `docker-compose.yml` are mapped from the container namespace into the host network namespace and become reachable externally:
+
+| Container port | Host mapping | Reachable from |
+|---------------|--------------|----------------|
+| `KD_PORT` (8080) | published on host | LAN / internet (via `:4000` port-forward) |
+| `5432` (PostgreSQL) | `POSTGRES_PORT:5432` — development only | localhost only; not publicly routable |
+
+The blockchain sidecar is not part of the Compose stack. It binds to `localhost:3001` on the VM host and is therefore unreachable from the internet. `kds` contacts it via `KD_BLOCKCHAIN_SIDECAR_URL` (default `http://localhost:3001`), which routes through the loopback interface.
+
+**Relevant environment variables for network configuration:**
+
+| Variable | Component | Effect |
+|----------|-----------|--------|
+| `KD_PORT` | kds | Port `kds` binds inside the container; must match the Compose `ports:` mapping |
+| `KD_DB_URL` | kds | libpq connection string; `host=` should be the Docker service name (`db`) so Docker DNS resolves it |
+| `KD_BLOCKCHAIN_SIDECAR_URL` | kds | Base URL for sidecar HTTP calls; `localhost:3001` works because kds runs on the VM host network via published ports |
+| `POSTGRES_PORT` | db | Host-side port for direct DB access in development; has no effect on container-to-container traffic |
+| `KD_CA_CERT` | kdctl | Path to CA certificate on the client machine for verifying the server's self-signed TLS cert |
 
 ---
 
