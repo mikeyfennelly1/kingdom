@@ -27,50 +27,28 @@
 
 #### Patrick O'Shea — approx. 33%
 
-**Client (kdctl)**
-- **Qt6 GUI client**: full implementation of the desktop application comprising `LoginWindow` (signup/login form with server URL field, inline error display) and `MainWindow` (conversation list, message list with decrypted plaintext display, compose field, send/forward/delete/revoke action buttons, per-conversation `QTimer`-driven polling)
-- `Client.cc` HTTP/HTTPS client wrapper: bearer token management, TLS certificate verification against a configurable CA certificate, TOFU key pinning via `known_keys.json`, key bundle fetch and fingerprint validation
-- `MessageStore` public-key cache with `std::map<uint64_t, std::string>`, `Message::formatted()` display helper, `findBySender` using `std::find_if`
-- Identity fingerprint confirmation dialog (`confirmRecipientIdentity`, `fingerprintForPublicKey`) and forward-target selection (`chooseForwardTarget`)
-- Unit tests for `LocalKeyStore`, `MessageStore`, and `Conversation`
-
-**Blockchain**
-- Background blockchain resolver thread (`startBlockchainResolver_`) running in `kds`: polls the database for messages whose `blockchain_digest` column contains a `pending:<id>` token, queries the sidecar `/pending/:id` endpoint, and writes the confirmed transaction hash back to the database once the on-chain batch is finalised
-- Wiring of sidecar HTTP calls into message creation in `Controller::handleCreateMessage_`: posts ciphertext to the sidecar `/record` endpoint and stores the returned `pendingId` as the initial digest value
-- Smart contract storage mapping fix: switched from per-conversation overwriting to a Merkle batch design with an auto-incrementing `batchId`; added Hardhat deployment and test scripts
-- Standalone blockchain verification web page (`blockchain/verification/index.html`)
+- Qt6 GUI desktop client: login/signup window and main messaging window with conversation list, message history, compose, send, forward, delete, and revoke actions
+- HTTPS client with TLS certificate verification and TOFU public key pinning
+- Blockchain sidecar, smart contract, and standalone message integrity verification page
+- Unit tests for client-side components
 
 ---
 
 #### Fionn Ó Murchú — approx. 33%
 
-**Cryptography / E2EE**
-- X3DH key exchange implementation (`LocalKeyStore.cc`): key bundle generation at registration (X25519 identity keypair, Ed25519 signing keypair, signed prekey with Ed25519 signature, 20 one-time prekeys), four-way DH computation on the sender side, HKDF-SHA256 key derivation, XChaCha20-Poly1305 AEAD encryption and decryption; associated data binds `conversationId`, `senderId`, `recipientId`, and the public keys used
-- One-time prekey tracking and access control: server-side enforcement preventing a prekey from being consumed more than once; `oneTimePreKeyIdFromPayload` helper for server-side prekey removal
-- Password hashing with libsodium Argon2id (`OPSLIMIT_INTERACTIVE` / `MEMLIMIT_INTERACTIVE`) at signup; server-side enforcement of password strength rules (minimum 12 characters, at least one uppercase letter, at least one digit)
-- Local private key encryption at rest: identity key file encrypted under a key derived from the user's password via Argon2id + HKDF-SHA256; decrypted only in memory at login
-- Encrypted local message store (v2): `MessageStore` upgraded to an envelope format using Argon2id + HKDF-SHA256 + XChaCha20-Poly1305; automatic migration of legacy plaintext v1 stores to the encrypted v2 format on first access
-- TOFU public key pinning at the client: first-seen public key pinned per username; subsequent logins verify against the stored fingerprint
-- X3DH message setup flow and decrypted plaintext caching in `MessageStore`
-- Server-side message deletion and access revocation endpoints; message forwarding implementation in the GUI client; conversation polling via `QTimer`
+- End-to-end encryption: X3DH key exchange, XChaCha20-Poly1305 AEAD, and HKDF-SHA256 key derivation
+- Local private key and message store encryption at rest; password hashing with Argon2id
+- TOFU public key pinning and one-time prekey consumption enforcement
+- JWT implementation; message deletion, forwarding, and access revocation
 
 ---
 
 #### Mikey Fennelly — approx. 33%
 
-**Server (kds)**
-- Project scaffolding: initial CMakeLists structure, `libkd` shared library skeleton, core data structures (`User`, `Message`, `Conversation` PODs with `nlohmann::json` serialisation macros), initial REST endpoint stubs
-- `Controller.cc` server implementation and `configure.cc` environment-variable loading (host, port, database connection string, TLS certificate paths, JWT secret, JWT TTL, rate limit threshold, sidecar URL)
-- Full REST API: auth routes (`POST /signup`, `POST /login`, `POST /logout`), user and public key routes, conversation routes (`POST /conversations`, `GET /users/:id/conversations`), message routes (`POST /conversations/:id/messages`, `GET /conversations/:id/messages`, `DELETE /conversations/:cid/messages/:mid`, `POST /conversations/:cid/messages/:mid/revoke`)
-- PostgreSQL 16 database layer (`Database.cc`): schema initialisation, parameterised queries via libpqxx, thread-safe access with `std::scoped_lock`, `blockchain_digest` column management (`updateMessageBlockchainDigest`, `getPendingBlockchainMessages`)
-- JWT authentication: token minting (`createSession_`) and verification (`authenticatedUserId_`) using HMAC-SHA256; configurable TTL
-- IP-based rate limiting: sliding window counter per IP address stored in `std::unordered_map<std::string, RateLimitEntry>` protected by `std::mutex`; configurable maximum request count
-- Security filter chain architecture (chain of responsibility pattern) with `SecurityPredicateFactory`; unit tests for the filter chain
-- TLS via `httplib::SSLServer` with configurable certificate and key paths; enforced on all endpoints
-- CI/CD pipeline: GitHub Actions workflows (build, test, docker-release with semver tagging), multi-stage Dockerfile for `kds`, Ansible playbooks for VM configuration and deployment to the project virtual host
-- Nix-based reproducible build environment: migration from devbox to a strict Nix shell, `check-nix-linkage.sh` asserting all linked libraries resolve to `/nix/store`
-- Clang-tidy and clang-format configuration; build hardening flags
-- Initial `MessageIntegrity.sol` smart contract skeleton and ethers.js sidecar scaffolding
+- HTTPS server: TLS 1.3, per-IP rate limiting, JWT authentication, security predicate chain, input validation, and access control
+- PostgreSQL database layer with parameterised queries and thread-safe access
+- C++ project architecture: shared `libkd` library, core domain classes, and security filter chain design pattern
+- CI/CD pipelines, Docker image release, Ansible deployment, and Nix-based reproducible build environment
 
 ---
 
