@@ -75,20 +75,18 @@ The conversation list and messages refresh automatically on a timer.
 
 == Blockchain Sidecar
 
-The sidecar records message hashes on the Ethereum Sepolia testnet. It runs as a separate Node.js process alongside `kds`.
+The sidecar records message hashes on the Ethereum Sepolia testnet. It runs as the `kd-sidecar` Docker Compose service alongside `kds` and is started automatically with the rest of the stack.
 
-=== Setup
+In production the required environment variables (`SEPOLIA_RPC_URL`, `PRIVATE_KEY`, `CONTRACT_ADDRESS`) are written to the VM's `.env` file by the Ansible deploy playbook. For local development, add them to your `.env` file manually:
 
-[source,bash]
+[source]
 ----
-cd blockchain/sidecar
-cp ../.env.example .env
-# Edit .env with SEPOLIA_RPC_URL, PRIVATE_KEY, CONTRACT_ADDRESS
-npm install
-npm start
+SEPOLIA_RPC_URL=https://...
+PRIVATE_KEY=0x...
+CONTRACT_ADDRESS=0x8955A2361A978A41F721e58B2766b614768Db596
 ----
 
-The sidecar runs on port 3001 by default. The server (`kds`) calls it automatically when messages are sent via `KD_BLOCKCHAIN_SIDECAR_URL` (defaults to `http://localhost:3001`).
+The sidecar starts with `docker compose up` and runs on port 3001. `kds` calls it automatically when messages are sent.
 
 === Verification page
 
